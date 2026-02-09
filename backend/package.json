@@ -1,0 +1,42 @@
+{
+  "name": "vallexpress-backend",
+  "version": "1.0.0",
+  "description": "Backend para ValleXpress - Sistema de Delivery",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "NODE_ENV=production node src/server.js",
+    "dev": "NODE_ENV=development nodemon src/server.js"
+  },
+  "keywords": [
+    "delivery",
+    "api",
+    "express",
+    "postgresql"
+  ],
+  "author": "Tu Nombre",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "engine.io": "^6.6.5",
+    "engine.io-parser": "^5.2.3",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.0.1",
+    "firebase-admin": "^13.6.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^6.9.4",
+    "pg": "^8.11.3",
+    "sequelize": "^6.35.1",
+    "socket.io": "^4.6.1",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

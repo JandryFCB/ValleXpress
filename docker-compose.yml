@@ -1,0 +1,36 @@
+services:
+  # Base de datos PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: vallexpress_db
+    restart: always
+    environment:
+      POSTGRES_USER: vallexpress_user
+      POSTGRES_PASSWORD: 2003
+      POSTGRES_DB: vallexpress_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - vallexpress_network
+
+  # Adminer para gestionar la BD
+  adminer:
+    image: adminer
+    container_name: vallexpress_adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    networks:
+      - vallexpress_network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+
+networks:
+  vallexpress_network:
+    driver: bridge

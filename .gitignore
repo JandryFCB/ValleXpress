@@ -1,0 +1,26 @@
+# Python / Django
+__pycache__/
+*.pyc
+.env
+venv/
+.env.*
+
+# Django
+db.sqlite3
+staticfiles/
+
+# Flutter
+build/
+.dart_tool/
+.packages
+
+# Firebase Admin SDK
+*firebase-adminsdk*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
