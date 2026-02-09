@@ -4,8 +4,8 @@
   "description": "Backend para ValleXpress - Sistema de Delivery",
   "main": "src/server.js",
   "scripts": {
-    "start": "NODE_ENV=production node src/server.js",
-    "dev": "NODE_ENV=development nodemon src/server.js"
+    "start": "cross-env NODE_ENV=production node src/server.js",
+    "dev": "cross-env NODE_ENV=development nodemon src/server.js"
   },
   "keywords": [
     "delivery",
@@ -37,6 +37,7 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "nodemon": "^3.0.2"
   }
 }
