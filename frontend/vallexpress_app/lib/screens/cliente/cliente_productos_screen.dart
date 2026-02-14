@@ -890,7 +890,7 @@ class _ClienteProductosScreenState extends State<ClienteProductosScreen> {
                           ],
                         ),
                         SizedBox(
-                          height: 42,
+                          height: 50,
                           child: ElevatedButton(
                             onPressed: _hacerPedido,
                             style: ElevatedButton.styleFrom(
@@ -899,10 +899,16 @@ class _ClienteProductosScreenState extends State<ClienteProductosScreen> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                             ),
                             child: const Text(
-                              'Pedir ahora',
-                              style: TextStyle(fontWeight: FontWeight.w900),
+                              'Pedir Ahora',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                              ),
                             ),
                           ),
                         ),

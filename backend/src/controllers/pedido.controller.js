@@ -222,8 +222,13 @@ class PedidoController {
   async misPedidos(req, res) {
     try {
       const clienteId = req.usuario.id;
+      
+      // Paginación con valores por defecto (backward compatible)
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+      const offset = (page - 1) * limit;
 
-      const pedidos = await Pedido.findAll({
+      const { count, rows: pedidos } = await Pedido.findAndCountAll({
         where: { clienteId },
         include: [
           {
@@ -266,15 +271,28 @@ class PedidoController {
           },
         ],
         order: [['fechaPedido', 'DESC']],
+        limit,
+        offset,
+        distinct: true, // Importante para contar correctamente con includes
       });
 
-
-      res.json(pedidos);
+      res.json({
+        pedidos,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit),
+          hasNext: page * limit < count,
+          hasPrev: page > 1,
+        }
+      });
     } catch (error) {
       console.error('❌ Error obtener mis pedidos:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
+
 
   async pedidosVendedor(req, res) {
     try {
@@ -288,8 +306,13 @@ class PedidoController {
       if (!vendedor) {
         return res.status(404).json({ error: 'Vendedor no encontrado' });
       }
+      
+      // Paginación con valores por defecto (backward compatible)
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+      const offset = (page - 1) * limit;
 
-      const pedidos = await Pedido.findAll({
+      const { count, rows: pedidos } = await Pedido.findAndCountAll({
         where: { vendedorId: vendedor.id },
         include: [
           {
@@ -326,15 +349,28 @@ class PedidoController {
           },
         ],
         order: [['fechaPedido', 'DESC']],
+        limit,
+        offset,
+        distinct: true, // Importante para contar correctamente con includes
       });
 
-
-      res.json(pedidos);
+      res.json({
+        pedidos,
+        pagination: {
+          page,
+          limit,
+          total: count,
+          totalPages: Math.ceil(count / limit),
+          hasNext: page * limit < count,
+          hasPrev: page > 1,
+        }
+      });
     } catch (error) {
       console.error('❌ Error obtener pedidos vendedor:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
+
 
   async actualizarEstado(req, res) {
     try {

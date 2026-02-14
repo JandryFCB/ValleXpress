@@ -9,6 +9,7 @@ const Pedido = require('./Pedido');
 const DetallePedido = require('./DetallePedido');
 const PasswordResetCode = require('./PasswordResetCode');
 const Notificacion = require('./Notificacion');
+const EmailVerificationCode = require('./EmailVerificationCode');
 
 module.exports = {
   Usuario,
@@ -20,4 +21,5 @@ module.exports = {
   DetallePedido,
   PasswordResetCode,
   Notificacion,
+  EmailVerificationCode,
 };

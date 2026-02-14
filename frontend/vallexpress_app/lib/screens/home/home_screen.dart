@@ -79,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final perfil = await RepartidorService.obtenerPerfilRepartidor();
 
-      final disponible = perfil?['disponible'] ?? false;
+      final disponible = perfil['disponible'] ?? false;
 
       if (mounted) {
         setState(() {
@@ -195,8 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Inicia refresh periódico para actualizar lista de pedidos activos
   void _startPeriodicRefresh() {
-    // Refrescar cada 10 segundos para detectar cambios de estado
-    Timer.periodic(const Duration(seconds: 10), (_) {
+    // OPTIMIZACIÓN: Reducido de 10s a 30s para disminuir carga en servidor
+    Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
         _refreshActivePedidos();
       }
@@ -646,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Cambiar al siguiente pedido en la lista
-    void _siguientePedido() {
+    void siguientePedido() {
       if (_pedidosActivosList.length <= 1) return;
       setState(() {
         _currentPedidoIndex =
@@ -665,20 +665,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Preview rastreo (solo si hay pedido en_camino o recogido)
     // Usar el pedido actual de la lista para mostrar el correcto
-    final _pedidoParaMostrar = _pedidosActivosList.isNotEmpty
+    final pedidoParaMostrar = _pedidosActivosList.isNotEmpty
         ? _pedidosActivosList[_currentPedidoIndex]
         : (pedidosProvider.pedidoActivo ?? _activePedidoCache);
 
-    final _estadoPedido = (_pedidoParaMostrar?['estado'] ?? '').toString();
+    final estadoPedido = (pedidoParaMostrar?['estado'] ?? '').toString();
     // Mostrar mapa durante en_camino y recogido, ocultar cuando ya está entregado
-    final _mostrarMapa =
-        _pedidoParaMostrar != null &&
-        (_estadoPedido == 'en_camino' || _estadoPedido == 'recogido');
+    final mostrarMapa =
+        pedidoParaMostrar != null &&
+        (estadoPedido == 'en_camino' || estadoPedido == 'recogido');
 
     // Obtener número del pedido actual para mostrar en el header
 
-    final String? apNumeroActual = _pedidoParaMostrar != null
-        ? (_pedidoParaMostrar['numeroPedido'] as String?)
+    final String? apNumeroActual = pedidoParaMostrar != null
+        ? (pedidoParaMostrar['numeroPedido'] as String?)
         : null;
 
     return SingleChildScrollView(
@@ -692,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
 
             // Preview rastreo (solo si hay pedido en_camino)
-            if (_mostrarMapa) ...[
+            if (mostrarMapa) ...[
               // Header con info del pedido y navegación si hay múltiples
               Row(
                 children: [
@@ -749,7 +749,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 4),
                           InkWell(
-                            onTap: _siguientePedido,
+                            onTap: siguientePedido,
                             child: Icon(
                               Icons.swap_horiz,
                               color: AppTheme.repartidorColor,

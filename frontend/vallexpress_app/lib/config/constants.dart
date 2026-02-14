@@ -2,8 +2,9 @@ class AppConstants {
   // API URL - PRODUCCIÓN
   // Cambiar esta URL por tu dominio/IP público cuando subas a producción
   // Ejemplo: https://api.vallexpress.com/api
-  static const String baseUrl = 'http://192.168.0.104:3000/api';
-  static const String socketUrl = 'http://192.168.0.104:3000';
+
+  static const String baseUrl = 'http://5.161.208.204:3000/api';
+  static const String socketUrl = 'http://5.161.208.204:3000';
 
   // Storage keys
   static const String tokenKey = 'token';

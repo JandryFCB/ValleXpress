@@ -3,6 +3,8 @@ const Usuario = require('../models/Usuario');
 const Vendedor = require('../models/Vendedor');
 const Repartidor = require('../models/Repartidor');
 const PasswordResetCode = require('../models/PasswordResetCode');
+const EmailVerificationCode = require('../models/EmailVerificationCode');
+
 const { validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const { sequelize } = require('../config/database');
@@ -13,13 +15,54 @@ function validarEmail(email) {
   return regex.test(email);
 }
 
-// ✅ Validar cédula ecuatoriana (10 dígitos)
+// ✅ Validar cédula ecuatoriana (algoritmo completo módulo 10)
 function validarCedula(cedula) {
+  // Verificar que tenga 10 dígitos
   if (!cedula || String(cedula).length !== 10) return false;
-  return /^\d{10}$/.test(String(cedula));
+  if (!/^\d{10}$/.test(String(cedula))) return false;
+  
+  const digitos = cedula.split('').map(Number);
+  
+  // Los dos primeros dígitos deben ser código de provincia (01-24)
+  const provincia = digitos[0] * 10 + digitos[1];
+  if (provincia < 1 || provincia > 24) return false;
+  
+  // Algoritmo de validación módulo 10
+  let suma = 0;
+  for (let i = 0; i < 9; i++) {
+    let mult = digitos[i] * (i % 2 === 0 ? 2 : 1);
+    suma += mult > 9 ? mult - 9 : mult;
+  }
+  
+  const verificador = (10 - (suma % 10)) % 10;
+  return verificador === digitos[9];
+}
+
+// ✅ Validar teléfono ecuatoriano (10 dígitos, empieza con 09)
+function validarTelefono(telefono) {
+  if (!telefono) return false;
+  // Limpiar espacios y guiones
+  const limpio = String(telefono).replace(/[\s\-]/g, '');
+  // Debe tener 10 dígitos y empezar con 09
+  return /^\d{10}$/.test(limpio) && limpio.startsWith('09');
+}
+
+// ✅ Validar placa de vehículo (Ecuador: AB1234 o ABC-123)
+function validarPlaca(placa) {
+  if (!placa) return false;
+  // Limpiar espacios y guiones, convertir a mayúsculas
+  const limpio = placa.trim().toUpperCase().replace(/[\s\-]/g, '');
+  
+  // Formato antiguo: 2 letras + 4 números (AB1234)
+  const formatoAntiguo = /^[A-Z]{2}\d{4}$/;
+  // Formato nuevo: 3 letras + 3 números (ABC123)
+  const formatoNuevo = /^[A-Z]{3}\d{3}$/;
+  
+  return formatoAntiguo.test(limpio) || formatoNuevo.test(limpio);
 }
 
 async function register(req, res) {
+
   const transaction = await sequelize.transaction();
   try {
     const errors = validationResult(req);
@@ -52,10 +95,15 @@ async function register(req, res) {
       await transaction.rollback();
       return res.status(400).json({ error: 'La cédula debe tener 10 dígitos' });
     }
+    if (!validarTelefono(telefono)) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'El teléfono debe tener 10 dígitos y empezar con 09 (ej: 0991234567)' });
+    }
     if (!password || password.length < 6) {
       await transaction.rollback();
       return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
     }
+
 
     const usuarioExistentePorEmail = await Usuario.findOne({ where: { email }, transaction });
     if (usuarioExistentePorEmail) {
@@ -68,6 +116,13 @@ async function register(req, res) {
       await transaction.rollback();
       return res.status(409).json({ error: 'La cédula ya está registrada' });
     }
+
+    const usuarioExistentePorTelefono = await Usuario.findOne({ where: { telefono }, transaction });
+    if (usuarioExistentePorTelefono) {
+      await transaction.rollback();
+      return res.status(409).json({ error: 'El teléfono ya está registrado' });
+    }
+
 
     const tipoUsuarioFinal = tipoUsuario || 'cliente';
 
@@ -96,13 +151,46 @@ async function register(req, res) {
       console.log('✅ Vendedor creado para:', email);
     }
 
-    // Si es repartidor, crear registro en tabla repartidores
+    // Si es repartidor, validar campos adicionales y crear registro
     if (tipoUsuarioFinal === 'repartidor') {
+      // Validar vehículo
+      if (!vehiculo || vehiculo.trim().length < 2) {
+        await transaction.rollback();
+        return res.status(400).json({ error: 'El tipo de vehículo es requerido (mínimo 2 caracteres)' });
+      }
+      
+      // Validar placa
+      if (!validarPlaca(placa)) {
+        await transaction.rollback();
+        return res.status(400).json({ 
+          error: 'Placa inválida. Formatos válidos: AB1234, ABC-123, AB-1234 (2-3 letras + 3-4 números)' 
+        });
+      }
+      
+      // Normalizar placa a mayúsculas sin guiones
+      const placaNormalizada = placa.trim().toUpperCase().replace(/[\s\-]/g, '');
+      
+      // Verificar que la placa no esté registrada por otro repartidor
+      const placaExistente = await Repartidor.findOne({ 
+        where: { placa: placaNormalizada },
+        transaction 
+      });
+      if (placaExistente) {
+        await transaction.rollback();
+        return res.status(409).json({ error: 'Esta placa ya está registrada por otro repartidor' });
+      }
+      
+      // Validar licencia
+      if (!licencia || licencia.trim().length < 5) {
+        await transaction.rollback();
+        return res.status(400).json({ error: 'El número de licencia es requerido (mínimo 5 caracteres)' });
+      }
+
       await Repartidor.create({
         usuarioId: nuevoUsuario.id,
-        vehiculo: vehiculo || 'No especificado',
-        placa: placa || 'No especificada',
-        licencia: licencia || 'No especificada',
+        vehiculo: vehiculo.trim(),
+        placa: placaNormalizada,
+        licencia: licencia.trim().toUpperCase(),
         calificacionPromedio: 0.00,
         totalCalificaciones: 0,
         disponible: false,
@@ -113,6 +201,7 @@ async function register(req, res) {
       }, { transaction });
       console.log('✅ Repartidor creado para:', email);
     }
+
 
     await transaction.commit();
 
@@ -386,6 +475,197 @@ async function resetPassword(req, res) {
   }
 }
 
+// 4) Enviar código de verificación de email
+async function sendEmailVerification(req, res) {
+  try {
+    const { email, nombre, fcmToken } = req.body;
+    
+    if (!email || !validarEmail(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    // ⏱️ Verificar tiempo mínimo entre reenvíos (60 segundos)
+    const ultimoCodigo = await EmailVerificationCode.findOne({
+      where: { email, usedAt: null },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (ultimoCodigo) {
+      const segundosDesdeUltimo = (new Date() - new Date(ultimoCodigo.createdAt)) / 1000;
+      if (segundosDesdeUltimo < 60) {
+        const segundosRestantes = Math.ceil(60 - segundosDesdeUltimo);
+        return res.status(429).json({ 
+          error: `Espera ${segundosRestantes} segundos antes de solicitar un nuevo código`,
+          retryAfter: segundosRestantes
+        });
+      }
+    }
+
+    // Generar código de 6 dígitos
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const codeHash = await bcrypt.hash(code, 10);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    // Invalidar códigos anteriores
+    await EmailVerificationCode.update(
+      { usedAt: new Date() },
+      { where: { email, usedAt: null } }
+    );
+
+    // Crear nuevo código con FCM token
+    await EmailVerificationCode.create({
+      email,
+      codeHash,
+      expiresAt,
+      attempts: 0,
+      usedAt: null,
+      fcmToken: fcmToken || null,
+    });
+
+    // Enviar email
+    try {
+      const mailer = require('../services/mailer.service');
+      await mailer.sendEmailVerificationCode(email, code, nombre || 'Usuario');
+    } catch (mailErr) {
+      console.error('Error enviando email de verificación:', mailErr);
+      console.log(`[VERIFY] Código para ${email}: ${code}`);
+    }
+
+    // Enviar notificación push si hay FCM token
+    if (fcmToken) {
+      try {
+        const fcmService = require('../services/fcm.service');
+        await fcmService.sendVerificationCodeNotification(fcmToken, code);
+      } catch (fcmErr) {
+        console.error('Error enviando notificación push:', fcmErr);
+        // No interrumpir el flujo si falla la notificación push
+      }
+    }
+
+    return res.json({ message: 'Código de verificación enviado' });
+  } catch (e) {
+    console.error('Error sendEmailVerification:', e);
+    return res.status(500).json({ error: 'Error al enviar código' });
+  }
+}
+
+
+
+// 5) Verificar código de email
+async function verifyEmailCode(req, res) {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email y código son requeridos' });
+    }
+    if (!validarEmail(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+    if (code.length !== 6) {
+      return res.status(400).json({ error: 'El código debe tener 6 dígitos' });
+    }
+
+    const record = await EmailVerificationCode.findOne({
+      where: { email, usedAt: null },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!record || record.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Código expirado' });
+    }
+    if (record.attempts >= 5) {
+      return res.status(400).json({ error: 'Demasiados intentos' });
+    }
+
+    const ok = await bcrypt.compare(code, record.codeHash);
+    if (!ok) {
+      await record.update({ attempts: record.attempts + 1 });
+      return res.status(400).json({ error: 'Código incorrecto' });
+    }
+
+    await record.update({ usedAt: new Date() });
+
+    return res.json({ 
+      message: 'Email verificado correctamente',
+      verified: true 
+    });
+  } catch (e) {
+    console.error('Error verifyEmailCode:', e);
+    return res.status(500).json({ error: 'Error al verificar código' });
+  }
+}
+
+// ✅ Verificar si cédula ya existe (validación en tiempo real)
+async function checkCedula(req, res) {
+  try {
+    const { cedula } = req.params;
+    
+    if (!cedula || !/^\d{10}$/.test(cedula)) {
+      return res.status(400).json({ error: 'Cédula inválida' });
+    }
+
+    const existe = await Usuario.findOne({ where: { cedula } });
+    
+    return res.json({ 
+      exists: !!existe,
+      message: existe ? 'Esta cédula ya está registrada' : 'Cédula disponible'
+    });
+  } catch (e) {
+    console.error('Error checkCedula:', e);
+    return res.status(500).json({ error: 'Error al verificar cédula' });
+  }
+}
+
+// ✅ Verificar si email ya existe (validación en tiempo real)
+async function checkEmail(req, res) {
+  try {
+    const { email } = req.params;
+    
+    if (!email || !validarEmail(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    const existe = await Usuario.findOne({ 
+      where: { email: email.toLowerCase().trim() } 
+    });
+    
+    return res.json({ 
+      exists: !!existe,
+      message: existe ? 'Este email ya está registrado' : 'Email disponible'
+    });
+  } catch (e) {
+    console.error('Error checkEmail:', e);
+    return res.status(500).json({ error: 'Error al verificar email' });
+  }
+}
+
+// ✅ Verificar si placa ya existe (validación en tiempo real para repartidores)
+async function checkPlaca(req, res) {
+  try {
+    const { placa } = req.params;
+    
+    if (!placa || !validarPlaca(placa)) {
+      return res.status(400).json({ error: 'Placa inválida' });
+    }
+
+    // Normalizar placa
+    const placaNormalizada = placa.trim().toUpperCase().replace(/[\s\-]/g, '');
+
+    const existe = await Repartidor.findOne({ 
+      where: { placa: placaNormalizada } 
+    });
+    
+    return res.json({ 
+      exists: !!existe,
+      message: existe ? 'Esta placa ya está registrada' : 'Placa disponible'
+    });
+  } catch (e) {
+    console.error('Error checkPlaca:', e);
+    return res.status(500).json({ error: 'Error al verificar placa' });
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -395,4 +675,9 @@ module.exports = {
   forgotPassword,
   verifyResetCode,
   resetPassword,
+  sendEmailVerification,
+  verifyEmailCode,
+  checkCedula,
+  checkEmail,
+  checkPlaca,
 };

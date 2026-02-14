@@ -413,7 +413,7 @@ class _ClienteProfileScreenState extends State<ClienteProfileScreen> {
 
             const SizedBox(height: 32),
 
-            // ===== Ubicación registrada del cliente =====
+            // ===== Ubicación del cliente =====
             Row(
               children: [
                 Container(
@@ -426,7 +426,7 @@ class _ClienteProfileScreenState extends State<ClienteProfileScreen> {
                 ),
                 const SizedBox(width: 12),
                 const Text(
-                  '📍 Ubicación registrada',
+                  '📍 Ubicación',
                   style: TextStyle(
                     color: AppTheme.textPrimaryColor,
                     fontSize: 18,
@@ -437,116 +437,116 @@ class _ClienteProfileScreenState extends State<ClienteProfileScreen> {
             ),
             const SizedBox(height: 16),
 
-            if (_direccionPredeterminada != null) ...[
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.clienteColor.withOpacity(0.2),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: SizedBox(
-                    height: 220,
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: LatLng(
-                          (_direccionPredeterminada!['latitud'] as num?)
-                                  ?.toDouble() ??
-                              AppConstants.clientLat,
-                          (_direccionPredeterminada!['longitud'] as num?)
-                                  ?.toDouble() ??
-                              AppConstants.clientLng,
-                        ),
-                        initialZoom: 15,
-                        interactionOptions: const InteractionOptions(
-                          flags:
-                              InteractiveFlag.pinchZoom |
-                              InteractiveFlag.drag |
-                              InteractiveFlag.doubleTapZoom,
-                        ),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.clienteColor.withOpacity(0.2),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: SizedBox(
+                  height: 220,
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: LatLng(
+                        (_direccionPredeterminada?['latitud'] as num?)
+                                ?.toDouble() ??
+                            AppConstants.clientLat,
+                        (_direccionPredeterminada?['longitud'] as num?)
+                                ?.toDouble() ??
+                            AppConstants.clientLng,
                       ),
-                      children: [
-                        // Fondo de respaldo mientras cargan los tiles
-                        Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)],
-                            ),
+                      initialZoom: 15,
+                      interactionOptions: const InteractionOptions(
+                        flags:
+                            InteractiveFlag.pinchZoom |
+                            InteractiveFlag.drag |
+                            InteractiveFlag.doubleTapZoom,
+                      ),
+                    ),
+                    children: [
+                      // Fondo de respaldo mientras cargan los tiles
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)],
                           ),
                         ),
-                        TileLayer(
-                          urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.vallexpress.app',
-                          tileBuilder: (context, child, tile) {
-                            return AnimatedOpacity(
-                              opacity: 1.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: child,
-                            );
-                          },
-                          errorTileCallback: (tile, error, stackTrace) {
-                            if (kDebugMode) {
-                              print('❌ Error cargando tile: $error');
-                            }
-                          },
-                        ),
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: LatLng(
-                                (_direccionPredeterminada!['latitud'] as num?)
-                                        ?.toDouble() ??
-                                    AppConstants.clientLat,
-                                (_direccionPredeterminada!['longitud'] as num?)
-                                        ?.toDouble() ??
-                                    AppConstants.clientLng,
-                              ),
-                              width: 60,
-                              height: 60,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: AppTheme.clienteColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 4,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppTheme.clienteColor.withOpacity(
-                                        0.5,
-                                      ),
-                                      blurRadius: 15,
-                                      spreadRadius: 5,
-                                    ),
-                                  ],
+                      ),
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.vallexpress.app',
+                        tileBuilder: (context, child, tile) {
+                          return AnimatedOpacity(
+                            opacity: 1.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: child,
+                          );
+                        },
+                        errorTileCallback: (tile, error, stackTrace) {
+                          if (kDebugMode) {
+                            print('❌ Error cargando tile: $error');
+                          }
+                        },
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: LatLng(
+                              (_direccionPredeterminada?['latitud'] as num?)
+                                      ?.toDouble() ??
+                                  AppConstants.clientLat,
+                              (_direccionPredeterminada?['longitud'] as num?)
+                                      ?.toDouble() ??
+                                  AppConstants.clientLng,
+                            ),
+                            width: 60,
+                            height: 60,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: AppTheme.clienteColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 4,
                                 ),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.home_rounded,
-                                    size: 30,
-                                    color: Colors.white,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.clienteColor.withOpacity(
+                                      0.5,
+                                    ),
+                                    blurRadius: 15,
+                                    spreadRadius: 5,
                                   ),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.home_rounded,
+                                  size: 30,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
 
+            if (_direccionPredeterminada != null) ...[
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -574,51 +574,6 @@ class _ClienteProfileScreenState extends State<ClienteProfileScreen> {
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppTheme.clienteColor.withOpacity(0.3),
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.location_off_outlined,
-                      color: AppTheme.clienteColor,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'No tienes una dirección guardada',
-                            style: TextStyle(
-                              color: AppTheme.textPrimaryColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Agrega una dirección en "Gestionar direcciones"',
-                            style: TextStyle(
-                              color: AppTheme.textSecondaryColor,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ],

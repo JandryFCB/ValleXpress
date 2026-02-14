@@ -54,6 +54,13 @@ const resetPasswordLimiter = rateLimit({
   message: { error: 'Demasiados intentos. Intenta en 1 minuto.' }
 });
 
+const emailVerificationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  message: { error: 'Demasiadas solicitudes. Intenta en 1 minuto.' }
+});
+
+
 // Rutas públicas
 router.post('/register', validacionRegistro, authController.register);
 router.post('/login', validacionLogin, authController.login);
@@ -62,7 +69,17 @@ router.post('/forgot-password', forgotPasswordLimiter, authController.forgotPass
 router.post('/verify-reset-code', verifyCodeLimiter, authController.verifyResetCode);
 router.post('/reset-password', resetPasswordLimiter, authController.resetPassword);
 
+// Verificación de email
+router.post('/send-verification', emailVerificationLimiter, authController.sendEmailVerification);
+router.post('/verify-email', verifyCodeLimiter, authController.verifyEmailCode);
+
+// ✅ Validación en tiempo real de campos únicos (sin autenticación)
+router.get('/check-cedula/:cedula', authController.checkCedula);
+router.get('/check-email/:email', authController.checkEmail);
+router.get('/check-placa/:placa', authController.checkPlaca);
+
 // Rutas protegidas
+
 router.get('/profile', verificarToken, authController.getProfile);
 router.put('/profile', verificarToken, authController.updateProfile);
 router.put('/change-password', verificarToken, authController.changePassword);

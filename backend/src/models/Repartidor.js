@@ -21,8 +21,15 @@ const Repartidor = sequelize.define('Repartidor', {
     type: DataTypes.STRING(50)
   },
   placa: {
-    type: DataTypes.STRING(20)
+    type: DataTypes.STRING(10),
+    allowNull: false,
+    unique: { msg: 'Esta placa ya está registrada' },
+    validate: {
+      notEmpty: { msg: 'La placa es requerida' },
+      len: { args: [5, 10], msg: 'La placa debe tener entre 5 y 10 caracteres' }
+    }
   },
+
   licencia: {
     type: DataTypes.STRING(50)
   },

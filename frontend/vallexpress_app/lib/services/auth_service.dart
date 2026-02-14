@@ -141,4 +141,115 @@ class AuthService {
       throw Exception('Error de conexión: $e');
     }
   }
+
+  // 📧 Enviar código de verificación de email
+  Future<Map<String, dynamic>> sendEmailVerification(
+    String email,
+    String nombre, {
+    String? fcmToken,
+  }) async {
+    try {
+      final body = {'email': email, 'nombre': nombre};
+
+      // Agregar FCM token si está disponible
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        body['fcmToken'] = fcmToken;
+      }
+
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/auth/send-verification'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Error al enviar código');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  // ✅ Verificar código de email
+  Future<Map<String, dynamic>> verifyEmailCode(
+    String email,
+    String code,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/auth/verify-email'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'email': email, 'code': code}),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Código inválido');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  // ✅ Verificar si cédula ya existe (validación en tiempo real)
+  Future<Map<String, dynamic>> checkCedula(String cedula) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/auth/check-cedula/$cedula'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Error al verificar cédula');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  // ✅ Verificar si email ya existe (validación en tiempo real)
+  Future<Map<String, dynamic>> checkEmail(String email) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/auth/check-email/$email'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Error al verificar email');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
+
+  // ✅ Verificar si placa ya existe (validación en tiempo real)
+  Future<Map<String, dynamic>> checkPlaca(String placa) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/auth/check-placa/$placa'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw Exception(error['error'] ?? 'Error al verificar placa');
+      }
+    } catch (e) {
+      throw Exception('Error de conexión: $e');
+    }
+  }
 }
