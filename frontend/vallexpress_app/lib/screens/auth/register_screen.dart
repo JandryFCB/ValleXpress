@@ -27,26 +27,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isEmailVerified = false;
   bool _isSendingCode = false;
   bool _isVerifyingCode = false;
-  bool _codeSent = false; // ✅ Solo mostrar campo después de enviar
+  bool _codeSent = false;
   int _retryAfterSeconds = 0;
   Timer? _retryTimer;
   final TextEditingController _codeController = TextEditingController();
 
-  // ✅ Validación en tiempo real de campos únicos
+  // Validación en tiempo real de campos únicos
   bool? _cedulaExists;
   bool? _emailExists;
   bool? _placaExists;
+  bool? _telefonoValido;
   bool _isCheckingCedula = false;
   bool _isCheckingEmail = false;
   bool _isCheckingPlaca = false;
 
-  // ✅ Variables para recordar últimos valores validados (evita re-validar)
+  // Variables para recordar últimos valores validados
   String _lastCheckedCedula = '';
   String _lastCheckedEmail = '';
   String _lastCheckedPlaca = '';
+  String _lastCheckedTelefono = '';
 
   // FocusNodes para detectar cuando pierden foco
+  final FocusNode _nombreFocus = FocusNode();
+  final FocusNode _apellidoFocus = FocusNode();
   final FocusNode _cedulaFocus = FocusNode();
+  final FocusNode _telefonoFocus = FocusNode();
   final FocusNode _emailFocus = FocusNode();
   final FocusNode _placaFocus = FocusNode();
 
@@ -67,6 +72,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Timer? _emailDebounceTimer;
   Timer? _cedulaDebounceTimer;
   Timer? _placaDebounceTimer;
+  Timer? _telefonoDebounceTimer;
 
   @override
   void initState() {
@@ -87,24 +93,54 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailFocus.addListener(_onEmailFocusChange);
     _placaFocus.addListener(_onPlacaFocusChange);
 
-    // ✅ Validación en tiempo real para email (con debounce)
+    // Validación en tiempo real
     _emailController.addListener(_onEmailChanged);
-
-    // ✅ Validación en tiempo real para cédula (con debounce)
     _cedulaController.addListener(_onCedulaChanged);
-
-    // ✅ Validación en tiempo real para placa (con debounce)
     _placaController.addListener(_onPlacaChanged);
+    _telefonoController.addListener(_onTelefonoChanged);
   }
 
-  // ✅ Validar cédula en tiempo real (con debounce de 500ms)
+  // Validar teléfono en tiempo real
+  void _onTelefonoChanged() {
+    final telefono = _telefonoController.text.trim();
+
+    _telefonoDebounceTimer?.cancel();
+
+    if (telefono.isEmpty || telefono.length < 10) {
+      setState(() {
+        _telefonoValido = null;
+      });
+      return;
+    }
+
+    if (telefono == _lastCheckedTelefono && _telefonoValido != null) {
+      return;
+    }
+
+    _telefonoDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted && _telefonoController.text.trim().length == 10) {
+        _validarTelefonoEnTiempoReal();
+      }
+    });
+  }
+
+  void _validarTelefonoEnTiempoReal() {
+    final telefono = _telefonoController.text.trim();
+    final limpio = telefono.replaceAll(RegExp(r'[\s\-]'), '');
+    final esValido =
+        RegExp(r'^\d{10}$').hasMatch(limpio) && limpio.startsWith('09');
+
+    setState(() {
+      _telefonoValido = esValido;
+      _lastCheckedTelefono = telefono;
+    });
+  }
+
+  // Validar cédula en tiempo real
   void _onCedulaChanged() {
     final cedula = _cedulaController.text.trim();
-
-    // Cancelar timer anterior
     _cedulaDebounceTimer?.cancel();
 
-    // Resetear estado si está vacío o inválido
     if (cedula.isEmpty || cedula.length != 10) {
       setState(() {
         _cedulaExists = null;
@@ -113,23 +149,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // ✅ NO validar si ya validamos este mismo valor antes
     if (cedula == _lastCheckedCedula && _cedulaExists != null) {
       return;
     }
 
-    // Esperar 500ms después de que el usuario deje de escribir
-    _cedulaDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+    _cedulaDebounceTimer = Timer(const Duration(milliseconds: 250), () {
       if (mounted && _cedulaController.text.trim().length == 10) {
         _checkCedula();
       }
     });
   }
 
-  // ✅ Validar cédula cuando pierde foco
   void _onCedulaFocusChange() {
     if (!_cedulaFocus.hasFocus && _cedulaController.text.length == 10) {
-      // Solo validar si no lo hemos validado antes con este valor
       final cedula = _cedulaController.text.trim();
       if (cedula != _lastCheckedCedula || _cedulaExists == null) {
         _checkCedula();
@@ -137,14 +169,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // ✅ Validar email en tiempo real (con debounce de 500ms)
+  // Validar email en tiempo real
   void _onEmailChanged() {
     final email = _emailController.text.trim();
-
-    // Cancelar timer anterior
     _emailDebounceTimer?.cancel();
 
-    // Resetear estado si está vacío o inválido
     if (email.isEmpty || !_validarEmail(email)) {
       setState(() {
         _emailExists = null;
@@ -153,23 +182,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // ✅ NO validar si ya validamos este mismo valor antes
     if (email == _lastCheckedEmail && _emailExists != null) {
       return;
     }
 
-    // Esperar 500ms después de que el usuario deje de escribir
-    _emailDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+    _emailDebounceTimer = Timer(const Duration(milliseconds: 250), () {
       if (mounted && _validarEmail(_emailController.text.trim())) {
         _checkEmail();
       }
     });
   }
 
-  // ✅ Validar email cuando pierde foco
   void _onEmailFocusChange() {
     if (!_emailFocus.hasFocus && _validarEmail(_emailController.text)) {
-      // Solo validar si no lo hemos validado antes con este valor
       final email = _emailController.text.trim();
       if (email != _lastCheckedEmail || _emailExists == null) {
         _checkEmail();
@@ -177,14 +202,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // ✅ Validar placa en tiempo real (con debounce de 500ms)
+  // Validar placa en tiempo real
   void _onPlacaChanged() {
     final placa = _placaController.text.trim().toUpperCase();
-
-    // Cancelar timer anterior
     _placaDebounceTimer?.cancel();
 
-    // Resetear estado si está vacío
     if (placa.isEmpty) {
       setState(() {
         _placaExists = null;
@@ -193,13 +215,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // ✅ NO validar si ya validamos este mismo valor antes
     if (placa == _lastCheckedPlaca && _placaExists != null) {
       return;
     }
 
-    // Esperar 500ms después de que el usuario deje de escribir
-    _placaDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+    _placaDebounceTimer = Timer(const Duration(milliseconds: 250), () {
       if (mounted && _placaController.text.trim().isNotEmpty) {
         _checkPlaca();
       }
@@ -293,6 +313,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailDebounceTimer?.cancel();
     _cedulaDebounceTimer?.cancel();
     _placaDebounceTimer?.cancel();
+    _telefonoDebounceTimer?.cancel();
     _nombreController.dispose();
 
     _apellidoController.dispose();
@@ -305,7 +326,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _vehiculoController.dispose();
     _placaController.dispose();
     _codeController.dispose();
+    _nombreFocus.dispose();
+    _apellidoFocus.dispose();
     _cedulaFocus.dispose();
+    _telefonoFocus.dispose();
     _emailFocus.dispose();
     _placaFocus.dispose();
     super.dispose();
@@ -646,8 +670,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Nombre
                 _buildStyledInput(
                   controller: _nombreController,
+                  focusNode: _nombreFocus,
                   hintText: 'Nombre',
                   icon: Icons.person_outline,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) {
+                    if (_nombreController.text.isNotEmpty) {
+                      FocusScope.of(context).requestFocus(_apellidoFocus);
+                    }
+                  },
                 ),
 
                 const SizedBox(height: 16),
@@ -655,8 +686,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Apellido
                 _buildStyledInput(
                   controller: _apellidoController,
+                  focusNode: _apellidoFocus,
                   hintText: 'Apellido',
                   icon: Icons.person_outline,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) {
+                    if (_apellidoController.text.isNotEmpty) {
+                      FocusScope.of(context).requestFocus(_cedulaFocus);
+                    }
+                  },
                 ),
 
                 const SizedBox(height: 16),
@@ -669,11 +707,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   icon: Icons.credit_card_outlined,
                   keyboardType: TextInputType.number,
                   maxLength: 10,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) {
+                    // Solo permitir pasar si la cédula es válida (no existe y tiene 10 dígitos)
+                    final cedula = _cedulaController.text.trim();
+                    if (cedula.length == 10 && _cedulaExists == false) {
+                      FocusScope.of(context).requestFocus(_telefonoFocus);
+                    } else if (_cedulaExists == true) {
+                      _showError('Esta cédula ya está registrada. Usa otra.');
+                    } else {
+                      _showError('Ingresa una cédula válida de 10 dígitos.');
+                    }
+                  },
                   errorText: _cedulaExists == true
                       ? 'Esta cédula ya está registrada'
                       : null,
                   isValid: _cedulaExists == false,
-                  isChecking: _isCheckingCedula,
+                  isChecking: false, // Ocultar circulito de carga
                 ),
 
                 const SizedBox(height: 16),
@@ -681,10 +731,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Teléfono con validación
                 _buildStyledInput(
                   controller: _telefonoController,
+                  focusNode: _telefonoFocus,
                   hintText: '09XXXXXXXX - 10 dígitos',
                   icon: Icons.phone_outlined,
                   keyboardType: TextInputType.phone,
                   maxLength: 10,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) {
+                    // Solo permitir pasar si el teléfono es válido (empieza con 09)
+                    final telefono = _telefonoController.text.trim();
+                    final limpio = telefono.replaceAll(RegExp(r'[\s\-]'), '');
+                    final esValido =
+                        RegExp(r'^\d{10}$').hasMatch(limpio) &&
+                        limpio.startsWith('09');
+
+                    if (esValido) {
+                      FocusScope.of(context).requestFocus(_emailFocus);
+                    } else {
+                      _showError(
+                        'El teléfono debe tener 10 dígitos y empezar con 09 (ej: 0991234567)',
+                      );
+                    }
+                  },
+                  errorText: _telefonoValido == false
+                      ? 'Debe empezar con 09 y tener 10 dígitos'
+                      : null,
+                  isValid: _telefonoValido == true,
+                  isChecking: false, // Ocultar circulito de carga
                 ),
 
                 const SizedBox(height: 16),
@@ -699,11 +772,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       hintText: 'tu@email.com',
                       icon: Icons.email_outlined,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) {
+                        // No permitir pasar si el email no está verificado
+                        if (!_isEmailVerified) {
+                          _showError(
+                            'Debes verificar tu email antes de continuar. Presiona "Verificar".',
+                          );
+                          return; // 🔴 BLOQUEAR: no permitir pasar al siguiente campo
+                        }
+                        if (_emailExists == true) {
+                          _showError(
+                            'Este email ya está registrado. Usa otro.',
+                          );
+                          return; // 🔴 BLOQUEAR: email duplicado
+                        }
+                        if (_emailExists == null) {
+                          _showError('Verifica tu email antes de continuar.');
+                          return; // 🔴 BLOQUEAR: aún no se ha verificado
+                        }
+                        // ✅ Email verificado y no existe, permitir pasar
+                        FocusScope.of(context).nextFocus();
+                      },
+
                       errorText: _emailExists == true
                           ? 'Este email ya está registrado'
                           : null,
                       isValid: _emailExists == false && _isEmailVerified,
-                      isChecking: _isCheckingEmail,
+                      isChecking: false, // Ocultar circulito de carga
+
                       suffixIcon: _isEmailVerified
                           ? const Icon(Icons.verified, color: Colors.green)
                           : _emailExists == true
@@ -864,12 +961,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         focusNode: _placaFocus,
                         hintText: 'Placa del vehículo (ABC123 o ABC-123)',
                         icon: Icons.confirmation_number_outlined,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) {
+                          // Solo permitir pasar si la placa es válida (no existe)
+                          if (_placaExists == false) {
+                            FocusScope.of(context).nextFocus();
+                          } else if (_placaExists == true) {
+                            _showError(
+                              'Esta placa ya está registrada. Usa otra.',
+                            );
+                          }
+                        },
                         errorText: _placaExists == true
                             ? 'Esta placa ya está registrada'
                             : null,
                         isValid: _placaExists == false,
-                        isChecking: _isCheckingPlaca,
+                        isChecking: false, // Ocultar circulito de carga
                       ),
+
                       const SizedBox(height: 16),
                     ],
                   ),
@@ -1110,6 +1219,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     String? errorText,
     bool? isValid,
     bool isChecking = false,
+    TextInputAction? textInputAction,
+    Function(String)? onSubmitted,
   }) {
     // Determinar color del borde según estado
     Color borderColor = AppTheme.borderColor.withOpacity(0.3);
@@ -1137,6 +1248,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             keyboardType: keyboardType,
             obscureText: obscureText,
             maxLength: maxLength,
+            textInputAction: textInputAction,
+            onSubmitted: onSubmitted,
             style: const TextStyle(color: AppTheme.textPrimaryColor),
             decoration: InputDecoration(
               hintText: hintText,
