@@ -9,6 +9,7 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/pedido_service.dart';
 import '../../services/socket_tracking_service.dart';
+import 'cliente_mis_pedidos_screen.dart';
 
 /// Pantalla de rastreo de pedido - Soporta múltiples pedidos en camino
 class RastrearPedidoScreen extends StatefulWidget {
@@ -31,6 +32,9 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
   List<Map<String, dynamic>> _pedidosEnCamino = [];
   bool _cargandoLista = false;
 
+  // 🚀 COMPARTIR CACHÉ con ClienteMisPedidosScreen
+  // Usamos la caché de Mis Pedidos para que sea instantáneo al navegar
+
   // Socket y tracking - MISMO patrón que HomeScreen
   final TrackingSocketService _socketService = TrackingSocketService();
   StreamSubscription<Map<String, dynamic>>? _locationSub;
@@ -51,13 +55,88 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
       // Modo tracking directo: cargar pedido específico
       _pedidoFuture = _cargarPedido(widget.pedidoId!);
     } else {
-      // Modo lista: cargar todos los pedidos en camino
-      _pedidoFuture = _cargarPedidosEnCamino();
+      // Modo lista: verificar caché primero para carga instantánea
+      _inicializarDesdeCache();
     }
   }
 
-  /// Carga TODOS los pedidos en camino del cliente
+  /// 🚀 Inicialización síncrona desde caché - INSTANTÁNEO
+  void _inicializarDesdeCache() {
+    final cache = ClienteMisPedidosScreen.cachePedidos;
+    final lastFetch = ClienteMisPedidosScreen.lastFetch;
+
+    if (cache != null && lastFetch != null) {
+      final cacheAge = DateTime.now().difference(lastFetch);
+      if (cacheAge < const Duration(minutes: 2)) {
+        // 🚀 Caché válida: usar inmediatamente (sin async, sin setState en init)
+        final enCamino = cache
+            .where((p) {
+              final estado = (p['estado'] ?? '').toString();
+              return estado == 'en_camino' || estado == 'recogido';
+            })
+            .cast<Map<String, dynamic>>()
+            .toList();
+
+        // Setear datos directamente sin Future
+        _pedidosEnCamino = enCamino;
+        _cargandoLista = false;
+
+        // Crear Future ya completado para que FutureBuilder no muestre loading
+        _pedidoFuture = Future.value(enCamino);
+
+        // Refrescar en background después del primer frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _refrescarEnCaminoSilencioso();
+        });
+        return;
+      }
+    }
+
+    // 🚀 Sin caché: mostrar vacío INMEDIATAMENTE y cargar en background
+    _pedidosEnCamino = []; // Lista vacía inicial
+    _cargandoLista = false;
+    _pedidoFuture = Future.value([]); // Future completado con lista vacía
+
+    // Cargar desde API en background después del primer frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargarPedidosEnCaminoDesdeApi();
+    });
+  }
+
+  /// 🚀 Carga pedidos en camino - USA CACHÉ COMPARTIDA de Mis Pedidos
   Future<List<Map<String, dynamic>>> _cargarPedidosEnCamino() async {
+    // Intentar usar caché compartida de ClienteMisPedidosScreen
+    final cache = ClienteMisPedidosScreen.cachePedidos;
+    final lastFetch = ClienteMisPedidosScreen.lastFetch;
+
+    if (cache != null && lastFetch != null) {
+      final cacheAge = DateTime.now().difference(lastFetch);
+      if (cacheAge < const Duration(minutes: 2)) {
+        // 🚀 Caché válida: filtrar solo los en camino
+        final enCamino = cache
+            .where((p) {
+              final estado = (p['estado'] ?? '').toString();
+              return estado == 'en_camino' || estado == 'recogido';
+            })
+            .cast<Map<String, dynamic>>()
+            .toList();
+
+        setState(() {
+          _pedidosEnCamino = enCamino;
+          _cargandoLista = false;
+        });
+
+        // Refrescar en background (actualiza caché compartida)
+        _refrescarEnCaminoSilencioso();
+        return enCamino;
+      }
+    }
+
+    // Sin caché compartida: cargar desde API
+    return await _cargarPedidosEnCaminoDesdeApi();
+  }
+
+  Future<List<Map<String, dynamic>>> _cargarPedidosEnCaminoDesdeApi() async {
     setState(() => _cargandoLista = true);
     try {
       final lista = await PedidoService.misPedidos();
@@ -69,6 +148,10 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
           .cast<Map<String, dynamic>>()
           .toList();
 
+      // Guardar en caché compartida de Mis Pedidos
+      ClienteMisPedidosScreen.cachePedidos = lista;
+      ClienteMisPedidosScreen.lastFetch = DateTime.now();
+
       setState(() {
         _pedidosEnCamino = enCamino;
         _cargandoLista = false;
@@ -77,6 +160,30 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
     } catch (e) {
       setState(() => _cargandoLista = false);
       rethrow;
+    }
+  }
+
+  Future<void> _refrescarEnCaminoSilencioso() async {
+    try {
+      final lista = await PedidoService.misPedidos();
+      final enCamino = lista
+          .where((p) {
+            final estado = (p['estado'] ?? '').toString();
+            return estado == 'en_camino' || estado == 'recogido';
+          })
+          .cast<Map<String, dynamic>>()
+          .toList();
+
+      // Actualizar caché compartida y UI solo si hay cambios
+      if (enCamino.length != _pedidosEnCamino.length) {
+        ClienteMisPedidosScreen.cachePedidos = lista;
+        ClienteMisPedidosScreen.lastFetch = DateTime.now();
+        if (mounted) {
+          setState(() => _pedidosEnCamino = enCamino);
+        }
+      }
+    } catch (_) {
+      // Silenciar errores de refresh en background
     }
   }
 
@@ -307,61 +414,100 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<dynamic>(
+      body: _buildBody(),
+    );
+  }
+
+  /// 🚀 NUEVO: Renderizado inteligente con caché COMPARTIDA
+  Widget _buildBody() {
+    // Modo lista (sin pedidoId específico)
+    if (widget.pedidoId == null) {
+      // 🚀 Si hay caché compartida válida, mostrar INMEDIATAMENTE
+      final cache = ClienteMisPedidosScreen.cachePedidos;
+      final lastFetch = ClienteMisPedidosScreen.lastFetch;
+
+      if (cache != null && lastFetch != null) {
+        final cacheAge = DateTime.now().difference(lastFetch);
+        if (cacheAge < const Duration(minutes: 2)) {
+          // Filtrar en camino desde caché compartida
+          final enCamino = cache
+              .where((p) {
+                final estado = (p['estado'] ?? '').toString();
+                return estado == 'en_camino' || estado == 'recogido';
+              })
+              .cast<Map<String, dynamic>>()
+              .toList();
+
+          // Renderizar directamente sin FutureBuilder = INSTANTÁNEO
+          if (enCamino.isEmpty) {
+            return _buildSinPedidosView();
+          }
+          return _buildListaPedidos(enCamino);
+        }
+      }
+
+      // Sin caché: usar FutureBuilder (primera vez)
+      return FutureBuilder<dynamic>(
         future: _pedidoFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-
           if (snapshot.hasError) {
             return _buildErrorView('Error: ${snapshot.error}');
           }
-
-          // Modo lista: mostrar pedidos en camino
-          if (widget.pedidoId == null) {
-            final pedidos = snapshot.data as List<Map<String, dynamic>>?;
-            if (pedidos == null || pedidos.isEmpty) {
-              return _buildSinPedidosView();
-            }
-            return _buildListaPedidos(pedidos);
+          final pedidos = snapshot.data as List<Map<String, dynamic>>?;
+          if (pedidos == null || pedidos.isEmpty) {
+            return _buildSinPedidosView();
           }
-
-          // Modo tracking: mostrar mapa directamente
-          final pedido = _currentPedido ?? snapshot.data;
-          if (pedido == null) {
-            return _buildErrorView('Pedido no encontrado');
-          }
-
-          final estado = (pedido['estado'] ?? '').toString();
-          final numeroPedido = (pedido['numeroPedido'] ?? '').toString();
-          final vendedor = pedido['vendedor'];
-          final tienda = (vendedor?['nombreNegocio'] ?? '').toString();
-
-          // Usar estado actual si está disponible, sino el del pedido cargado
-          final effectiveEstado = _currentEstado ?? estado;
-
-          return SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildPedidoCard(numeroPedido, tienda, estado),
-                  const SizedBox(height: 16),
-                  // Usar estado actual del pedido para mostrar/ocultar mapa
-                  if (effectiveEstado == 'en_camino' ||
-                      effectiveEstado == 'recogido') ...[
-                    _buildTrackingSection(),
-                  ] else ...[
-                    _buildEstadoInfo(effectiveEstado),
-                  ],
-                ],
-              ),
-            ),
-          );
+          return _buildListaPedidos(pedidos);
         },
-      ),
+      );
+    }
+
+    // Modo tracking específico (con pedidoId)
+    return FutureBuilder<dynamic>(
+      future: _pedidoFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            _currentPedido == null) {
+          // Solo mostrar loading si NO tenemos datos previos
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError && _currentPedido == null) {
+          return _buildErrorView('Error: ${snapshot.error}');
+        }
+
+        final pedido = _currentPedido ?? snapshot.data;
+        if (pedido == null) {
+          return _buildErrorView('Pedido no encontrado');
+        }
+
+        final estado = (pedido['estado'] ?? '').toString();
+        final numeroPedido = (pedido['numeroPedido'] ?? '').toString();
+        final vendedor = pedido['vendedor'];
+        final tienda = (vendedor?['nombreNegocio'] ?? '').toString();
+        final effectiveEstado = _currentEstado ?? estado;
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildPedidoCard(numeroPedido, tienda, estado),
+                const SizedBox(height: 16),
+                if (effectiveEstado == 'en_camino' ||
+                    effectiveEstado == 'recogido') ...[
+                  _buildTrackingSection(),
+                ] else ...[
+                  _buildEstadoInfo(effectiveEstado),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

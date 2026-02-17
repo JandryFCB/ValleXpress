@@ -1,9 +1,7 @@
-const Repartidor = require('./models/Repartidor');
-
 const jwt = require('jsonwebtoken');
-const Pedido = require('./models/Pedido'); // ajusta la ruta si es diferente
 
 require('dotenv').config();
+
 
 // Inicializar Firebase Admin SDK
 const admin = require('firebase-admin');
@@ -22,6 +20,7 @@ try {
       // Leer y parsear el archivo JSON manualmente
       const serviceAccountContent = fs.readFileSync(serviceAccountPath, 'utf8');
       const serviceAccount = JSON.parse(serviceAccountContent);
+
       
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
@@ -48,19 +47,23 @@ const { Server } = require('socket.io');
 
 
 // Importar rutas
-const authRoutes = require('./routes/auth.routes');
-const direccionesRoutes = require('./routes/direcciones.routes');
-const vendedorRoutes = require('./routes/vendedor.routes');
-const productoRoutes = require('./routes/producto.routes');
-const pedidoRoutes = require('./routes/pedido.routes');
-const repartidorRoutes = require('./routes/repartidor.routes');
-const notificacionRoutes = require('./routes/notificacion.routes');
-// const usuarioRoutes = require('./routes/usuarios.routes'); // Eliminado, unificado en auth.routes
+const authRoutes = require('./modules/auth/auth.routes');
+const direccionesRoutes = require('./modules/direcciones/direcciones.routes');
+const vendedorRoutes = require('./modules/vendedores/vendedor.routes');
+const productoRoutes = require('./modules/productos/producto.routes');
+const pedidoRoutes = require('./modules/pedidos/pedido.routes');
+const repartidorRoutes = require('./modules/repartidores/repartidor.routes');
+const notificacionRoutes = require('./modules/notificaciones/notificacion.routes');
+const usuarioRoutes = require('./modules/auth/usuario.routes');
 
 
-// Importar base de datos
-const { sequelize } = require('./config/database');
-require('./models'); 
+
+
+// Importar base de datos y modelos
+const { sequelize } = require('./index');
+
+
+
 
 // Crear aplicación Express
 const app = express();
@@ -145,7 +148,8 @@ app.use('/api/productos', productoRoutes);
 app.use('/api/pedidos', pedidoRoutes);
 app.use('/api/repartidores', repartidorRoutes);
 app.use('/api/notificaciones', notificacionRoutes);
-// app.use('/api/usuarios', usuarioRoutes); // Eliminado, unificado en auth.routes
+app.use('/api/usuarios', usuarioRoutes);
+
 
 
 // Ruta de prueba
@@ -179,7 +183,9 @@ app.use((err, req, res, next) => {
 // se manejan dentro de `src/sockets/pedidos.socket.js`.
 // Se eliminaron funciones/variables duplicadas para evitar confusión.
 
-const registerPedidosSocket = require('./sockets/pedidos.socket');
+const registerPedidosSocket = require('./modules/pedidos/pedidos.socket');
+
+
 
 io.on('connection', (socket) => {
   console.log(
@@ -212,6 +218,8 @@ io.on('connection', (socket) => {
 
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
+
+
 
 async function startServer() {
   try {

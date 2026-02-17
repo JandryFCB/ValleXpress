@@ -50,13 +50,6 @@ flutter:
     - assets/images/
     - assets/documents/
 
-flutter_icons:
-  android: true
-  ios: false
-  image_path: "assets/images/logo.png"
-  adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: "assets/images/logo.png"
-
 flutter_launcher_icons:
   android: true
   ios: false

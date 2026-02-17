@@ -1,4 +1,7 @@
-const Usuario = require('../models/Usuario');
+const Usuario = require('../modules/auth/usuario.model');
+
+
+
 
 class UsuariosService {
   // Obtener usuario por ID

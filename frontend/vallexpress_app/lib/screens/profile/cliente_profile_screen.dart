@@ -44,16 +44,14 @@ class _ClienteProfileScreenState extends State<ClienteProfileScreen> {
 
   Future<void> _cargarPerfil() async {
     try {
-      final datos = await ProfileService.obtenerPerfil();
-      Map<String, dynamic>? direccion;
+      // 🚀 OPTIMIZACIÓN: Cargar en paralelo, no secuencial
+      final results = await Future.wait([
+        ProfileService.obtenerPerfil(),
+        AddressService.predeterminada().catchError((_) => null),
+      ]);
 
-      // Intentar cargar la dirección predeterminada
-      try {
-        direccion = await AddressService.predeterminada();
-      } catch (_) {
-        // Si falla, no hay dirección predeterminada
-        direccion = null;
-      }
+      final datos = results[0] as Map<String, dynamic>;
+      final direccion = results[1] as Map<String, dynamic>?;
 
       if (!mounted) return;
       setState(() {

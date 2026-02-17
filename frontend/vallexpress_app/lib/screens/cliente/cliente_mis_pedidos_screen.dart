@@ -5,6 +5,12 @@ import '../../services/pedido_service.dart';
 class ClienteMisPedidosScreen extends StatefulWidget {
   const ClienteMisPedidosScreen({super.key});
 
+  // 🚀 CACHE: Almacenar pedidos en memoria para carga instantánea
+  // NOTA: Públicas para que RastrearPedidoScreen pueda acceder a la misma caché
+  static List<dynamic>? cachePedidos;
+  static DateTime? lastFetch;
+  static const Duration cacheDuration = Duration(minutes: 2);
+
   @override
   State<ClienteMisPedidosScreen> createState() =>
       _ClienteMisPedidosScreenState();
@@ -21,9 +27,38 @@ class _ClienteMisPedidosScreenState extends State<ClienteMisPedidosScreen> {
   }
 
   Future<void> _cargar() async {
+    // 🚀 Mostrar cache inmediatamente si existe y es fresco
+    if (ClienteMisPedidosScreen.cachePedidos != null &&
+        ClienteMisPedidosScreen.lastFetch != null) {
+      final cacheAge = DateTime.now().difference(
+        ClienteMisPedidosScreen.lastFetch!,
+      );
+      if (cacheAge < ClienteMisPedidosScreen.cacheDuration) {
+        // Cache fresco: mostrar inmediatamente
+        setState(() {
+          pedidos = ClienteMisPedidosScreen.cachePedidos!;
+          loading = false;
+        });
+
+        // Refrescar en background silenciosamente
+        _refrescarSilencioso();
+        return;
+      }
+    }
+
+    // Sin cache o expirado: cargar normal
+    await _cargarDesdeApi();
+  }
+
+  Future<void> _cargarDesdeApi() async {
     try {
       final data = await PedidoService.misPedidos();
       if (!mounted) return;
+
+      // 🚀 Guardar en cache
+      ClienteMisPedidosScreen.cachePedidos = data;
+      ClienteMisPedidosScreen.lastFetch = DateTime.now();
+
       setState(() {
         pedidos = data;
         loading = false;
@@ -34,6 +69,26 @@ class _ClienteMisPedidosScreenState extends State<ClienteMisPedidosScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  // Refresca en background sin mostrar loading
+  Future<void> _refrescarSilencioso() async {
+    try {
+      final data = await PedidoService.misPedidos();
+      if (!mounted) return;
+
+      // Actualizar cache y UI solo si hay cambios
+      if (data.length != pedidos.length ||
+          (data.isNotEmpty &&
+              pedidos.isNotEmpty &&
+              data.first['id'] != pedidos.first['id'])) {
+        ClienteMisPedidosScreen.cachePedidos = data;
+        ClienteMisPedidosScreen.lastFetch = DateTime.now();
+        setState(() => pedidos = data);
+      }
+    } catch (_) {
+      // Silenciar errores de refresh background
     }
   }
 
