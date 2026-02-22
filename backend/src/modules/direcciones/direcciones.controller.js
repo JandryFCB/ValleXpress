@@ -1,6 +1,8 @@
 const { Op } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const Direccion = require('./direccion.model');
+
+//const Direccion = require('./direccion.model');
+const { Direccion } = require('../../config/models');
 
 
 
