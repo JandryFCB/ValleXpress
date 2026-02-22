@@ -106,13 +106,13 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  // Aqui van las Asociaciones
-  // Direccion.associate = (models) => {
-  //   Direccion.belongsTo(models.Usuario, {
-  //     foreignKey: 'usuarioId',
-  //     as: 'usuario',
-  //   });
-  // };
+  // Aqui van las 
+  Direccion.associate = (models) => {
+    Direccion.belongsTo(models.Usuario, {
+      foreignKey: 'usuarioId',
+      as: 'usuario',
+    });
+  };
 
   return Direccion;
 };

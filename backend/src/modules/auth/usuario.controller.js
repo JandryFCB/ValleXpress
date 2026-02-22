@@ -1,6 +1,6 @@
 const { validationResult } = require('express-validator');
 const usuariosService = require('../../services/usuarios.service');
-const Usuario = require('./usuario.model');
+const { Usuario, Direccion } = require('../../config/models');
 
 
 
@@ -9,7 +9,15 @@ class UsuariosController {
   // Obtener perfil del usuario actual
   async obtenerPerfil(req, res) {
     try {
-      const usuario = await usuariosService.obtenerPorId(req.usuario.id);
+      const usuario = await usuariosService.obtenerPorId({
+        id: req.usuario.id,
+        // include: [
+        //   {
+        //     model: Direccion,
+        //     as: 'direcciones'
+        //   }
+        // ]
+      });
 
       if (!usuario) {
         return res.status(404).json({
