@@ -1,85 +1,41 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
+const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
 const Usuario = require('../auth/usuario.model');
 
-
-
+// Tabla REPARTIDORES. La clave primaria es REPARTIDOR (REP-000001), generada por la BD; en el modelo es "id".
+// Se conservan los nombres de atributos que usan los módulos aún no migrados.
+// PENDIENTE al migrar el módulo de repartidores: "foto" ahora es ARCHIVOS (fotoId) y "cedula" ya no está
+// aquí: vive solo en USUARIOS.
 const Repartidor = sequelize.define('Repartidor', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  usuarioId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'usuarios',
-      key: 'id'
-    },
-    field: 'usuario_id'
-  },
-  vehiculo: {
-    type: DataTypes.STRING(50)
-  },
-  placa: {
-    type: DataTypes.STRING(10),
-    allowNull: false,
-    unique: { msg: 'Esta placa ya está registrada' },
-    validate: {
-      notEmpty: { msg: 'La placa es requerida' },
-      len: { args: [5, 10], msg: 'La placa debe tener entre 5 y 10 caracteres' }
-    }
-  },
+  id: clavePrimaria('repartidor'),
+  usuarioId: { type: DataTypes.STRING(30), allowNull: false, field: 'usuario' },   // USUARIOS.USUARIO
+  vehiculo: { type: DataTypes.CHAR(3), field: 'vehiculo' },                // TIPOVEHICULO.CODIGO
+  placa: { type: DataTypes.STRING(10), field: 'placa' },
+  marca: { type: DataTypes.STRING(50), field: 'marca' },
+  modelo: { type: DataTypes.STRING(50), field: 'modelo' },
+  color: { type: DataTypes.STRING(30), field: 'color' },
+  anio: { type: DataTypes.SMALLINT, field: 'anio' },
+  licencia: { type: DataTypes.STRING(30), field: 'licencia' },
+  licenciaTipo: { type: DataTypes.STRING(5), field: 'licenciatipo' },
+  licenciaVence: { type: DataTypes.DATEONLY, field: 'licenciavence' },
+  fotoId: { type: DataTypes.STRING(30), field: 'foto' },                   // ARCHIVOS.ARCHIVO
+  disponible: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'disponible' },
+  enServicio: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'enservicio' },
+  latitud: { type: DataTypes.DECIMAL(10, 8), field: 'latitud' },
+  longitud: { type: DataTypes.DECIMAL(11, 8), field: 'longitud' },
+  ubicacionEn: { type: DataTypes.DATE, field: 'ubicacionen' },
+  calificacionPromedio: { type: DataTypes.DECIMAL(3, 2), defaultValue: 0, field: 'calificacion' },
+  totalCalificaciones: { type: DataTypes.INTEGER, defaultValue: 0, field: 'totalcalif' },
+  pedidosCompletados: { type: DataTypes.INTEGER, defaultValue: 0, field: 'pedidoscompletos' },
+  saldoEfectivo: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, field: 'saldoefectivo' },
+  ganancias: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0, field: 'ganancias' },
+  aprobacion: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: '001', field: 'aprobacion' },  // ESTADOAPROBACION.CODIGO
+  aprobadoPor: { type: DataTypes.STRING(30), field: 'aprobadopor' },
+  aprobadoEn: { type: DataTypes.DATE, field: 'aprobadoen' },
+  ...columnasComunes,
+}, opcionesBase('REPARTIDORES'));
 
-  licencia: {
-    type: DataTypes.STRING(50)
-  },
-  calificacionPromedio: {
-    type: DataTypes.DECIMAL(3, 2),
-    defaultValue: 0.00,
-    field: 'calificacion_promedio'
-  },
-  totalCalificaciones: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'total_calificaciones'
-  },
-  disponible: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  latitud: {
-    type: DataTypes.DECIMAL(10, 8),
-    field: 'latitud'
-  },
-  longitud: {
-    type: DataTypes.DECIMAL(11, 8),
-    field: 'longitud'
-  },
-  pedidosCompletados: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    field: 'pedidos_completados'
-  },
-  foto: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  cedula: {
-    type: DataTypes.STRING(10),
-    field: 'cedula'
-  }
-}, {
-  tableName: 'repartidores',
-  timestamps: true,
-  underscored: true
-});
-
-// Relación con Usuario
-Repartidor.belongsTo(Usuario, {
-  foreignKey: 'usuarioId',
-  as: 'usuario'
-});
+Repartidor.belongsTo(Usuario, { foreignKey: 'usuarioId', as: 'usuario' });
 
 module.exports = Repartidor;

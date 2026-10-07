@@ -1,72 +1,26 @@
 const express = require('express');
 const router = express.Router();
-const { body } = require('express-validator');
-const vendedorController = require('./vendedor.controller');
+const controller = require('./vendedor.controller');
+const schema = require('./vendedor.schema');
+const validar = require('../../shared/middlewares/validar');
 const { verificarToken, verificarRol } = require('../../middlewares/auth.middleware');
 
+// Cada ruta lista, en orden: autenticación/rol -> reglas de validación -> validar -> controller.
+const vendedor = [verificarToken, verificarRol('vendedor')];
 
-// Subir logo de perfil (base64, igual que cliente)
-router.patch('/perfil/logo',
-  verificarToken,
-  verificarRol('vendedor'),
-  vendedorController.subirLogoPerfil
-);
+// --- Rutas del propio vendedor (antes que /:id) ---
+router.get('/perfil/mi-negocio', vendedor, controller.miPerfil);
+router.put('/perfil/actualizar', vendedor, schema.actualizar, validar, controller.actualizar);
+router.delete('/perfil/eliminar', vendedor, controller.eliminar);
+router.patch('/perfil/ubicacion', vendedor, schema.ubicacion, validar, controller.actualizarUbicacion);
+router.patch('/perfil/logo', vendedor, schema.logo, validar, controller.subirLogoPerfil);
+router.patch('/perfil/banner', vendedor, schema.banner, validar, controller.subirBanner);
 
-// Validaciones
-const validacionCrear = [
-  body('nombreNegocio')
-    .trim()
-    .notEmpty().withMessage('El nombre del negocio es requerido')
-    .isLength({ min: 3, max: 200 }).withMessage('El nombre debe tener entre 3 y 200 caracteres'),
-  body('descripcion')
-    .optional()
-    .trim(),
-  body('categoria')
-    .optional()
-    .trim(),
-  body('costoDelivery')
-    .optional()
-    .isFloat({ min: 0 }).withMessage('El costo de delivery debe ser mayor a 0'),
-  body('radioCobertura')
-    .optional()
-    .isInt({ min: 1 }).withMessage('El radio de cobertura debe ser mayor a 0')
-];
+// --- Públicas (solo vendedores aprobados y activos) ---
+router.get('/', controller.listar);
+router.get('/:id', schema.id, validar, controller.obtenerPorId);
 
-// Rutas públicas (cualquiera puede ver)
-router.get('/', vendedorController.listar);
-router.get('/:id', vendedorController.obtenerPorId);
-
-// Rutas protegidas (requieren autenticación)
-router.post('/', 
-  verificarToken, 
-  verificarRol('vendedor'), 
-  validacionCrear, 
-  vendedorController.crear
-);
-
-router.get('/perfil/mi-negocio', 
-  verificarToken, 
-  verificarRol('vendedor'), 
-  vendedorController.miPerfil
-);
-
-router.put('/perfil/actualizar', 
-  verificarToken, 
-  verificarRol('vendedor'), 
-  vendedorController.actualizar
-);
-
-router.delete('/perfil/eliminar', 
-  verificarToken, 
-  verificarRol('vendedor'), 
-  vendedorController.eliminar
-);
-
-// Actualizar ubicación del vendedor
-router.patch('/perfil/ubicacion',
-  verificarToken,
-  verificarRol('vendedor'),
-  vendedorController.actualizarUbicacion
-);
+// --- Crear negocio (el registro ya lo crea; esto es por si falta) ---
+router.post('/', vendedor, schema.crear, validar, controller.crear);
 
 module.exports = router;

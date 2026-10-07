@@ -1,92 +1,43 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
+const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
+const { ESTADOPRODUCTO } = require('../../shared/constants/codigos');
 const Vendedor = require('../vendedores/vendedor.model');
 
-
-
+// Tabla PRODUCTOS. La clave es PRODUCTO (PRO-000001), generada por la BD; en el modelo es "id".
+// El estado vive en el catálogo ESTADOPRODUCTO (001 disponible, 002 agotado, 003 no disponible, 004 descontinuado).
 const Producto = sequelize.define('Producto', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  vendedorId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'vendedores',
-      key: 'id'
-    },
-    field: 'vendedor_id'
-  },
-  nombre: {
-    type: DataTypes.STRING(200),
-    allowNull: false,
-    validate: {
-      notEmpty: { msg: 'El nombre del producto es requerido' }
-    }
-  },
-  descripcion: {
-    type: DataTypes.TEXT
-  },
-  precio: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    validate: {
-      min: { args: [0], msg: 'El precio debe ser mayor a 0' }
-    }
-  },
-  imagen: {
-    type: DataTypes.TEXT
-  },
-  categoria: {
-    type: DataTypes.STRING(50)
-  },
+  id: clavePrimaria('producto'),
+  vendedorId: { type: DataTypes.STRING(30), allowNull: false, field: 'vendedor' },    // VENDEDORES.VENDEDOR
+  categoria: { type: DataTypes.CHAR(3), field: 'categoria' },                          // CATEGORIAS.CODIGO
+  estado: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: ESTADOPRODUCTO.DISPONIBLE, field: 'estado' },
+  nombre: { type: DataTypes.STRING(200), allowNull: false, field: 'nombre' },
+  descripcion: { type: DataTypes.TEXT, field: 'descripcion' },
+  sku: { type: DataTypes.STRING(50), field: 'sku' },
+  precio: { type: DataTypes.DECIMAL(10, 2), allowNull: false, field: 'precio' },
+  precioAnterior: { type: DataTypes.DECIMAL(10, 2), field: 'precioanterior' },
+  costo: { type: DataTypes.DECIMAL(10, 2), field: 'costo' },
+  iva: { type: DataTypes.DECIMAL(5, 2), field: 'iva' },
+  imagenId: { type: DataTypes.STRING(30), field: 'imagen' },                           // ARCHIVOS.ARCHIVO
+  controlaStock: { type: DataTypes.BOOLEAN, field: 'controlastock' },
+  stock: { type: DataTypes.INTEGER, field: 'stock' },
+  stockMinimo: { type: DataTypes.INTEGER, field: 'stockminimo' },
+  tiempoPreparacion: { type: DataTypes.INTEGER, field: 'tiempoprepmin' },
+  destacado: { type: DataTypes.BOOLEAN, field: 'destacado' },
+  etiquetas: { type: DataTypes.ARRAY(DataTypes.TEXT), field: 'etiquetas' },
+  orden: { type: DataTypes.INTEGER, field: 'orden' },
+  totalVendidos: { type: DataTypes.INTEGER, field: 'totalvendidos' },
+
+  // Compatibilidad con la API: "disponible" (true/false) = el estado es 001. No es una columna.
   disponible: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
+    type: DataTypes.VIRTUAL(DataTypes.BOOLEAN, ['estado']),
+    get() { return this.getDataValue('estado') === ESTADOPRODUCTO.DISPONIBLE; },
+    set(valor) { this.setDataValue('estado', valor ? ESTADOPRODUCTO.DISPONIBLE : ESTADOPRODUCTO.NODISPONIBLE); },
   },
-  tiempoPreparacion: {
-    type: DataTypes.INTEGER,
-    field: 'tiempo_preparacion'
-  },
-  stock: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    validate: {
-      min: { args: [0], msg: 'El stock no puede ser negativo' }
-    }
-  }
-}, {
-  tableName: 'productos',
-  timestamps: true,
-  underscored: true
-});
+  ...columnasComunes,
+}, opcionesBase('PRODUCTOS'));
 
-// Relación con Vendedor
-Producto.belongsTo(Vendedor, {
-  foreignKey: 'vendedorId',
-  as: 'vendedor'
-});
-
-Vendedor.hasMany(Producto, {
-  foreignKey: 'vendedorId',
-  as: 'productos'
-});
-
-// Relación con DetallePedido
-const DetallePedido = require('../shared/detallePedido.model');
-
-
-
-Producto.hasMany(DetallePedido, {
-  foreignKey: 'productoId',
-  as: 'detalles'
-});
-
-DetallePedido.belongsTo(Producto, {
-  foreignKey: 'productoId',
-  as: 'producto'
-});
+Producto.belongsTo(Vendedor, { foreignKey: 'vendedorId', as: 'vendedor' });
+Vendedor.hasMany(Producto, { foreignKey: 'vendedorId', as: 'productos' });
 
 module.exports = Producto;

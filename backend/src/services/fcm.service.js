@@ -1,5 +1,42 @@
 const admin = require('firebase-admin');
 
+// Arma el mensaje de FCM (los valores de "data" deben ser texto)
+function armarMensaje(fcmToken, title, body, data = {}) {
+  return {
+    notification: {
+      title,
+      body
+    },
+    data: {
+      ...data,
+      click_action: 'FLUTTER_NOTIFICATION_CLICK'
+    },
+    token: fcmToken,
+    android: {
+      priority: 'high',
+      notification: {
+        channelId: 'verification_channel',
+        priority: 'high',
+        sound: 'default',
+        vibrateTimings: ['0s', '0.5s', '0.5s']
+      }
+    }
+  };
+}
+
+// Igual que sendPushNotification pero DICE qué pasó: { ok } | { ok:false, omitido } | { ok:false, invalido, code }.
+// "invalido" = el token ya no existe (app desinstalada...): quien llama debe desactivarlo.
+async function enviarPush(fcmToken, title, body, data = {}) {
+  if (!admin.apps.length) return { ok: false, omitido: true };
+  try {
+    await admin.messaging().send(armarMensaje(fcmToken, title, body, data));
+    return { ok: true };
+  } catch (error) {
+    const invalido = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(error.code);
+    return { ok: false, invalido, code: error.code, error: error.message };
+  }
+}
+
 /**
  * Enviar notificación push a un dispositivo específico
  * @param {string} fcmToken - Token del dispositivo
@@ -15,26 +52,7 @@ async function sendPushNotification(fcmToken, title, body, data = {}) {
       return null;
     }
 
-    const message = {
-      notification: {
-        title,
-        body
-      },
-      data: {
-        ...data,
-        click_action: 'FLUTTER_NOTIFICATION_CLICK'
-      },
-      token: fcmToken,
-      android: {
-        priority: 'high',
-        notification: {
-          channelId: 'verification_channel',
-          priority: 'high',
-          sound: 'default',
-          vibrateTimings: ['0s', '0.5s', '0.5s']
-        }
-      }
-    };
+    const message = armarMensaje(fcmToken, title, body, data);
 
     const response = await admin.messaging().send(message);
     console.log('✅ Notificación push enviada:', response);
@@ -82,6 +100,7 @@ async function sendWelcomeNotification(fcmToken, nombre) {
 
 module.exports = {
   sendPushNotification,
+  enviarPush,
   sendVerificationCodeNotification,
   sendWelcomeNotification
 };

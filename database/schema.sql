@@ -1,253 +1,1334 @@
--- ===============================
--- ValleXpress - Clean Schema (PostgreSQL 15)
--- 11 tablas - listo para init.sql / schema.sql
--- ===============================
+-- =============================================================================
+-- ValleXpress: esquema de base de datos (PostgreSQL 15)  ·  VERSIÓN 2
+-- =============================================================================
+-- CONVENCIONES
+--   * Nombres en ESPAÑOL, cortos y SIN guiones bajos. Se escriben en MAYÚSCULAS y SIN comillas:
+--     PostgreSQL los guarda en minúsculas, así que  SELECT * FROM USUARIOS  =  select * from usuarios.
+--     (NO usar comillas dobles en los nombres: con comillas "USUARIOS" sí distinguiría mayúsculas.)
+--   * NO HAY UUID. Cada tabla usa como CLAVE PRIMARIA un código legible, y las demás tablas guardan
+--     SOLO ese código para relacionarse (PEDIDOS.CLIENTE = 'jcayapa'):
+--         USUARIOS.USUARIO      jcayapa              (se genera del nombre; NO se puede cambiar nunca)
+--         VENDEDORES.VENDEDOR   VEN-000001           REPARTIDORES.REPARTIDOR  REP-000001
+--         PRODUCTOS.PRODUCTO    PRO-000001           PEDIDOS.PEDIDO           PED-20261006-000001
+--         catálogos: CODIGO     '001', '002'...      (ESTADOPEDIDO, ESTADOPRODUCTO, ROLES...)
+--     Las tablas internas (detalle del pedido, notificaciones...) usan un número 1, 2, 3 (columna ID).
+--   * Estados y tipos viven en catálogos con código de 3 dígitos; las tablas de negocio guardan SOLO el código.
+--   * Control de versiones por registro, en TODAS las tablas versionadas:
+--       FDESDE          desde cuándo rige esta versión del registro
+--       FHASTA          hasta cuándo rige ('2999-12-31 00:00:00' = vigente)
+--       VERSIONCONTROL  0 al crear, +1 en cada modificación
+--     La fila vigente siempre está en la tabla; al modificarla, la versión anterior pasa a la tabla
+--     gemela HIST<TABLA> (ej. HISTUSUARIOS) con su FDESDE/FHASTA reales (trigger automático).
+--   * Imágenes NO se guardan en la BD: la tabla ARCHIVOS guarda ruta, hash y variantes.
+--   * Borrado lógico: ELIMINADOEN. Quién cambió: el backend ejecuta  SET LOCAL app.usuario = 'jcayapa';
+-- Columnas comunes (todas las tablas versionadas):
+--   ACTIVO, FDESDE, FHASTA, VERSIONCONTROL, CREADOEN, CREADOPOR, ACTUALIZADOPOR, ELIMINADOEN
+--   DATOSEXTRA: texto libre de reserva (un dato o un comentario). VARCHAR de 50 a 250 según
+--   la tabla, NULL por ahora. Se puede ampliar o cambiar con CAMBIARTIPOCOLUMNA.
+-- =============================================================================
 
--- Extensiones
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- ===============================
--- ENUMS (idempotente)
--- ===============================
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_usuarios_tipo_usuario') THEN
-    CREATE TYPE enum_usuarios_tipo_usuario AS ENUM ('cliente', 'vendedor', 'repartidor');
-  END IF;
+-- Las fechas se guardan en UTC, pero se muestran en hora de Ecuador (así FHASTA se ve 2999-12-31 00:00:00).
+-- Aplica a las conexiones nuevas a esta base.
+DO $$ BEGIN
+    EXECUTE format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'America/Guayaquil');
 END $$;
 
--- ===============================
--- TABLAS
--- ===============================
+-- -----------------------------------------------------------------------------
+-- 1. CÓDIGOS CON PATRÓN
+-- -----------------------------------------------------------------------------
+CREATE SEQUENCE SECVENDEDORES;   CREATE SEQUENCE SECREPARTIDORES;  CREATE SEQUENCE SECPRODUCTOS;
+CREATE SEQUENCE SECPEDIDOS;      CREATE SEQUENCE SECPAGOS;         CREATE SEQUENCE SECCUPONES;
+CREATE SEQUENCE SECARCHIVOS;     CREATE SEQUENCE SECDIRECCIONES;   CREATE SEQUENCE SECCALIFICACIONES;
+CREATE SEQUENCE SECZONAS;
 
-CREATE TABLE IF NOT EXISTS public.usuarios (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  nombre varchar(100) NOT NULL,
-  apellido varchar(100) NOT NULL,
-  email varchar(150) NOT NULL UNIQUE,
-  telefono varchar(20),
-  password_hash varchar(255) NOT NULL,
-  tipo_usuario enum_usuarios_tipo_usuario NOT NULL,
-  foto_perfil text,
-  activo boolean DEFAULT true,
-  verificado boolean DEFAULT false,
-  fecha_registro timestamptz,
-  ultima_conexion timestamptz,
-  created_at timestamptz NOT NULL,
-  updated_at timestamptz NOT NULL,
-  cedula varchar(10) NOT NULL UNIQUE
+-- GENERARCODIGO('VEN', 'SECVENDEDORES')        -> VEN-000001
+-- GENERARCODIGO('PED', 'SECPEDIDOS', TRUE)     -> PED-20261006-000001
+CREATE FUNCTION GENERARCODIGO(p_prefijo TEXT, p_secuencia REGCLASS, p_confecha BOOLEAN DEFAULT FALSE)
+RETURNS TEXT LANGUAGE sql VOLATILE AS $$
+  SELECT p_prefijo || '-'
+      || CASE WHEN p_confecha THEN to_char(now() AT TIME ZONE 'America/Guayaquil', 'YYYYMMDD') || '-' ELSE '' END
+      || lpad(nextval(p_secuencia)::TEXT, 6, '0')
+$$;
+
+-- -----------------------------------------------------------------------------
+-- 2. CATÁLOGOS (CODIGO de 3 dígitos + DESCRIPCION)
+-- -----------------------------------------------------------------------------
+CREATE TABLE ROLES (
+    CODIGO          CHAR(3)       NOT NULL,
+    DESCRIPCION     VARCHAR(100)  NOT NULL,
+    DETALLE         TEXT,
+    ESPUBLICO       BOOLEAN       NOT NULL DEFAULT TRUE,     -- ¿se puede elegir al registrarse?
+    ORDEN           SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(50),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKROLES PRIMARY KEY (CODIGO),
+    CONSTRAINT CKROLESCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE INDEX IF NOT EXISTS idx_usuarios_email ON public.usuarios(email);
-CREATE INDEX IF NOT EXISTS idx_usuarios_tipo_usuario ON public.usuarios(tipo_usuario);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.direcciones (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  usuario_id uuid REFERENCES public.usuarios(id) ON DELETE CASCADE,
-  nombre varchar(50),
-  direccion text NOT NULL,
-  latitud numeric(10,8) NOT NULL,
-  longitud numeric(11,8) NOT NULL,
-  es_predeterminada boolean DEFAULT false,
-  created_at timestamp DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE ESTADOPEDIDO (
+    CODIGO          CHAR(3)       NOT NULL,
+    DESCRIPCION     VARCHAR(100)  NOT NULL,
+    DETALLE         TEXT,
+    ESFINAL         BOOLEAN       NOT NULL DEFAULT FALSE,    -- ya no admite más cambios
+    COLOR           VARCHAR(7),
+    ICONO           VARCHAR(50),
+    ORDEN           SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(50),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKESTADOPEDIDO PRIMARY KEY (CODIGO),
+    CONSTRAINT CKESTADOPEDIDOCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE INDEX IF NOT EXISTS idx_direcciones_usuario_id ON public.direcciones(usuario_id);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.vendedores (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  usuario_id uuid NOT NULL REFERENCES public.usuarios(id) ON UPDATE CASCADE,
-  nombre_negocio varchar(200) NOT NULL,
-  descripcion text,
-  logo text,
-  banner text,
-  categoria varchar(50),
-  calificacion_promedio numeric(3,2) DEFAULT 0,
-  total_calificaciones integer DEFAULT 0,
-  horario_apertura varchar(10),
-  horario_cierre varchar(10),
-  dias_atencion varchar(100),
-  tiempo_preparacion_promedio integer,
-  costo_delivery numeric(10,2),
-  radio_cobertura integer,
-  abierto_ahora boolean DEFAULT false,
-  created_at timestamp DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
-  cedula varchar(10) UNIQUE,
-  latitud numeric(10,8),
-  longitud numeric(11,8)
+CREATE TABLE ESTADOPRODUCTO (
+    CODIGO          CHAR(3)       NOT NULL,
+    DESCRIPCION     VARCHAR(100)  NOT NULL,
+    DETALLE         TEXT,
+    SEVENDE         BOOLEAN       NOT NULL DEFAULT TRUE,     -- ¿se puede pedir en este estado?
+    COLOR           VARCHAR(7),
+    ORDEN           SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(50),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKESTADOPRODUCTO PRIMARY KEY (CODIGO),
+    CONSTRAINT CKESTADOPRODUCTOCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_vendedores_cedula ON public.vendedores(cedula);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.productos (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  vendedor_id uuid REFERENCES public.vendedores(id) ON DELETE CASCADE,
-  nombre varchar(200) NOT NULL,
-  descripcion text,
-  precio numeric(10,2) NOT NULL,
-  imagen text,
-  categoria varchar(50),
-  disponible boolean DEFAULT true,
-  tiempo_preparacion integer,
-  stock integer DEFAULT 0,
-  created_at timestamp DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE ESTADOPAGO (
+    CODIGO          CHAR(3)       NOT NULL,
+    DESCRIPCION     VARCHAR(100)  NOT NULL,
+    DETALLE         TEXT,
+    ORDEN           SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(50),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKESTADOPAGO PRIMARY KEY (CODIGO),
+    CONSTRAINT CKESTADOPAGOCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE INDEX IF NOT EXISTS idx_productos_vendedor_id ON public.productos(vendedor_id);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.repartidores (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  usuario_id uuid NOT NULL REFERENCES public.usuarios(id) ON UPDATE CASCADE,
-  vehiculo varchar(50),
-  placa varchar(20),
-  licencia varchar(50),
-  calificacion_promedio numeric(3,2) DEFAULT 0,
-  total_calificaciones integer DEFAULT 0,
-  disponible boolean DEFAULT false,
-  latitud numeric(10,8),
-  longitud numeric(11,8),
-  pedidos_completados integer DEFAULT 0,
-  created_at timestamptz NOT NULL,
-  updated_at timestamptz NOT NULL,
-  cedula varchar(10) UNIQUE,
-  foto text
+-- Aprobación de vendedores, repartidores y documentos
+CREATE TABLE ESTADOAPROBACION (
+    CODIGO          CHAR(3)       NOT NULL,
+    DESCRIPCION     VARCHAR(100)  NOT NULL,
+    DETALLE         TEXT,
+    ORDEN           SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(50),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKESTADOAPROBACION PRIMARY KEY (CODIGO),
+    CONSTRAINT CKESTADOAPROBACIONCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_repartidores_cedula ON public.repartidores(cedula);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.pedidos (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  numero_pedido varchar(20) NOT NULL UNIQUE,
-  cliente_id uuid REFERENCES public.usuarios(id),
-  vendedor_id uuid REFERENCES public.vendedores(id),
-  repartidor_id uuid REFERENCES public.repartidores(id),
-  direccion_entrega_id uuid REFERENCES public.direcciones(id),
-  estado varchar(50),
-  subtotal numeric(10,2) NOT NULL,
-  costo_delivery numeric(10,2) NOT NULL,
-  total numeric(10,2) NOT NULL,
-  metodo_pago varchar(50),
-  pagado boolean DEFAULT false,
-  paypal_order_id varchar(100),
-  notas_cliente text,
-  tiempo_estimado integer,
-  fecha_pedido timestamp DEFAULT CURRENT_TIMESTAMP,
-  fecha_confirmacion timestamp,
-  fecha_preparacion timestamp,
-  fecha_listo timestamp,
-  fecha_recogida timestamp,
-  fecha_entrega timestamp,
-  created_at timestamp DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT pedidos_estado_check CHECK (
-    (estado)::text = ANY (
-      (ARRAY[
-        'pendiente'::character varying,
-        'confirmado'::character varying,
-        'preparando'::character varying,
-        'listo'::character varying,
-        'recogido'::character varying,
-        'en_camino'::character varying,
-        'entregado'::character varying,
-        'recibido_cliente'::character varying,
-        'cancelado'::character varying
-      ])::text[]
-    )
-  )
+CREATE TABLE METODOPAGO (
+    CODIGO            CHAR(3)       NOT NULL,
+    DESCRIPCION       VARCHAR(100)  NOT NULL,
+    DETALLE           TEXT,
+    REQUIEREPASARELA  BOOLEAN       NOT NULL DEFAULT FALSE,
+    ESENLINEA         BOOLEAN       NOT NULL DEFAULT FALSE,
+    ORDEN             SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO            BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE            TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA            TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL    INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA        VARCHAR(50),
+    CREADOEN          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR         VARCHAR(30),
+    ACTUALIZADOPOR    VARCHAR(30),
+    ELIMINADOEN       TIMESTAMPTZ,
+    CONSTRAINT PKMETODOPAGO PRIMARY KEY (CODIGO),
+    CONSTRAINT CKMETODOPAGOCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE INDEX IF NOT EXISTS idx_pedidos_estado ON public.pedidos(estado);
-CREATE INDEX IF NOT EXISTS idx_pedidos_cliente_id ON public.pedidos(cliente_id);
-CREATE INDEX IF NOT EXISTS idx_pedidos_vendedor_id ON public.pedidos(vendedor_id);
-CREATE INDEX IF NOT EXISTS idx_pedidos_repartidor_id ON public.pedidos(repartidor_id);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.detalle_pedidos (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  pedido_id uuid REFERENCES public.pedidos(id) ON DELETE CASCADE,
-  producto_id uuid REFERENCES public.productos(id),
-  cantidad integer NOT NULL,
-  precio_unitario numeric(10,2) NOT NULL,
-  subtotal numeric(10,2) NOT NULL,
-  notas text
+CREATE TABLE TIPOVEHICULO (
+    CODIGO            CHAR(3)       NOT NULL,
+    DESCRIPCION       VARCHAR(100)  NOT NULL,
+    DETALLE           TEXT,
+    REQUIEREPLACA     BOOLEAN       NOT NULL DEFAULT TRUE,
+    REQUIERELICENCIA  BOOLEAN       NOT NULL DEFAULT TRUE,
+    ORDEN             SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO            BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE            TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA            TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL    INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA        VARCHAR(50),
+    CREADOEN          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR         VARCHAR(30),
+    ACTUALIZADOPOR    VARCHAR(30),
+    ELIMINADOEN       TIMESTAMPTZ,
+    CONSTRAINT PKTIPOVEHICULO PRIMARY KEY (CODIGO),
+    CONSTRAINT CKTIPOVEHICULOCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE INDEX IF NOT EXISTS idx_detalle_pedidos_pedido_id ON public.detalle_pedidos(pedido_id);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.calificaciones (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  pedido_id uuid REFERENCES public.pedidos(id),
-  usuario_id uuid REFERENCES public.usuarios(id),
-  vendedor_id uuid REFERENCES public.vendedores(id),
-  repartidor_id uuid REFERENCES public.repartidores(id),
-  puntuacion numeric(2,1) CHECK (puntuacion BETWEEN 1 AND 5),
-  comentario text,
-  tipo varchar(20) CHECK (tipo IN ('vendedor','repartidor')),
-  created_at timestamp DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE CATEGORIAS (
+    CODIGO          CHAR(3)       NOT NULL,
+    PADRE           CHAR(3),                                 -- permite subcategorías
+    DESCRIPCION     VARCHAR(100)  NOT NULL,
+    DETALLE         TEXT,
+    ICONO           VARCHAR(50),
+    ORDEN           SMALLINT      NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(50),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKCATEGORIAS PRIMARY KEY (CODIGO),
+    CONSTRAINT FKCATEGORIASPADRE FOREIGN KEY (PADRE) REFERENCES CATEGORIAS (CODIGO),
+    CONSTRAINT CKCATEGORIASCODIGO CHECK (CODIGO ~ '^[0-9]{3}$')
 );
 
-CREATE INDEX IF NOT EXISTS idx_calificaciones_pedido_id ON public.calificaciones(pedido_id);
-CREATE INDEX IF NOT EXISTS idx_calificaciones_vendedor_id ON public.calificaciones(vendedor_id);
-CREATE INDEX IF NOT EXISTS idx_calificaciones_repartidor_id ON public.calificaciones(repartidor_id);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.notificaciones (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  usuario_id uuid REFERENCES public.usuarios(id) ON DELETE CASCADE,
-  titulo varchar(200) NOT NULL,
-  mensaje text NOT NULL,
-  tipo varchar(50),
-  leida boolean DEFAULT false,
-  pedido_id uuid REFERENCES public.pedidos(id),
-  created_at timestamp DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE ZONACOBERTURA (
+    ZONA            VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('ZON', 'SECZONAS'),
+    DESCRIPCION     VARCHAR(100)  NOT NULL,
+    CIUDAD          VARCHAR(100),
+    PROVINCIA       VARCHAR(100),
+    LATITUD         NUMERIC(10,8) NOT NULL,                  -- centro de la zona
+    LONGITUD        NUMERIC(11,8) NOT NULL,
+    RADIOKM         NUMERIC(6,2)  NOT NULL,
+    TARIFABASE      NUMERIC(10,2) NOT NULL DEFAULT 0,
+    TARIFAKM        NUMERIC(10,2) NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(100),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKZONACOBERTURA PRIMARY KEY (ZONA)
 );
 
-CREATE INDEX IF NOT EXISTS idx_notificaciones_usuario_id ON public.notificaciones(usuario_id);
-CREATE INDEX IF NOT EXISTS idx_notificaciones_pedido_id ON public.notificaciones(pedido_id);
-
--- --------------------------------
-
-CREATE TABLE IF NOT EXISTS public.password_reset_codes (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id uuid NULL REFERENCES public.usuarios(id) ON DELETE SET NULL,
-  email varchar(200) NOT NULL,
-  code_hash varchar(255) NOT NULL,
-  expires_at timestamp NOT NULL,
-  attempts integer NOT NULL DEFAULT 0,
-  used_at timestamp NULL,
-  created_at timestamp DEFAULT CURRENT_TIMESTAMP,
-  updated_at timestamp DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE CONFIGURACIONES (
+    CLAVE           VARCHAR(80)   NOT NULL,
+    VALOR           JSONB         NOT NULL,
+    DESCRIPCION     TEXT,
+    ESPUBLICA       BOOLEAN       NOT NULL DEFAULT FALSE,    -- ¿la app móvil puede leerla?
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(100),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKCONFIGURACIONES PRIMARY KEY (CLAVE)
 );
 
-CREATE INDEX IF NOT EXISTS idx_reset_email ON public.password_reset_codes(email);
+-- -----------------------------------------------------------------------------
+-- 3. ARCHIVOS (imágenes y documentos: ya no se guarda base64 en la BD)
+-- -----------------------------------------------------------------------------
+CREATE TABLE ARCHIVOS (
+    ARCHIVO         VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('ARC', 'SECARCHIVOS'),
+    PROPIETARIO     VARCHAR(30),                             -- usuario que lo subió (FK abajo)
+    CATEGORIA       VARCHAR(20)   NOT NULL,
+    NOMBREORIGINAL  VARCHAR(255),
+    MIME            VARCHAR(100)  NOT NULL,
+    EXTENSION       VARCHAR(10),
+    BYTES           BIGINT        NOT NULL,
+    ANCHO           INTEGER,
+    ALTO            INTEGER,
+    HASH            CHAR(64),                                -- SHA-256: evita guardar el mismo archivo dos veces
+    ALMACEN         VARCHAR(10)   NOT NULL DEFAULT 'LOCAL',
+    RUTAORIGINAL    TEXT          NOT NULL,
+    RUTAOPTIMIZADA  TEXT,                                    -- WebP/AVIF comprimido
+    RUTAMEDIANA     TEXT,                                    -- ~800 px
+    RUTAMINIATURA   TEXT,                                    -- ~200 px
+    URLPUBLICA      TEXT,
+    BLURHASH        VARCHAR(100),                            -- marcador borroso mientras carga
+    OPTIMIZADO      BOOLEAN       NOT NULL DEFAULT FALSE,
+    BYTESOPTIMIZADO BIGINT,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(150),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKARCHIVOS PRIMARY KEY (ARCHIVO),
+    CONSTRAINT CKARCHIVOSCATEGORIA CHECK (CATEGORIA IN ('PERFIL','LOGO','BANNER','PRODUCTO','DOCUMENTO','EVIDENCIA','OTRO')),
+    CONSTRAINT CKARCHIVOSALMACEN CHECK (ALMACEN IN ('LOCAL','S3','R2'))
+);
+CREATE INDEX IXARCHIVOSHASH ON ARCHIVOS (HASH);
+CREATE INDEX IXARCHIVOSPROPIETARIO ON ARCHIVOS (PROPIETARIO);
 
--- --------------------------------
+-- -----------------------------------------------------------------------------
+-- 4. USUARIOS  (la clave primaria es USUARIO: jcayapa)
+-- -----------------------------------------------------------------------------
+CREATE TABLE USUARIOS (
+    USUARIO         VARCHAR(30)   NOT NULL,                  -- clave primaria y nombre para iniciar sesión. Lo genera la BD
+    ROL             CHAR(3)       NOT NULL,                  -- ROLES.CODIGO
+    NOMBRES         VARCHAR(100)  NOT NULL,
+    APELLIDOS       VARCHAR(100)  NOT NULL,
+    EMAIL           VARCHAR(150)  NOT NULL,                  -- siempre en minúsculas (lo exige el CHECK)
+    TELEFONO        VARCHAR(20),
+    TIPODOC         VARCHAR(10)   NOT NULL DEFAULT 'CEDULA',
+    NUMDOC          VARCHAR(20)   NOT NULL,                  -- cédula / pasaporte
+    FECHANAC        DATE,
+    GENERO          VARCHAR(10),
+    CLAVEHASH       VARCHAR(255)  NOT NULL,
+    FOTO            VARCHAR(30),                             -- ARCHIVOS.ARCHIVO
+    EMAILVERIF      BOOLEAN       NOT NULL DEFAULT FALSE,
+    EMAILVERIFEN    TIMESTAMPTZ,
+    TELVERIF        BOOLEAN       NOT NULL DEFAULT FALSE,
+    TELVERIFEN      TIMESTAMPTZ,
+    TERMINOSEN      TIMESTAMPTZ,                             -- cuándo aceptó los términos
+    TERMINOSVER     VARCHAR(20),                             -- qué versión aceptó
+    IDIOMA          VARCHAR(5)    NOT NULL DEFAULT 'es',
+    ZONAHORARIA     VARCHAR(50)   NOT NULL DEFAULT 'America/Guayaquil',
+    ACEPTANOTIF     BOOLEAN       NOT NULL DEFAULT TRUE,
+    ACEPTAPROMO     BOOLEAN       NOT NULL DEFAULT FALSE,
+    INTENTOSFALLIDOS SMALLINT     NOT NULL DEFAULT 0,
+    BLOQUEADOHASTA  TIMESTAMPTZ,
+    CLAVECAMBIADAEN TIMESTAMPTZ,
+    ULTIMACONEXION  TIMESTAMPTZ,
+    ULTIMAIP        INET,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(250),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKUSUARIOS PRIMARY KEY (USUARIO),
+    CONSTRAINT UQUSUARIOSEMAIL UNIQUE (EMAIL),
+    CONSTRAINT UQUSUARIOSDOC UNIQUE (TIPODOC, NUMDOC),
+    CONSTRAINT UQUSUARIOSTELEFONO UNIQUE (TELEFONO),
+    CONSTRAINT FKUSUARIOSROL FOREIGN KEY (ROL) REFERENCES ROLES (CODIGO),
+    CONSTRAINT FKUSUARIOSFOTO FOREIGN KEY (FOTO) REFERENCES ARCHIVOS (ARCHIVO),
+    CONSTRAINT CKUSUARIOSUSUARIO CHECK (USUARIO ~ '^[a-z0-9]{3,30}$'),
+    CONSTRAINT CKUSUARIOSEMAIL CHECK (EMAIL = lower(EMAIL)),
+    CONSTRAINT CKUSUARIOSTIPODOC CHECK (TIPODOC IN ('CEDULA','PASAPORTE','RUC')),
+    CONSTRAINT CKUSUARIOSGENERO CHECK (GENERO IS NULL OR GENERO IN ('MASCULINO','FEMENINO','OTRO','NOINDICA'))
+);
+CREATE INDEX IXUSUARIOSROL ON USUARIOS (ROL);
 
-CREATE TABLE IF NOT EXISTS public.device_tokens (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  usuario_id uuid NOT NULL REFERENCES public.usuarios(id) ON DELETE CASCADE,
-  token text NOT NULL,
-  platform varchar(20),
-  created_at timestamptz NOT NULL DEFAULT NOW(),
-  updated_at timestamptz NOT NULL DEFAULT NOW()
+ALTER TABLE ARCHIVOS ADD CONSTRAINT FKARCHIVOSPROPIETARIO FOREIGN KEY (PROPIETARIO) REFERENCES USUARIOS (USUARIO);
+
+-- 4B. El USUARIO se genera a partir del nombre ----------------------------------------------------
+-- "Jandry Franklin" + "Cayapa Baque"  ->  jcayapa   (inicial del nombre + primer apellido)
+-- Si ya está tomado se prueba, en orden:  jfcayapa  ·  jcayapab  ·  jfcayapab  ·  jcayapa2, jcayapa3...
+-- Se ignoran tildes, símbolos y partículas (de, del, la, las, los, y, e). Se asigna sola en cada INSERT
+-- (también desde Adminer); si el INSERT ya trae un USUARIO se respeta, en minúsculas.
+
+-- Texto en minúsculas, sin tildes (ni mayúsculas acentuadas) ni símbolos
+CREATE FUNCTION LIMPIARTEXTO(p TEXT) RETURNS TEXT LANGUAGE sql IMMUTABLE AS $$
+  SELECT regexp_replace(
+           lower(translate(coalesce(p, ''), 'áàäâéèëêíìïîóòöôúùüûñçÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑÇ', 'aaaaeeeeiiiioooouuuuncAAAAEEEEIIIIOOOOUUUUNC')),
+           '[^a-z0-9 ]', '', 'g')
+$$;
+
+CREATE FUNCTION GENERARUSUARIO(p_nombres TEXT, p_apellidos TEXT) RETURNS TEXT LANGUAGE plpgsql AS $$
+DECLARE
+    particulas  TEXT[] := ARRAY['de','del','la','las','los','y','e'];
+    reservados  TEXT[] := ARRAY['admin','administrador','root','soporte','sistema','vallexpress','api','null'];
+    n  TEXT[] := ARRAY(SELECT w FROM unnest(regexp_split_to_array(btrim(LIMPIARTEXTO(p_nombres)),   '\s+')) w WHERE w <> '' AND w <> ALL(particulas));
+    a  TEXT[] := ARRAY(SELECT w FROM unnest(regexp_split_to_array(btrim(LIMPIARTEXTO(p_apellidos)), '\s+')) w WHERE w <> '' AND w <> ALL(particulas));
+    n1 TEXT := n[1];  n2 TEXT := n[2];  a1 TEXT := a[1];  a2 TEXT := a[2];
+    candidatos TEXT[] := '{}';
+    base TEXT;  c TEXT;  i INT := 1;
+BEGIN
+    IF a1 IS NULL THEN a1 := n1; n1 := n2; n2 := NULL; END IF;       -- sin apellido útil: se usa el nombre
+    IF a1 IS NULL THEN a1 := 'usuario'; END IF;                      -- sin nada utilizable
+
+    a1 := left(a1, 22);
+    candidatos := candidatos || (COALESCE(left(n1, 1), '') || a1);
+    IF n2 IS NOT NULL THEN candidatos := candidatos || (left(n1, 1) || left(n2, 1) || a1); END IF;
+    IF a2 IS NOT NULL THEN candidatos := candidatos || (COALESCE(left(n1, 1), '') || a1 || left(a2, 1)); END IF;
+    IF n2 IS NOT NULL AND a2 IS NOT NULL THEN candidatos := candidatos || (left(n1, 1) || left(n2, 1) || a1 || left(a2, 1)); END IF;
+
+    -- Mínimo 3 caracteres (si un nombre y apellido muy cortos dan menos, se usa el nombre completo)
+    base := candidatos[1];
+    IF length(base) < 3 THEN base := COALESCE(n1, '') || a1; candidatos[1] := base; END IF;
+    IF length(base) < 3 THEN base := base || 'usr'; candidatos[1] := base; END IF;
+
+    FOREACH c IN ARRAY candidatos LOOP
+        IF length(c) >= 3
+           AND c <> ALL(reservados)
+           AND NOT EXISTS (SELECT 1 FROM USUARIOS WHERE USUARIO = c) THEN
+            RETURN c;
+        END IF;
+    END LOOP;
+
+    LOOP                                                             -- jcayapa2, jcayapa3...
+        i := i + 1;
+        c := left(base, 30 - length(i::TEXT)) || i::TEXT;
+        IF NOT EXISTS (SELECT 1 FROM USUARIOS WHERE USUARIO = c) THEN RETURN c; END IF;
+    END LOOP;
+END $$;
+
+CREATE FUNCTION FNASIGNARUSUARIO() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.USUARIO IS NULL OR btrim(NEW.USUARIO) = '' THEN
+        -- Un solo registro a la vez genera su usuario (evita que dos personas reciban el mismo)
+        PERFORM pg_advisory_xact_lock(hashtext('usuarios.usuario'));
+        NEW.USUARIO := GENERARUSUARIO(NEW.NOMBRES, NEW.APELLIDOS);
+    ELSE
+        NEW.USUARIO := lower(btrim(NEW.USUARIO));
+    END IF;
+    NEW.CREADOPOR := COALESCE(NEW.CREADOPOR, NEW.USUARIO);          -- quien se registra se crea a sí mismo
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER TRUSUARIOSASIGNARUSUARIO BEFORE INSERT ON USUARIOS
+FOR EACH ROW EXECUTE FUNCTION FNASIGNARUSUARIO();
+
+CREATE TABLE DOCUMENTOUSUARIO (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    USUARIO         VARCHAR(30)   NOT NULL,
+    TIPO            VARCHAR(20)   NOT NULL,
+    NUMERO          VARCHAR(50),
+    ARCHIVO         VARCHAR(30)   NOT NULL,
+    EMITIDOEN       DATE,
+    VENCEEN         DATE,
+    APROBACION      CHAR(3)       NOT NULL DEFAULT '001',    -- ESTADOAPROBACION.CODIGO
+    VERIFICADOPOR   VARCHAR(30),
+    VERIFICADOEN    TIMESTAMPTZ,
+    MOTIVORECHAZO   TEXT,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(150),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKDOCUMENTOUSUARIO PRIMARY KEY (ID),
+    CONSTRAINT FKDOCUMENTOUSUARIOUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT FKDOCUMENTOUSUARIOARCHIVO FOREIGN KEY (ARCHIVO) REFERENCES ARCHIVOS (ARCHIVO),
+    CONSTRAINT FKDOCUMENTOUSUARIOAPROBACION FOREIGN KEY (APROBACION) REFERENCES ESTADOAPROBACION (CODIGO),
+    CONSTRAINT CKDOCUMENTOUSUARIOTIPO CHECK (TIPO IN ('CEDULAFRENTE','CEDULAREVERSO','LICENCIA','MATRICULA','ANTECEDENTES','RUC','PATENTE','OTRO'))
+);
+CREATE INDEX IXDOCUMENTOUSUARIOUSUARIO ON DOCUMENTOUSUARIO (USUARIO);
+
+CREATE TABLE DIRECCIONES (
+    DIRECCION        VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('DIR', 'SECDIRECCIONES'),
+    USUARIO          VARCHAR(30)   NOT NULL,
+    ALIAS            VARCHAR(50),                            -- Casa, Trabajo...
+    CALLEPRINCIPAL   VARCHAR(150),
+    CALLESECUNDARIA  VARCHAR(150),
+    NUMERACION       VARCHAR(20),
+    SECTOR           VARCHAR(100),
+    CIUDAD           VARCHAR(100),
+    PROVINCIA        VARCHAR(100),
+    CODIGOPOSTAL     VARCHAR(10),
+    DOMICILIO        TEXT          NOT NULL,                 -- dirección completa en texto
+    REFERENCIA       TEXT,
+    INSTRUCCIONES    TEXT,
+    TELCONTACTO      VARCHAR(20),
+    LATITUD          NUMERIC(10,8) NOT NULL,
+    LONGITUD         NUMERIC(11,8) NOT NULL,
+    ESPREDETERMINADA BOOLEAN       NOT NULL DEFAULT FALSE,
+    ACTIVO           BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE           TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA           TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL   INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA       VARCHAR(150),
+    CREADOEN         TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR        VARCHAR(30),
+    ACTUALIZADOPOR   VARCHAR(30),
+    ELIMINADOEN      TIMESTAMPTZ,
+    CONSTRAINT PKDIRECCIONES PRIMARY KEY (DIRECCION),
+    CONSTRAINT FKDIRECCIONESUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT CKDIRECCIONESLATITUD CHECK (LATITUD BETWEEN -90 AND 90),
+    CONSTRAINT CKDIRECCIONESLONGITUD CHECK (LONGITUD BETWEEN -180 AND 180)
+);
+CREATE INDEX IXDIRECCIONESUSUARIO ON DIRECCIONES (USUARIO);
+CREATE UNIQUE INDEX UQDIRECCIONESPREDETERMINADA ON DIRECCIONES (USUARIO) WHERE ESPREDETERMINADA AND ELIMINADOEN IS NULL;
+
+-- -----------------------------------------------------------------------------
+-- 5. VENDEDORES
+-- -----------------------------------------------------------------------------
+CREATE TABLE VENDEDORES (
+    VENDEDOR        VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('VEN', 'SECVENDEDORES'),
+    USUARIO         VARCHAR(30)   NOT NULL,
+    NEGOCIO         VARCHAR(200)  NOT NULL,                  -- nombre del negocio
+    RAZONSOCIAL     VARCHAR(200),
+    RUC             VARCHAR(13),
+    DESCRIPCION     TEXT,
+    CATEGORIA       CHAR(3),                                 -- CATEGORIAS.CODIGO
+    LOGO            VARCHAR(30),                             -- ARCHIVOS.ARCHIVO
+    BANNER          VARCHAR(30),
+    TELEFONO        VARCHAR(20),
+    EMAIL           VARCHAR(150),
+    SITIOWEB        VARCHAR(200),
+    DOMICILIO       TEXT,
+    LATITUD         NUMERIC(10,8),
+    LONGITUD        NUMERIC(11,8),
+    RADIOKM         NUMERIC(6,2),                            -- radio de cobertura
+    COSTODELIVERY   NUMERIC(10,2),
+    PEDIDOMINIMO    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    TIEMPOPREPMIN   INTEGER,
+    ABIERTO         BOOLEAN       NOT NULL DEFAULT FALSE,
+    ACEPTAPEDIDOS   BOOLEAN       NOT NULL DEFAULT TRUE,
+    ACEPTAPROGRAMADOS BOOLEAN     NOT NULL DEFAULT FALSE,
+    COMISION        NUMERIC(5,2),                            -- NULL = usa la configuración global
+    CALIFICACION    NUMERIC(3,2)  NOT NULL DEFAULT 0,
+    TOTALCALIF      INTEGER       NOT NULL DEFAULT 0,
+    TOTALPEDIDOS    INTEGER       NOT NULL DEFAULT 0,
+    APROBACION      CHAR(3)       NOT NULL DEFAULT '001',    -- ESTADOAPROBACION.CODIGO
+    APROBADOPOR     VARCHAR(30),
+    APROBADOEN      TIMESTAMPTZ,
+    MOTIVORECHAZO   TEXT,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(250),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKVENDEDORES PRIMARY KEY (VENDEDOR),
+    CONSTRAINT UQVENDEDORESUSUARIO UNIQUE (USUARIO),
+    CONSTRAINT UQVENDEDORESRUC UNIQUE (RUC),
+    CONSTRAINT FKVENDEDORESUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT FKVENDEDORESCATEGORIA FOREIGN KEY (CATEGORIA) REFERENCES CATEGORIAS (CODIGO),
+    CONSTRAINT FKVENDEDORESLOGO FOREIGN KEY (LOGO) REFERENCES ARCHIVOS (ARCHIVO),
+    CONSTRAINT FKVENDEDORESBANNER FOREIGN KEY (BANNER) REFERENCES ARCHIVOS (ARCHIVO),
+    CONSTRAINT FKVENDEDORESAPROBACION FOREIGN KEY (APROBACION) REFERENCES ESTADOAPROBACION (CODIGO)
+);
+CREATE INDEX IXVENDEDORESCATEGORIA ON VENDEDORES (CATEGORIA);
+CREATE INDEX IXVENDEDORESUBICACION ON VENDEDORES (LATITUD, LONGITUD);
+
+CREATE TABLE HORARIOVENDEDOR (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    VENDEDOR        VARCHAR(30)   NOT NULL,
+    DIA             SMALLINT      NOT NULL,                  -- 1 = lunes ... 7 = domingo
+    APERTURA        TIME,
+    CIERRE          TIME,
+    CERRADO         BOOLEAN       NOT NULL DEFAULT FALSE,    -- cerrado todo el día
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(100),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKHORARIOVENDEDOR PRIMARY KEY (ID),
+    CONSTRAINT FKHORARIOVENDEDORVENDEDOR FOREIGN KEY (VENDEDOR) REFERENCES VENDEDORES (VENDEDOR),
+    CONSTRAINT CKHORARIOVENDEDORDIA CHECK (DIA BETWEEN 1 AND 7)
+);
+CREATE INDEX IXHORARIOVENDEDORVENDEDOR ON HORARIOVENDEDOR (VENDEDOR, DIA);
+
+-- -----------------------------------------------------------------------------
+-- 6. REPARTIDORES
+-- -----------------------------------------------------------------------------
+CREATE TABLE REPARTIDORES (
+    REPARTIDOR      VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('REP', 'SECREPARTIDORES'),
+    USUARIO         VARCHAR(30)   NOT NULL,
+    VEHICULO        CHAR(3),                                 -- TIPOVEHICULO.CODIGO
+    PLACA           VARCHAR(10),                             -- sin guiones, en mayúsculas
+    MARCA           VARCHAR(50),
+    MODELO          VARCHAR(50),
+    COLOR           VARCHAR(30),
+    ANIO            SMALLINT,
+    LICENCIA        VARCHAR(30),
+    LICENCIATIPO    VARCHAR(5),
+    LICENCIAVENCE   DATE,
+    FOTO            VARCHAR(30),                             -- ARCHIVOS.ARCHIVO
+    DISPONIBLE      BOOLEAN       NOT NULL DEFAULT FALSE,
+    ENSERVICIO      BOOLEAN       NOT NULL DEFAULT FALSE,    -- tiene un pedido activo
+    LATITUD         NUMERIC(10,8),                           -- ubicación actual
+    LONGITUD        NUMERIC(11,8),
+    UBICACIONEN     TIMESTAMPTZ,
+    CALIFICACION    NUMERIC(3,2)  NOT NULL DEFAULT 0,
+    TOTALCALIF      INTEGER       NOT NULL DEFAULT 0,
+    PEDIDOSCOMPLETOS INTEGER      NOT NULL DEFAULT 0,
+    SALDOEFECTIVO   NUMERIC(10,2) NOT NULL DEFAULT 0,        -- efectivo cobrado pendiente de entregar
+    GANANCIAS       NUMERIC(12,2) NOT NULL DEFAULT 0,
+    APROBACION      CHAR(3)       NOT NULL DEFAULT '001',    -- ESTADOAPROBACION.CODIGO
+    APROBADOPOR     VARCHAR(30),
+    APROBADOEN      TIMESTAMPTZ,
+    MOTIVORECHAZO   TEXT,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(250),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKREPARTIDORES PRIMARY KEY (REPARTIDOR),
+    CONSTRAINT UQREPARTIDORESUSUARIO UNIQUE (USUARIO),
+    CONSTRAINT UQREPARTIDORESPLACA UNIQUE (PLACA),
+    CONSTRAINT FKREPARTIDORESUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT FKREPARTIDORESVEHICULO FOREIGN KEY (VEHICULO) REFERENCES TIPOVEHICULO (CODIGO),
+    CONSTRAINT FKREPARTIDORESFOTO FOREIGN KEY (FOTO) REFERENCES ARCHIVOS (ARCHIVO),
+    CONSTRAINT FKREPARTIDORESAPROBACION FOREIGN KEY (APROBACION) REFERENCES ESTADOAPROBACION (CODIGO),
+    CONSTRAINT CKREPARTIDORESPLACA CHECK (PLACA IS NULL OR PLACA = upper(PLACA))
+);
+CREATE INDEX IXREPARTIDORESDISPONIBLES ON REPARTIDORES (DISPONIBLE, ENSERVICIO);
+CREATE INDEX IXREPARTIDORESUBICACION ON REPARTIDORES (LATITUD, LONGITUD);
+
+-- -----------------------------------------------------------------------------
+-- 7. PRODUCTOS
+-- -----------------------------------------------------------------------------
+CREATE TABLE PRODUCTOS (
+    PRODUCTO        VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('PRO', 'SECPRODUCTOS'),
+    VENDEDOR        VARCHAR(30)   NOT NULL,
+    CATEGORIA       CHAR(3),                                 -- CATEGORIAS.CODIGO
+    ESTADO          CHAR(3)       NOT NULL DEFAULT '001',    -- ESTADOPRODUCTO.CODIGO
+    NOMBRE          VARCHAR(200)  NOT NULL,
+    DESCRIPCION     TEXT,
+    SKU             VARCHAR(50),
+    PRECIO          NUMERIC(10,2) NOT NULL,
+    PRECIOANTERIOR  NUMERIC(10,2),                           -- para mostrar tachado en ofertas
+    COSTO           NUMERIC(10,2),
+    IVA             NUMERIC(5,2)  NOT NULL DEFAULT 15.00,
+    IMAGEN          VARCHAR(30),                             -- imagen principal: ARCHIVOS.ARCHIVO
+    CONTROLASTOCK   BOOLEAN       NOT NULL DEFAULT TRUE,
+    STOCK           INTEGER       NOT NULL DEFAULT 0,
+    STOCKMINIMO     INTEGER       NOT NULL DEFAULT 0,
+    TIEMPOPREPMIN   INTEGER,
+    DESTACADO       BOOLEAN       NOT NULL DEFAULT FALSE,
+    ETIQUETAS       TEXT[]        NOT NULL DEFAULT '{}',
+    ORDEN           INTEGER       NOT NULL DEFAULT 0,
+    TOTALVENDIDOS   INTEGER       NOT NULL DEFAULT 0,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(250),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKPRODUCTOS PRIMARY KEY (PRODUCTO),
+    CONSTRAINT FKPRODUCTOSVENDEDOR FOREIGN KEY (VENDEDOR) REFERENCES VENDEDORES (VENDEDOR),
+    CONSTRAINT FKPRODUCTOSCATEGORIA FOREIGN KEY (CATEGORIA) REFERENCES CATEGORIAS (CODIGO),
+    CONSTRAINT FKPRODUCTOSESTADO FOREIGN KEY (ESTADO) REFERENCES ESTADOPRODUCTO (CODIGO),
+    CONSTRAINT FKPRODUCTOSIMAGEN FOREIGN KEY (IMAGEN) REFERENCES ARCHIVOS (ARCHIVO),
+    CONSTRAINT CKPRODUCTOSPRECIO CHECK (PRECIO >= 0),
+    CONSTRAINT CKPRODUCTOSSTOCK CHECK (STOCK >= 0)
+);
+CREATE INDEX IXPRODUCTOSVENDEDOR ON PRODUCTOS (VENDEDOR);
+CREATE INDEX IXPRODUCTOSCATEGORIA ON PRODUCTOS (CATEGORIA);
+CREATE INDEX IXPRODUCTOSESTADO ON PRODUCTOS (ESTADO);
+
+CREATE TABLE IMAGENPRODUCTO (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    PRODUCTO        VARCHAR(30)   NOT NULL,
+    ARCHIVO         VARCHAR(30)   NOT NULL,
+    ORDEN           SMALLINT      NOT NULL DEFAULT 0,
+    ESPRINCIPAL     BOOLEAN       NOT NULL DEFAULT FALSE,
+    TEXTOALT        VARCHAR(200),
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(100),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKIMAGENPRODUCTO PRIMARY KEY (ID),
+    CONSTRAINT FKIMAGENPRODUCTOPRODUCTO FOREIGN KEY (PRODUCTO) REFERENCES PRODUCTOS (PRODUCTO),
+    CONSTRAINT FKIMAGENPRODUCTOARCHIVO FOREIGN KEY (ARCHIVO) REFERENCES ARCHIVOS (ARCHIVO)
+);
+CREATE INDEX IXIMAGENPRODUCTOPRODUCTO ON IMAGENPRODUCTO (PRODUCTO, ORDEN);
+
+-- -----------------------------------------------------------------------------
+-- 8. CUPONES
+-- -----------------------------------------------------------------------------
+CREATE TABLE CUPONES (
+    CUPON           VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('CUP', 'SECCUPONES'),
+    CODIGOPROMO     VARCHAR(30)   NOT NULL,                  -- lo que escribe el cliente: BIENVENIDO10
+    DESCRIPCION     TEXT,
+    VENDEDOR        VARCHAR(30),                             -- NULL = válido en toda la plataforma
+    TIPO            VARCHAR(12)   NOT NULL,
+    VALOR           NUMERIC(10,2) NOT NULL,
+    MONTOMINIMO     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    DESCUENTOMAXIMO NUMERIC(10,2),
+    APLICADELIVERY  BOOLEAN       NOT NULL DEFAULT FALSE,
+    USOSMAXIMOS     INTEGER,
+    USOSPORUSUARIO  INTEGER       NOT NULL DEFAULT 1,
+    USOSACTUALES    INTEGER       NOT NULL DEFAULT 0,
+    VALIDODESDE     TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    VALIDOHASTA     TIMESTAMPTZ,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(150),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKCUPONES PRIMARY KEY (CUPON),
+    CONSTRAINT UQCUPONESPROMO UNIQUE (CODIGOPROMO),
+    CONSTRAINT FKCUPONESVENDEDOR FOREIGN KEY (VENDEDOR) REFERENCES VENDEDORES (VENDEDOR),
+    CONSTRAINT CKCUPONESTIPO CHECK (TIPO IN ('PORCENTAJE','MONTOFIJO')),
+    CONSTRAINT CKCUPONESVALOR CHECK (VALOR > 0),
+    CONSTRAINT CKCUPONESVIGENCIA CHECK (VALIDOHASTA IS NULL OR VALIDOHASTA > VALIDODESDE)
 );
 
-CREATE INDEX IF NOT EXISTS idx_device_tokens_usuario_id ON public.device_tokens(usuario_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_device_tokens_token ON public.device_tokens(token);
+-- -----------------------------------------------------------------------------
+-- 9. PEDIDOS
+-- -----------------------------------------------------------------------------
+CREATE TABLE PEDIDOS (
+    PEDIDO          VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('PED', 'SECPEDIDOS', TRUE),
+    CLIENTE         VARCHAR(30)   NOT NULL,                  -- USUARIOS.USUARIO
+    VENDEDOR        VARCHAR(30)   NOT NULL,
+    REPARTIDOR      VARCHAR(30),
+    DIRECCION       VARCHAR(30),
+    -- Copia de la dirección al momento del pedido (si el cliente la edita después, el pedido no cambia)
+    DOMICILIO       TEXT,
+    LATITUDENTREGA  NUMERIC(10,8),
+    LONGITUDENTREGA NUMERIC(11,8),
+    ESTADO          CHAR(3)       NOT NULL DEFAULT '001',    -- ESTADOPEDIDO.CODIGO
+    SUBTOTAL        NUMERIC(10,2) NOT NULL,
+    DESCUENTO       NUMERIC(10,2) NOT NULL DEFAULT 0,
+    IMPUESTOS       NUMERIC(10,2) NOT NULL DEFAULT 0,
+    COSTODELIVERY   NUMERIC(10,2) NOT NULL DEFAULT 0,
+    PROPINA         NUMERIC(10,2) NOT NULL DEFAULT 0,
+    COMISION        NUMERIC(10,2) NOT NULL DEFAULT 0,        -- comisión de la plataforma
+    TOTAL           NUMERIC(10,2) NOT NULL,
+    CUPON           VARCHAR(30),
+    METODOPAGO      CHAR(3)       NOT NULL,                  -- METODOPAGO.CODIGO
+    PAGADO          BOOLEAN       NOT NULL DEFAULT FALSE,
+    NOTASCLIENTE    TEXT,
+    NOTASVENDEDOR   TEXT,
+    DISTANCIAKM     NUMERIC(6,2),
+    TIEMPOESTMIN    INTEGER,
+    PROGRAMADOPARA  TIMESTAMPTZ,
+    PINENTREGA      VARCHAR(6),                              -- PIN que el cliente da al repartidor
+    MOTIVOCANCEL    TEXT,
+    CANCELADOPOR    VARCHAR(30),
+    PEDIDOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONFIRMADOEN    TIMESTAMPTZ,
+    PREPARACIONEN   TIMESTAMPTZ,
+    LISTOEN         TIMESTAMPTZ,
+    ASIGNADOEN      TIMESTAMPTZ,
+    RECOGIDOEN      TIMESTAMPTZ,
+    ENTREGADOEN     TIMESTAMPTZ,
+    RECIBIDOEN      TIMESTAMPTZ,
+    CANCELADOEN     TIMESTAMPTZ,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(250),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKPEDIDOS PRIMARY KEY (PEDIDO),
+    CONSTRAINT FKPEDIDOSCLIENTE FOREIGN KEY (CLIENTE) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT FKPEDIDOSVENDEDOR FOREIGN KEY (VENDEDOR) REFERENCES VENDEDORES (VENDEDOR),
+    CONSTRAINT FKPEDIDOSREPARTIDOR FOREIGN KEY (REPARTIDOR) REFERENCES REPARTIDORES (REPARTIDOR),
+    CONSTRAINT FKPEDIDOSDIRECCION FOREIGN KEY (DIRECCION) REFERENCES DIRECCIONES (DIRECCION),
+    CONSTRAINT FKPEDIDOSESTADO FOREIGN KEY (ESTADO) REFERENCES ESTADOPEDIDO (CODIGO),
+    CONSTRAINT FKPEDIDOSCUPON FOREIGN KEY (CUPON) REFERENCES CUPONES (CUPON),
+    CONSTRAINT FKPEDIDOSMETODOPAGO FOREIGN KEY (METODOPAGO) REFERENCES METODOPAGO (CODIGO),
+    CONSTRAINT CKPEDIDOSMONTOS CHECK (SUBTOTAL >= 0 AND COSTODELIVERY >= 0 AND TOTAL >= 0)
+);
+CREATE INDEX IXPEDIDOSCLIENTE ON PEDIDOS (CLIENTE, PEDIDOEN DESC);
+CREATE INDEX IXPEDIDOSVENDEDOR ON PEDIDOS (VENDEDOR, PEDIDOEN DESC);
+CREATE INDEX IXPEDIDOSREPARTIDOR ON PEDIDOS (REPARTIDOR, PEDIDOEN DESC);
+CREATE INDEX IXPEDIDOSESTADO ON PEDIDOS (ESTADO);
+
+CREATE TABLE DETALLEPEDIDO (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    PEDIDO          VARCHAR(30)   NOT NULL,
+    PRODUCTO        VARCHAR(30)   NOT NULL,
+    NOMBRE          VARCHAR(200)  NOT NULL,                  -- copia del nombre al momento de la compra
+    CANTIDAD        INTEGER       NOT NULL,
+    PRECIO          NUMERIC(10,2) NOT NULL,
+    DESCUENTO       NUMERIC(10,2) NOT NULL DEFAULT 0,
+    IMPUESTO        NUMERIC(10,2) NOT NULL DEFAULT 0,
+    SUBTOTAL        NUMERIC(10,2) NOT NULL,
+    NOTAS           TEXT,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(100),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKDETALLEPEDIDO PRIMARY KEY (ID),
+    CONSTRAINT FKDETALLEPEDIDOPEDIDO FOREIGN KEY (PEDIDO) REFERENCES PEDIDOS (PEDIDO),
+    CONSTRAINT FKDETALLEPEDIDOPRODUCTO FOREIGN KEY (PRODUCTO) REFERENCES PRODUCTOS (PRODUCTO),
+    CONSTRAINT CKDETALLEPEDIDOCANTIDAD CHECK (CANTIDAD > 0)
+);
+CREATE INDEX IXDETALLEPEDIDOPEDIDO ON DETALLEPEDIDO (PEDIDO);
+CREATE INDEX IXDETALLEPEDIDOPRODUCTO ON DETALLEPEDIDO (PRODUCTO);
+
+CREATE TABLE PAGOS (
+    PAGO            VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('PAG', 'SECPAGOS'),
+    PEDIDO          VARCHAR(30)   NOT NULL,
+    METODOPAGO      CHAR(3)       NOT NULL,                  -- METODOPAGO.CODIGO
+    ESTADO          CHAR(3)       NOT NULL DEFAULT '001',    -- ESTADOPAGO.CODIGO
+    PROVEEDOR       VARCHAR(30),                             -- PAYPHONE, DATAFAST, PAYPAL...
+    REFERENCIA      VARCHAR(100),                            -- id de la transacción en la pasarela
+    IDEMPOTENCIA    VARCHAR(100),                            -- evita cobrar dos veces el mismo intento
+    MONTO           NUMERIC(10,2) NOT NULL,
+    MONEDA          CHAR(3)       NOT NULL DEFAULT 'USD',
+    RESPUESTA       JSONB,                                   -- respuesta cruda de la pasarela
+    PAGADOEN        TIMESTAMPTZ,
+    MONTOREEMBOLSO  NUMERIC(10,2) NOT NULL DEFAULT 0,
+    REEMBOLSOEN     TIMESTAMPTZ,
+    MOTIVOREEMBOLSO TEXT,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(150),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKPAGOS PRIMARY KEY (PAGO),
+    CONSTRAINT UQPAGOSIDEMPOTENCIA UNIQUE (IDEMPOTENCIA),
+    CONSTRAINT FKPAGOSPEDIDO FOREIGN KEY (PEDIDO) REFERENCES PEDIDOS (PEDIDO),
+    CONSTRAINT FKPAGOSMETODOPAGO FOREIGN KEY (METODOPAGO) REFERENCES METODOPAGO (CODIGO),
+    CONSTRAINT FKPAGOSESTADO FOREIGN KEY (ESTADO) REFERENCES ESTADOPAGO (CODIGO),
+    CONSTRAINT CKPAGOSMONTO CHECK (MONTO >= 0 AND MONTOREEMBOLSO >= 0 AND MONTOREEMBOLSO <= MONTO)
+);
+CREATE INDEX IXPAGOSPEDIDO ON PAGOS (PEDIDO);
+CREATE INDEX IXPAGOSREFERENCIA ON PAGOS (REFERENCIA);
+
+CREATE TABLE CALIFICACIONES (
+    CALIFICACION    VARCHAR(30)   NOT NULL DEFAULT GENERARCODIGO('CAL', 'SECCALIFICACIONES'),
+    PEDIDO          VARCHAR(30)   NOT NULL,
+    USUARIO         VARCHAR(30)   NOT NULL,                  -- quien califica
+    TIPO            VARCHAR(12)   NOT NULL,
+    VENDEDOR        VARCHAR(30),
+    REPARTIDOR      VARCHAR(30),
+    PUNTUACION      NUMERIC(2,1)  NOT NULL,
+    COMENTARIO      TEXT,
+    RESPUESTA       TEXT,                                    -- respuesta del calificado
+    RESPONDIDOEN    TIMESTAMPTZ,
+    VISIBLE         BOOLEAN       NOT NULL DEFAULT TRUE,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(150),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKCALIFICACIONES PRIMARY KEY (CALIFICACION),
+    CONSTRAINT UQCALIFICACIONESPEDIDOTIPO UNIQUE (PEDIDO, TIPO),
+    CONSTRAINT FKCALIFICACIONESPEDIDO FOREIGN KEY (PEDIDO) REFERENCES PEDIDOS (PEDIDO),
+    CONSTRAINT FKCALIFICACIONESUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT FKCALIFICACIONESVENDEDOR FOREIGN KEY (VENDEDOR) REFERENCES VENDEDORES (VENDEDOR),
+    CONSTRAINT FKCALIFICACIONESREPARTIDOR FOREIGN KEY (REPARTIDOR) REFERENCES REPARTIDORES (REPARTIDOR),
+    CONSTRAINT CKCALIFICACIONESTIPO CHECK (TIPO IN ('VENDEDOR','REPARTIDOR')),
+    CONSTRAINT CKCALIFICACIONESPUNTUACION CHECK (PUNTUACION BETWEEN 1 AND 5),
+    CONSTRAINT CKCALIFICACIONESOBJETIVO CHECK ((TIPO = 'VENDEDOR' AND VENDEDOR IS NOT NULL) OR (TIPO = 'REPARTIDOR' AND REPARTIDOR IS NOT NULL))
+);
+CREATE INDEX IXCALIFICACIONESVENDEDOR ON CALIFICACIONES (VENDEDOR);
+CREATE INDEX IXCALIFICACIONESREPARTIDOR ON CALIFICACIONES (REPARTIDOR);
+
+-- -----------------------------------------------------------------------------
+-- 10. NOTIFICACIONES Y DISPOSITIVOS
+-- -----------------------------------------------------------------------------
+CREATE TABLE NOTIFICACIONES (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    USUARIO         VARCHAR(30)   NOT NULL,
+    TIPO            VARCHAR(50)   NOT NULL,                  -- PEDIDONUEVO, PEDIDOENCAMINO...
+    TITULO          VARCHAR(200)  NOT NULL,
+    MENSAJE         TEXT          NOT NULL,
+    PEDIDO          VARCHAR(30),
+    DATOS           JSONB         NOT NULL DEFAULT '{}',     -- carga útil para abrir la pantalla correcta
+    CANAL           VARCHAR(10)   NOT NULL DEFAULT 'APP',
+    PRIORIDAD       VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',
+    LEIDA           BOOLEAN       NOT NULL DEFAULT FALSE,
+    LEIDAEN         TIMESTAMPTZ,
+    ENVIADAEN       TIMESTAMPTZ,
+    ERRORENVIO      TEXT,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(150),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKNOTIFICACIONES PRIMARY KEY (ID),
+    CONSTRAINT FKNOTIFICACIONESUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT FKNOTIFICACIONESPEDIDO FOREIGN KEY (PEDIDO) REFERENCES PEDIDOS (PEDIDO),
+    CONSTRAINT CKNOTIFICACIONESCANAL CHECK (CANAL IN ('APP','PUSH','EMAIL','SMS','WHATSAPP')),
+    CONSTRAINT CKNOTIFICACIONESPRIORIDAD CHECK (PRIORIDAD IN ('BAJA','NORMAL','ALTA'))
+);
+CREATE INDEX IXNOTIFICACIONESUSUARIO ON NOTIFICACIONES (USUARIO, LEIDA, CREADOEN DESC);
+
+CREATE TABLE DISPOSITIVOS (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    USUARIO         VARCHAR(30)   NOT NULL,
+    TOKENFCM        TEXT          NOT NULL,
+    PLATAFORMA      VARCHAR(10)   NOT NULL,
+    MODELO          VARCHAR(100),
+    SISTEMAVER      VARCHAR(30),
+    APPVER          VARCHAR(20),
+    ULTIMOUSOEN     TIMESTAMPTZ,
+    ACTIVO          BOOLEAN       NOT NULL DEFAULT TRUE,
+    FDESDE          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    FHASTA          TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    VERSIONCONTROL  INTEGER       NOT NULL DEFAULT 0,
+    DATOSEXTRA      VARCHAR(100),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CREADOPOR       VARCHAR(30),
+    ACTUALIZADOPOR  VARCHAR(30),
+    ELIMINADOEN     TIMESTAMPTZ,
+    CONSTRAINT PKDISPOSITIVOS PRIMARY KEY (ID),
+    CONSTRAINT UQDISPOSITIVOSTOKEN UNIQUE (TOKENFCM),
+    CONSTRAINT FKDISPOSITIVOSUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT CKDISPOSITIVOSPLATAFORMA CHECK (PLATAFORMA IN ('ANDROID','IOS','WEB'))
+);
+CREATE INDEX IXDISPOSITIVOSUSUARIO ON DISPOSITIVOS (USUARIO);
+
+-- -----------------------------------------------------------------------------
+-- 11. TABLAS DE REGISTRO (solo se insertan; no llevan versionado propio)
+-- -----------------------------------------------------------------------------
+CREATE TABLE SEGUIMIENTOPEDIDO (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    PEDIDO          VARCHAR(30)   NOT NULL,
+    ESTADOANTERIOR  CHAR(3),
+    ESTADONUEVO     CHAR(3)       NOT NULL,
+    CAMBIADOPOR     VARCHAR(30),
+    MOTIVO          TEXT,
+    LATITUD         NUMERIC(10,8),
+    LONGITUD        NUMERIC(11,8),
+    CAMBIADOEN      TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT PKSEGUIMIENTOPEDIDO PRIMARY KEY (ID),
+    CONSTRAINT FKSEGUIMIENTOPEDIDOPEDIDO FOREIGN KEY (PEDIDO) REFERENCES PEDIDOS (PEDIDO),
+    CONSTRAINT FKSEGUIMIENTOPEDIDOESTADO FOREIGN KEY (ESTADONUEVO) REFERENCES ESTADOPEDIDO (CODIGO)
+);
+CREATE INDEX IXSEGUIMIENTOPEDIDOPEDIDO ON SEGUIMIENTOPEDIDO (PEDIDO, CAMBIADOEN);
+
+CREATE TABLE CODIGOVERIFICACION (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    PROPOSITO       VARCHAR(12)   NOT NULL,
+    EMAIL           VARCHAR(150),
+    TELEFONO        VARCHAR(20),
+    USUARIO         VARCHAR(30),
+    CODIGOHASH      VARCHAR(255)  NOT NULL,
+    EXPIRAEN        TIMESTAMPTZ   NOT NULL,
+    INTENTOS        SMALLINT      NOT NULL DEFAULT 0,
+    MAXINTENTOS     SMALLINT      NOT NULL DEFAULT 5,
+    VERIFICADOEN    TIMESTAMPTZ,                             -- el usuario acertó el código
+    USADOEN         TIMESTAMPTZ,                             -- consumido (por el registro o el reseteo) o invalidado por uno nuevo
+    IP              INET,
+    TOKENFCM        TEXT,
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT PKCODIGOVERIFICACION PRIMARY KEY (ID),
+    CONSTRAINT FKCODIGOVERIFICACIONUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT CKCODIGOVERIFICACIONPROPOSITO CHECK (PROPOSITO IN ('EMAIL','RESETCLAVE','TELEFONO')),
+    CONSTRAINT CKCODIGOVERIFICACIONDESTINO CHECK (EMAIL IS NOT NULL OR TELEFONO IS NOT NULL)
+);
+CREATE INDEX IXCODIGOVERIFICACIONEMAIL ON CODIGOVERIFICACION (EMAIL, PROPOSITO, CREADOEN DESC);
+
+CREATE TABLE SESIONES (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    USUARIO         VARCHAR(30)   NOT NULL,
+    DISPOSITIVO     BIGINT,
+    TOKENHASH       VARCHAR(255)  NOT NULL,                  -- hash del refresh token
+    IP              INET,
+    USERAGENT       TEXT,
+    EXPIRAEN        TIMESTAMPTZ   NOT NULL,
+    ULTIMOUSOEN     TIMESTAMPTZ,
+    REVOCADAEN      TIMESTAMPTZ,
+    MOTIVOREVOCACION VARCHAR(100),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT PKSESIONES PRIMARY KEY (ID),
+    CONSTRAINT UQSESIONESTOKEN UNIQUE (TOKENHASH),
+    CONSTRAINT FKSESIONESUSUARIO FOREIGN KEY (USUARIO) REFERENCES USUARIOS (USUARIO),
+    CONSTRAINT FKSESIONESDISPOSITIVO FOREIGN KEY (DISPOSITIVO) REFERENCES DISPOSITIVOS (ID)
+);
+CREATE INDEX IXSESIONESUSUARIO ON SESIONES (USUARIO);
+
+CREATE TABLE UBICACIONREPARTIDOR (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    REPARTIDOR      VARCHAR(30)   NOT NULL,
+    PEDIDO          VARCHAR(30),
+    LATITUD         NUMERIC(10,8) NOT NULL,
+    LONGITUD        NUMERIC(11,8) NOT NULL,
+    PRECISIONM      NUMERIC(7,2),
+    VELOCIDADKMH    NUMERIC(6,2),
+    RUMBO           NUMERIC(5,2),
+    BATERIA         SMALLINT,
+    REGISTRADAEN    TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT PKUBICACIONREPARTIDOR PRIMARY KEY (ID),
+    CONSTRAINT FKUBICACIONREPARTIDORREPARTIDOR FOREIGN KEY (REPARTIDOR) REFERENCES REPARTIDORES (REPARTIDOR),
+    CONSTRAINT FKUBICACIONREPARTIDORPEDIDO FOREIGN KEY (PEDIDO) REFERENCES PEDIDOS (PEDIDO)
+);
+CREATE INDEX IXUBICACIONREPARTIDORREP ON UBICACIONREPARTIDOR (REPARTIDOR, REGISTRADAEN DESC);
+CREATE INDEX IXUBICACIONREPARTIDORPEDIDO ON UBICACIONREPARTIDOR (PEDIDO, REGISTRADAEN);
+
+CREATE TABLE AUDITORIA (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    USUARIO         VARCHAR(30),
+    ACCION          VARCHAR(50)   NOT NULL,                  -- LOGIN, LOGINFALLIDO, CAMBIOCLAVE...
+    ENTIDAD         VARCHAR(60),
+    ENTIDADID       TEXT,
+    DETALLE         JSONB         NOT NULL DEFAULT '{}',
+    IP              INET,
+    USERAGENT       TEXT,
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT PKAUDITORIA PRIMARY KEY (ID)
+);
+CREATE INDEX IXAUDITORIAUSUARIO ON AUDITORIA (USUARIO, CREADOEN DESC);
+CREATE INDEX IXAUDITORIAACCION ON AUDITORIA (ACCION, CREADOEN DESC);
+
+-- LOGMENSAJES y LOGERRORES: bitácora técnica de la aplicación.
+--   * AUDITORIA = qué hizo cada usuario (login, cambio de clave...)
+--   * LOGMENSAJES = qué hace el sistema (eventos informativos, avisos, trazas)
+--   * LOGERRORES = qué falló (con detalle técnico para depurar)
+-- Sin claves foráneas a propósito: un log nunca debe fallar ni bloquear por un FK.
+-- NUNCA guardar contraseñas, tokens ni datos de tarjeta en DETALLE / CUERPO / PARAMETROS
+-- (el backend debe limpiarlos antes de insertar).
+CREATE TABLE LOGMENSAJES (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    NIVEL           VARCHAR(12)   NOT NULL DEFAULT 'INFO',
+    MODULO          VARCHAR(50)   NOT NULL,                  -- AUTH, PEDIDOS, PAGOS, SOCKET, FCM, CORREO...
+    ACCION          VARCHAR(80),                             -- PEDIDOCREADO, CODIGOENVIADO...
+    MENSAJE         TEXT          NOT NULL,
+    DETALLE         JSONB         NOT NULL DEFAULT '{}',
+    ORIGEN          VARCHAR(12)   NOT NULL DEFAULT 'BACKEND',
+    USUARIO         VARCHAR(30),
+    PEDIDO          VARCHAR(30),
+    SOLICITUDID     VARCHAR(64),                             -- une todos los logs de una misma petición
+    IP              INET,
+    DURACIONMS      INTEGER,
+    ENTORNO         VARCHAR(15),
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT PKLOGMENSAJES PRIMARY KEY (ID),
+    CONSTRAINT CKLOGMENSAJESNIVEL CHECK (NIVEL IN ('DEBUG','INFO','ADVERTENCIA')),
+    CONSTRAINT CKLOGMENSAJESORIGEN CHECK (ORIGEN IN ('BACKEND','APPMOVIL','WEB','SISTEMA'))
+);
+CREATE INDEX IXLOGMENSAJESFECHA ON LOGMENSAJES (CREADOEN DESC);
+CREATE INDEX IXLOGMENSAJESMODULO ON LOGMENSAJES (MODULO, NIVEL, CREADOEN DESC);
+CREATE INDEX IXLOGMENSAJESUSUARIO ON LOGMENSAJES (USUARIO, CREADOEN DESC);
+CREATE INDEX IXLOGMENSAJESSOLICITUD ON LOGMENSAJES (SOLICITUDID);
+
+CREATE TABLE LOGERRORES (
+    ID              BIGINT        GENERATED ALWAYS AS IDENTITY,
+    NIVEL           VARCHAR(12)   NOT NULL DEFAULT 'ERROR',
+    MODULO          VARCHAR(50)   NOT NULL,
+    ORIGEN          VARCHAR(12)   NOT NULL DEFAULT 'BACKEND',
+    CODIGO          VARCHAR(50),                             -- código de error estable: EMAILDUPLICADO...
+    MENSAJE         TEXT          NOT NULL,
+    STACK           TEXT,
+    HUELLA          CHAR(64),                                -- SHA-256 módulo+código+mensaje: agrupa el mismo error repetido
+    METODO          VARCHAR(10),                             -- GET, POST...
+    RUTA            TEXT,
+    ESTADOHTTP      SMALLINT,
+    PARAMETROS      JSONB,                                   -- query/params ya limpios de datos sensibles
+    CUERPO          JSONB,                                   -- body ya limpio de datos sensibles
+    USUARIO         VARCHAR(30),
+    PEDIDO          VARCHAR(30),
+    SOLICITUDID     VARCHAR(64),
+    IP              INET,
+    USERAGENT       TEXT,
+    APPVER          VARCHAR(20),
+    ENTORNO         VARCHAR(15),
+    RESUELTO        BOOLEAN       NOT NULL DEFAULT FALSE,
+    RESUELTOPOR     VARCHAR(30),
+    RESUELTOEN      TIMESTAMPTZ,
+    NOTAS           TEXT,
+    CREADOEN        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT PKLOGERRORES PRIMARY KEY (ID),
+    CONSTRAINT CKLOGERRORESNIVEL CHECK (NIVEL IN ('ERROR','CRITICO')),
+    CONSTRAINT CKLOGERRORESORIGEN CHECK (ORIGEN IN ('BACKEND','APPMOVIL','WEB','SISTEMA'))
+);
+CREATE INDEX IXLOGERRORESFECHA ON LOGERRORES (CREADOEN DESC);
+CREATE INDEX IXLOGERRORESMODULO ON LOGERRORES (MODULO, CREADOEN DESC);
+CREATE INDEX IXLOGERRORESHUELLA ON LOGERRORES (HUELLA);
+CREATE INDEX IXLOGERRORESPENDIENTES ON LOGERRORES (CREADOEN DESC) WHERE NOT RESUELTO;
+CREATE INDEX IXLOGERRORESSOLICITUD ON LOGERRORES (SOLICITUDID);
+
+-- Limpieza de logs viejos (los logs crecen sin parar). Ejecutar a diario desde el backend o un cron:
+--   SELECT * FROM PURGARLOGS();            -- por defecto: mensajes 30 días, errores resueltos 180 días
+CREATE FUNCTION PURGARLOGS(p_diasmensajes INT DEFAULT 30, p_diaserrores INT DEFAULT 180)
+RETURNS TABLE (MENSAJESBORRADOS BIGINT, ERRORESBORRADOS BIGINT) LANGUAGE plpgsql AS $$
+DECLARE v_m BIGINT; v_e BIGINT;
+BEGIN
+    DELETE FROM LOGMENSAJES WHERE CREADOEN < now() - make_interval(days => p_diasmensajes);
+    GET DIAGNOSTICS v_m = ROW_COUNT;
+    DELETE FROM LOGERRORES WHERE RESUELTO AND CREADOEN < now() - make_interval(days => p_diaserrores);
+    GET DIAGNOSTICS v_e = ROW_COUNT;
+    RETURN QUERY SELECT v_m, v_e;
+END $$;
+
+-- -----------------------------------------------------------------------------
+-- 12. CONTROL DE VERSIONES POR REGISTRO (FDESDE / FHASTA / VERSIONCONTROL)
+-- -----------------------------------------------------------------------------
+-- Antes de cada UPDATE o DELETE copia la fila anterior a HIST<TABLA> cerrando su
+-- vigencia (FHASTA = ahora) y, en la fila vigente, abre la nueva versión:
+--     FDESDE = ahora · VERSIONCONTROL + 1 · FHASTA queda como se indique (por defecto 2999-12-31)
+-- Para dar de baja un código de catálogo: UPDATE ... SET FHASTA = now().
+CREATE FUNCTION FNVERSIONAR() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    v_cols   TEXT;
+    v_sel    TEXT;
+    v_ahora  TIMESTAMPTZ := clock_timestamp();
+    v_quien  TEXT := NULLIF(current_setting('app.usuario', TRUE), '');
+BEGIN
+    -- No se versiona si no cambió nada, ni si solo cambiaron columnas "volátiles" (las que el
+    -- trigger recibe como argumentos: p. ej. ULTIMACONEXION o la ubicación del repartidor),
+    -- que cambian todo el tiempo y llenarían el historial de versiones sin valor.
+    IF TG_OP = 'UPDATE' AND (to_jsonb(NEW) - TG_ARGV) = (to_jsonb(OLD) - TG_ARGV) THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT string_agg(quote_ident(attname), ', ' ORDER BY attnum),
+           string_agg(CASE WHEN attname = 'fhasta' THEN '$4' ELSE quote_ident(attname) END, ', ' ORDER BY attnum)
+      INTO v_cols, v_sel
+      FROM pg_attribute
+     WHERE attrelid = TG_RELID AND attnum > 0 AND NOT attisdropped;
+
+    EXECUTE format(
+        'INSERT INTO %I (%s, operacion, cambiadopor) SELECT %s, $2, $3 FROM (SELECT ($1).*) x',
+        'hist' || TG_TABLE_NAME, v_cols, v_sel)
+    USING OLD, TG_OP, v_quien, v_ahora;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    NEW.VERSIONCONTROL := OLD.VERSIONCONTROL + 1;
+    NEW.FDESDE         := v_ahora;
+    RETURN NEW;
+END $$;
+
+-- Las claves primarias legibles NO se pueden cambiar nunca (otras tablas guardan ese código).
+-- Se llama con el nombre de la columna clave:  FNCLAVEFIJA('usuario')
+CREATE FUNCTION FNCLAVEFIJA() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF (to_jsonb(NEW) ->> TG_ARGV[0]) IS DISTINCT FROM (to_jsonb(OLD) ->> TG_ARGV[0]) THEN
+        RAISE EXCEPTION 'La clave % de % no se puede cambiar (% -> %)',
+            TG_ARGV[0], TG_TABLE_NAME, to_jsonb(OLD) ->> TG_ARGV[0], to_jsonb(NEW) ->> TG_ARGV[0];
+    END IF;
+    RETURN NEW;
+END $$;
+
+-- Crea la tabla gemela HIST<TABLA> y los triggers en cada tabla versionada
+DO $$
+DECLARE
+    t TEXT;
+    v_volatiles TEXT;
+    v_pk TEXT;
+    tablas TEXT[] := ARRAY[
+        'roles','estadopedido','estadoproducto','estadopago','estadoaprobacion','metodopago',
+        'tipovehiculo','categorias','zonacobertura','configuraciones','archivos','usuarios',
+        'documentousuario','direcciones','vendedores','horariovendedor','repartidores','productos',
+        'imagenproducto','cupones','pedidos','detallepedido','pagos','calificaciones',
+        'notificaciones','dispositivos'];
+BEGIN
+    FOREACH t IN ARRAY tablas LOOP
+        EXECUTE format('CREATE TABLE %I (LIKE %I)', 'hist' || t, t);
+        EXECUTE format('ALTER TABLE %I
+                          ADD COLUMN histid       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                          ADD COLUMN operacion    VARCHAR(6) NOT NULL,
+                          ADD COLUMN cambiadopor  TEXT', 'hist' || t);
+
+        SELECT a.attname INTO v_pk
+          FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
+         WHERE i.indrelid = t::regclass AND i.indisprimary
+         LIMIT 1;
+        EXECUTE format('CREATE INDEX %I ON %I (%I, versioncontrol)', 'ixhist' || t || 'reg', 'hist' || t, v_pk);
+
+        -- Columnas volátiles por tabla: cambiarlas NO crea una versión nueva
+        v_volatiles := CASE t
+            WHEN 'usuarios'      THEN $a$'ultimaconexion','ultimaip','intentosfallidos','bloqueadohasta'$a$
+            WHEN 'repartidores'  THEN $a$'latitud','longitud','ubicacionen'$a$
+            WHEN 'dispositivos'  THEN $a$'ultimousoen'$a$
+            WHEN 'productos'     THEN $a$'totalvendidos'$a$
+            WHEN 'vendedores'    THEN $a$'totalpedidos'$a$
+            WHEN 'cupones'       THEN $a$'usosactuales'$a$
+            ELSE '' END;
+        EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE OR DELETE ON %I
+                        FOR EACH ROW EXECUTE FUNCTION FNVERSIONAR(%s)', 'tr' || t || 'version', t, v_volatiles);
+    END LOOP;
+END $$;
+
+-- Claves legibles inmutables (tabla:columna)
+DO $$
+DECLARE par TEXT;
+BEGIN
+    FOREACH par IN ARRAY ARRAY[
+        'usuarios:usuario','archivos:archivo','zonacobertura:zona','direcciones:direccion',
+        'vendedores:vendedor','repartidores:repartidor','productos:producto','cupones:cupon',
+        'pedidos:pedido','pagos:pago','calificaciones:calificacion'] LOOP
+        EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION FNCLAVEFIJA(%L)',
+                       'tr' || split_part(par, ':', 1) || 'clavefija', split_part(par, ':', 1), split_part(par, ':', 2));
+    END LOOP;
+END $$;
+
+-- -----------------------------------------------------------------------------
+-- 12B. CAMBIOS DE ESTRUCTURA SEGUROS (tabla principal + su HIST a la vez)
+-- -----------------------------------------------------------------------------
+-- IMPORTANTE: el trigger de versionado copia las columnas de la tabla principal a su HIST.
+-- Si cambias una columna SOLO en la principal, el siguiente UPDATE falla. Por eso, para
+-- cualquier cambio de columna en una tabla versionada usa estas funciones (en mayúsculas o minúsculas):
+--     SELECT AGREGARCOLUMNA('PRODUCTOS', 'PESOGRAMOS', 'NUMERIC(8,2)');
+--     SELECT RENOMBRARCOLUMNA('PRODUCTOS', 'DATOSEXTRA', 'EXTRA');
+--     SELECT CAMBIARTIPOCOLUMNA('PRODUCTOS', 'DATOSEXTRA', 'VARCHAR(250)');          -- cambia el largo o el tipo
+--     SELECT CAMBIARTIPOCOLUMNA('PRODUCTOS', 'STOCK', 'BIGINT', 'STOCK::BIGINT');   -- con conversión
+CREATE FUNCTION AGREGARCOLUMNA(p_tabla TEXT, p_columna TEXT, p_tipo TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE format('ALTER TABLE %I ADD COLUMN %I %s', lower(p_tabla), lower(p_columna), p_tipo);
+    EXECUTE format('ALTER TABLE %I ADD COLUMN %I %s', 'hist' || lower(p_tabla), lower(p_columna), p_tipo);
+END $$;
+
+CREATE FUNCTION RENOMBRARCOLUMNA(p_tabla TEXT, p_viejo TEXT, p_nuevo TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE format('ALTER TABLE %I RENAME COLUMN %I TO %I', lower(p_tabla), lower(p_viejo), lower(p_nuevo));
+    EXECUTE format('ALTER TABLE %I RENAME COLUMN %I TO %I', 'hist' || lower(p_tabla), lower(p_viejo), lower(p_nuevo));
+END $$;
+
+-- p_usando = expresión de conversión (por defecto, un CAST simple). Quita el DEFAULT de la
+-- columna en la tabla principal (puede no ser compatible con el tipo nuevo): vuélvelo a poner si lo necesitas.
+CREATE FUNCTION CAMBIARTIPOCOLUMNA(p_tabla TEXT, p_columna TEXT, p_tipo TEXT, p_usando TEXT DEFAULT NULL)
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    v_usando TEXT := COALESCE(p_usando, format('%I::%s', lower(p_columna), p_tipo));
+BEGIN
+    EXECUTE format('ALTER TABLE %I ALTER COLUMN %I DROP DEFAULT', lower(p_tabla), lower(p_columna));
+    EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE %s USING %s', lower(p_tabla), lower(p_columna), p_tipo, v_usando);
+    EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE %s USING %s', 'hist' || lower(p_tabla), lower(p_columna), p_tipo, v_usando);
+END $$;
+
+-- -----------------------------------------------------------------------------
+-- 13. SEGUIMIENTO AUTOMÁTICO DE ESTADOS DEL PEDIDO
+-- -----------------------------------------------------------------------------
+CREATE FUNCTION FNSEGUIMIENTOPEDIDO() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO SEGUIMIENTOPEDIDO (PEDIDO, ESTADOANTERIOR, ESTADONUEVO, CAMBIADOPOR)
+        VALUES (NEW.PEDIDO, NULL, NEW.ESTADO, NEW.CREADOPOR);
+    ELSIF NEW.ESTADO IS DISTINCT FROM OLD.ESTADO THEN
+        INSERT INTO SEGUIMIENTOPEDIDO (PEDIDO, ESTADOANTERIOR, ESTADONUEVO, CAMBIADOPOR, MOTIVO)
+        VALUES (NEW.PEDIDO, OLD.ESTADO, NEW.ESTADO, NEW.ACTUALIZADOPOR, NEW.MOTIVOCANCEL);
+    END IF;
+    RETURN NULL;
+END $$;
+
+CREATE TRIGGER TRPEDIDOSSEGUIMIENTO
+AFTER INSERT OR UPDATE OF ESTADO ON PEDIDOS
+FOR EACH ROW EXECUTE FUNCTION FNSEGUIMIENTOPEDIDO();
+
+-- -----------------------------------------------------------------------------
+-- 14. DATOS INICIALES DE CATÁLOGOS (referencia, no son datos de prueba)
+-- -----------------------------------------------------------------------------
+INSERT INTO ROLES (CODIGO, DESCRIPCION, DETALLE, ESPUBLICO, ORDEN) VALUES
+    ('001','CLIENTE',       'Realiza pedidos',               TRUE,  1),
+    ('002','VENDEDOR',      'Negocio que vende productos',   TRUE,  2),
+    ('003','REPARTIDOR',    'Entrega los pedidos',           TRUE,  3),
+    ('004','ADMINISTRADOR', 'Gestiona la plataforma',        FALSE, 4);
+
+INSERT INTO ESTADOPEDIDO (CODIGO, DESCRIPCION, DETALLE, ESFINAL, COLOR, ORDEN) VALUES
+    ('001','PENDIENTE',   'Esperando confirmación del vendedor',   FALSE, '#F59E0B', 1),
+    ('002','CONFIRMADO',  'El vendedor aceptó el pedido',          FALSE, '#3B82F6', 2),
+    ('003','PREPARANDO',  'El vendedor lo está preparando',        FALSE, '#8B5CF6', 3),
+    ('004','LISTO',       'Listo para ser recogido',               FALSE, '#06B6D4', 4),
+    ('005','EN CAMINO',   'Un repartidor aceptó el pedido y va al negocio a recogerlo', FALSE, '#14B8A6', 5),
+    ('006','RECOGIDO',    'El repartidor recogió el pedido y lo lleva al cliente',      FALSE, '#10B981', 6),
+    ('007','ENTREGADO',   'El repartidor lo entregó',              FALSE, '#22C55E', 7),
+    ('008','RECIBIDO',    'El cliente confirmó la recepción',      TRUE,  '#16A34A', 8),
+    ('009','RECHAZADO',   'El vendedor lo rechazó',                TRUE,  '#EF4444', 9),
+    ('010','CANCELADO',   'Cancelado por el cliente o el sistema', TRUE,  '#DC2626', 10);
+
+INSERT INTO ESTADOPRODUCTO (CODIGO, DESCRIPCION, DETALLE, SEVENDE, COLOR, ORDEN) VALUES
+    ('001','DISPONIBLE',    'Se puede pedir',                         TRUE,  '#22C55E', 1),
+    ('002','AGOTADO',       'Sin stock por ahora',                    FALSE, '#F59E0B', 2),
+    ('003','NO DISPONIBLE', 'Oculto temporalmente por el vendedor',   FALSE, '#6B7280', 3),
+    ('004','DESCONTINUADO', 'Ya no se venderá',                       FALSE, '#DC2626', 4);
+
+INSERT INTO ESTADOPAGO (CODIGO, DESCRIPCION, ORDEN) VALUES
+    ('001','PENDIENTE',          1),
+    ('002','APROBADO',           2),
+    ('003','RECHAZADO',          3),
+    ('004','REEMBOLSADO',        4),
+    ('005','REEMBOLSO PARCIAL',  5),
+    ('006','CANCELADO',          6);
+
+INSERT INTO ESTADOAPROBACION (CODIGO, DESCRIPCION, DETALLE, ORDEN) VALUES
+    ('001','PENDIENTE',  'En revisión por un administrador',  1),
+    ('002','APROBADO',   'Verificado y habilitado',           2),
+    ('003','RECHAZADO',  'No cumple los requisitos',          3),
+    ('004','SUSPENDIDO', 'Habilitación retirada temporalmente',4),
+    ('005','VENCIDO',    'Documento vencido',                 5);
+
+INSERT INTO METODOPAGO (CODIGO, DESCRIPCION, REQUIEREPASARELA, ESENLINEA, ORDEN) VALUES
+    ('001','EFECTIVO',               FALSE, FALSE, 1),
+    ('002','TRANSFERENCIA BANCARIA', FALSE, FALSE, 2),
+    ('003','TARJETA',                TRUE,  TRUE,  3),
+    ('004','PAYPAL',                 TRUE,  TRUE,  4);
+
+INSERT INTO TIPOVEHICULO (CODIGO, DESCRIPCION, REQUIEREPLACA, REQUIERELICENCIA, ORDEN) VALUES
+    ('001','MOTOCICLETA', TRUE,  TRUE,  1),
+    ('002','AUTOMOVIL',   TRUE,  TRUE,  2),
+    ('003','CAMIONETA',   TRUE,  TRUE,  3),
+    ('004','BICICLETA',   FALSE, FALSE, 4),
+    ('005','A PIE',       FALSE, FALSE, 5);
+
+INSERT INTO CATEGORIAS (CODIGO, DESCRIPCION, ORDEN) VALUES
+    ('001','COMIDA',        1),
+    ('002','BEBIDAS',       2),
+    ('003','POSTRES',       3),
+    ('004','PANADERIA',     4),
+    ('005','SUPERMERCADO',  5),
+    ('006','FARMACIA',      6),
+    ('007','MASCOTAS',      7),
+    ('099','OTROS',         99);
+
+INSERT INTO CONFIGURACIONES (CLAVE, VALOR, DESCRIPCION, ESPUBLICA) VALUES
+    ('MONEDA',                    '"USD"',  'Moneda de la plataforma',                           TRUE),
+    ('IVA',                       '15',     'IVA por defecto (%)',                               TRUE),
+    ('COMISIONPLATAFORMA',        '10',     'Comisión por pedido (%). Valor inicial editable',   FALSE),
+    ('TARIFADELIVERYBASE',        '1.00',   'Tarifa base de envío (USD). Valor inicial editable',TRUE),
+    ('TARIFADELIVERYKM',          '0.50',   'Tarifa por km (USD). Valor inicial editable',       TRUE),
+    ('RADIOBUSQUEDAREPARTIDORKM', '5',      'Radio para buscar repartidores cercanos',           FALSE),
+    ('TIEMPOACEPTACIONSEG',       '60',     'Segundos que tiene un repartidor para aceptar',     FALSE),
+    ('VERSIONTERMINOS',           '"1.0"',  'Versión vigente de los términos y condiciones',     TRUE),
+    ('APROBACIONAUTOMATICA',      'true',   'Vendedores y repartidores nuevos quedan APROBADOS sin revisión. Poner false cuando exista el panel de administración', FALSE);

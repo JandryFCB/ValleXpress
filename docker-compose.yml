@@ -5,24 +5,24 @@ services:
     container_name: vallexpress_db
     restart: always
     environment:
-      POSTGRES_USER: vallexpress_user
-      POSTGRES_PASSWORD: 2003
-      POSTGRES_DB: vallexpress_db
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     networks:
       - vallexpress_network
 
-  # Adminer para gestionar la BD
+  # Adminer para gestionar la BD (solo accesible desde tu máquina)
   adminer:
     image: adminer
     container_name: vallexpress_adminer
     restart: always
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     networks:
       - vallexpress_network
     depends_on:

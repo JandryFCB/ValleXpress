@@ -1,325 +1,103 @@
-# ValleXpress 2.0.2 🚀
+# ValleXpress
 
-Sistema completo de delivery con arquitectura cliente-servidor, desarrollado con Flutter (frontend) y Node.js/Express (backend).
+App de delivery (proyecto de tesis) que conecta **clientes**, **vendedores** y **repartidores**.
+Backend en Node.js/Express + PostgreSQL y app móvil en Flutter.
 
-## 📋 Descripción del Proyecto
+> Estado: **backend completo y probado (341 pruebas)**. La app Flutter está en revisión para conectarla al backend nuevo.
+> Avances: [INFORME_AVANCES.md](INFORME_AVANCES.md) · Plan: [ROADMAP_TOP.md](ROADMAP_TOP.md)
 
-ValleXpress es una plataforma de delivery que conecta a **clientes**, **vendedores** y **repartidores** en un ecosistema completo de pedidos y entregas. El sistema permite a los vendedores gestionar sus productos, a los clientes hacer pedidos desde múltiples tiendas, y a los repartidores gestionar las entregas con seguimiento en tiempo real.
+## Tecnologías
 
-### 🎯 Características Principales
+| Capa | Stack |
+|---|---|
+| Backend | Node 22, Express 4, Sequelize 6, Socket.IO, JWT + bcryptjs, express-validator, express-rate-limit |
+| Base de datos | PostgreSQL 15 (Docker) |
+| Imágenes | `sharp` (WebP en 3 tamaños, nombre por hash SHA-256) |
+| Notificaciones | Firebase Cloud Messaging (firebase-admin) |
+| Correo | Brevo (API) |
+| App | Flutter (Provider, flutter_map, socket_io_client, firebase_messaging) |
 
-- **👥 Multi-rol**: Sistema de autenticación con 3 tipos de usuarios (cliente, vendedor, repartidor)
-- **📱 App Móvil**: Interfaz Flutter nativa para Android/iOS/Web
-- **🛒 E-commerce**: Carrito de compras con productos de múltiples vendedores
-- **📍 Geolocalización**: Mapas interactivos con OpenStreetMap
-- **🔔 Notificaciones Push**: Firebase Cloud Messaging (FCM)
-- **📡 Tiempo Real**: Socket.IO para actualizaciones en vivo
-- **💳 Pagos**: Sistema de pagos integrado
-- **📊 Dashboard**: Paneles diferenciados por rol con colores temáticos
+## Inicio rápido
 
-## 🏗️ Arquitectura
-
-### Backend (Node.js + Express)
-- **Base de Datos**: PostgreSQL con Sequelize ORM
-- **Autenticación**: JWT con bcryptjs
-- **WebSockets**: Socket.IO para comunicación en tiempo real
-- **Notificaciones**: Firebase Admin SDK
-- **Archivos**: Multer para uploads de imágenes
-- **Rate Limiting**: Protección contra abuso
-- **CORS**: Configurado para desarrollo y producción
-
-### Frontend (Flutter)
-- **UI Framework**: Material Design 3
-- **Estado**: Provider para gestión de estado
-- **HTTP**: Cliente HTTP para APIs REST
-- **WebSockets**: Socket.IO client para tiempo real
-- **Mapas**: Flutter Map con OpenStreetMap
-- **Notificaciones**: Firebase Messaging
-- **Almacenamiento**: Shared Preferences para persistencia local
-
-## 🚀 Inicio Rápido
-
-### Prerrequisitos
-- **Flutter**: SDK 3.8.1+
-- **Node.js**: 16+
-- **PostgreSQL**: 15+
-- **Docker**: Para base de datos (opcional)
-
-### 1. Clonar el Repositorio
 ```bash
-git clone <url-del-repositorio>
-cd ValleXpress2.0.2
-```
+# 1. Variables de entorno (el docker-compose y el backend usan el mismo .env)
+cd backend
+cp .env.example .env        # completa DB_PASSWORD y JWT_SECRET
+npm install
 
-### 2. Configurar Base de Datos
-```bash
-# Con Docker (recomendado)
+# 2. Base de datos (crea las tablas con database/schema.sql la primera vez)
+cd ..
 docker-compose up -d
 
-# O instalar PostgreSQL localmente
-# Crear base de datos: vallexpress_db
-# Usuario: vallexpress_user
-# Contraseña: 2003
-# Puerto: 5433
-```
-
-### 3. Configurar Backend
-```bash
+# 3. Backend
 cd backend
-npm install
-cp .env.example .env  # Configurar variables de entorno
-npm run dev
-```
+npm run dev                 # http://localhost:3000
 
-### 4. Configurar Frontend
-```bash
-cd frontend/vallexpress_app
+# 4. App
+cd ../frontend/vallexpress_app
 flutter pub get
 flutter run
 ```
 
-## 📱 Funcionalidades por Rol
+## Pruebas del backend
 
-### 👤 Cliente
-- ✅ Registro e inicio de sesión
-- ✅ Explorar productos de todas las tiendas
-- ✅ Carrito de compras inteligente
-- ✅ Realizar pedidos múltiples
-- ✅ Seguimiento de pedidos en tiempo real
-- ✅ Historial de pedidos
-- ✅ Gestión de direcciones de entrega
-- ✅ Cancelación de pedidos pendientes
-
-### 🏪 Vendedor
-- ✅ Registro e inicio de sesión
-- ✅ Gestión completa de productos (CRUD)
-- ✅ Configuración de ubicación GPS
-- ✅ Gestión de pedidos entrantes
-- ✅ Actualización de estados de pedido
-- ✅ Dashboard con estadísticas
-- ✅ Indicador de estado online/offline
-
-### 🚴 Repartidor
-- ✅ Registro e inicio de sesión
-- ✅ Visualización de pedidos asignados
-- ✅ Seguimiento GPS en tiempo real
-- ✅ Actualización de estados de entrega
-- ✅ Contador de pedidos completados
-- ✅ Rutas optimizadas en mapa
-
-## 🎨 Diseño y UX
-
-### Tema por Rol
-- **Cliente**: Tema verde (#4CAF50) - Confianza y crecimiento
-- **Vendedor**: Tema naranja (#FF9800) - Energía y vitalidad
-- **Repartidor**: Tema azul (#2196F3) - Confianza y profesionalismo
-
-### Características Visuales
-- Gradientes dinámicos en headers
-- Efectos de sombra y glow
-- Iconos temáticos por funcionalidad
-- Animaciones suaves de transición
-- Badges de estado con colores vibrantes
-
-## 📊 Estados de Pedido
-
-```
-Flujo Completo:
-Pendiente → Confirmado → Preparando → Listo → En Camino → Entregado
-     ↓
-Cancelado (solo en estados iniciales)
-```
-
-## 🔧 Tecnologías Utilizadas
-
-### Backend
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Base de Datos**: PostgreSQL
-- **ORM**: Sequelize
-- **Autenticación**: JWT + bcryptjs
-- **WebSockets**: Socket.IO
-- **Notificaciones**: Firebase Admin SDK
-- **Uploads**: Multer
-- **Validación**: express-validator
-- **Rate Limiting**: express-rate-limit
-- **CORS**: cors
-- **Compresión**: compression
-- **Logging**: morgan
-
-### Frontend
-- **Framework**: Flutter
-- **Lenguaje**: Dart
-- **UI**: Material Design 3
-- **Estado**: Provider
-- **HTTP**: http package
-- **WebSockets**: socket_io_client
-- **Mapas**: flutter_map + latlong2
-- **Notificaciones**: firebase_messaging
-- **Almacenamiento**: shared_preferences
-- **Geolocalización**: geolocator
-- **PDF Viewer**: syncfusion_flutter_pdfviewer
-- **Fuentes**: google_fonts
-
-## 📁 Estructura del Proyecto
-
-```
-ValleXpress2.0.2/
-├── backend/                          # API REST + WebSockets
-│   ├── src/
-│   │   ├── config/                   # Configuración BD
-│   │   ├── controllers/              # Lógica de negocio
-│   │   ├── middlewares/              # Middlewares personalizados
-│   │   ├── models/                   # Modelos Sequelize
-│   │   ├── routes/                   # Definición de rutas
-│   │   ├── services/                 # Servicios externos
-│   │   ├── sockets/                  # WebSockets handlers
-│   │   └── server.js                 # Punto de entrada
-│   ├── uploads/                      # Archivos subidos
-│   └── package.json
-├── frontend/
-│   └── vallexpress_app/              # App Flutter
-│       ├── lib/
-│       │   ├── config/               # Constantes y temas
-│       │   ├── models/               # Modelos de datos
-│       │   ├── providers/            # Gestión de estado
-│       │   ├── screens/              # Pantallas por rol
-│       │   ├── services/             # Servicios API
-│       │   ├── widgets/              # Componentes reutilizables
-│       │   └── main.dart             # Punto de entrada
-│       ├── android/                  # Config Android
-│       ├── ios/                      # Config iOS
-│       └── pubspec.yaml
-├── database/                         # Scripts SQL
-├── docker-compose.yml                # Orquestación Docker
-└── README.md
-```
-
-## 🔐 Variables de Entorno (Backend)
-
-```env
-# Base de Datos
-DB_HOST=localhost
-DB_PORT=5433
-DB_NAME=vallexpress_db
-DB_USER=vallexpress_user
-DB_PASSWORD=2003
-
-# JWT
-JWT_SECRET=tu_jwt_secret_aqui
-
-# Firebase (opcional)
-FIREBASE_SERVICE_ACCOUNT_PATH=./vallexpress-delivery-firebase-adminsdk-fbsvc-625e5b0964.json
-
-# Entorno
-NODE_ENV=development
-
-# Puerto
-PORT=3000
-```
-
-## 📡 API Endpoints Principales
-
-### Autenticación
-- `POST /api/auth/register` - Registro de usuarios
-- `POST /api/auth/login` - Inicio de sesión
-- `POST /api/auth/forgot-password` - Recuperar contraseña
-
-### Productos
-- `GET /api/productos` - Listar productos
-- `POST /api/productos` - Crear producto (vendedor)
-- `PUT /api/productos/:id` - Actualizar producto
-- `DELETE /api/productos/:id` - Eliminar producto
-
-### Pedidos
-- `POST /api/pedidos` - Crear pedido (cliente)
-- `GET /api/pedidos/mis-pedidos` - Mis pedidos (cliente)
-- `GET /api/pedidos/vendedor/pedidos` - Pedidos del vendedor
-- `PUT /api/pedidos/:id/estado` - Cambiar estado
-
-### Notificaciones
-- `GET /api/notificaciones` - Obtener notificaciones
-- `PUT /api/notificaciones/:id/leido` - Marcar como leída
-
-## 🧪 Testing
-
-### Backend
 ```bash
 cd backend
-npm test
+npm test                    # 4 suites, 341 pruebas
 ```
 
-### Frontend
-```bash
-cd frontend/vallexpress_app
-flutter test
+Cada suite crea su propia base y carpeta temporales y las borra al terminar:
+`test:auth` (103), `test:tienda` (85), `test:pedidos` (106), `test:repartidores` (47).
+
+## Estructura del backend
+
+```
+backend/src/
+├── modules/                # Un módulo por área: routes → schema → controller → service
+│   ├── auth/  vendedores/  productos/  archivos/  direcciones/
+│   └── notificaciones/  pedidos/  repartidores/
+├── shared/                 # Código común: errores (AppError), helpers, middlewares,
+│                           # servicios (token, código, log, catálogo, archivo), constantes
+├── services/fcm.service.js # Push (FCM)
+└── server.js
+database/schema.sql         # Esquema v2 (tablas, catálogos, triggers de versionado)
 ```
 
-## 🚀 Despliegue
+## Base de datos (esquema v2)
 
-### Backend
-```bash
-cd backend
-npm run build
-npm start
+- Tablas en **MAYÚSCULAS, sin guion bajo** (`USUARIOS`, `PEDIDOS`, `ESTADOPEDIDO`…). Se consultan sin comillas: `SELECT * FROM USUARIOS`.
+- **Ids legibles** generados por la BD: `VEN-000001`, `ARC-000001`; el usuario inicia sesión con su código (por ejemplo `jcayapa`) o con su correo.
+- **Catálogos de estados** con códigos numéricos (`'001'`…).
+- **Versionado** por registro (`FDESDE`, `FHASTA`, `VERSIONCONTROL`) con tablas `HIST*` y registro de quién cambió.
+- Columna `DATOSEXTRA` (VARCHAR, nula) para ampliar sin migrar.
+- **Bitácoras:** `LOGERRORES`, `LOGMENSAJES` y `AUDITORIA`, con datos sensibles ocultos.
+
+## Flujo de un pedido
+
+```
+PENDIENTE → CONFIRMADO → PREPARANDO → LISTO → EN CAMINO → RECOGIDO → ENTREGADO → RECIBIDO
+     └── CANCELADO / RECHAZADO (solo en los primeros estados)
 ```
 
-### Frontend
-```bash
-cd frontend/vallexpress_app
-flutter build apk  # Para Android
-flutter build ios  # Para iOS
-flutter build web  # Para Web
-```
+Las transiciones las valida una máquina de estados en el backend, y el repartidor se asigna con bloqueo de fila (sin carreras entre repartidores).
 
-## 📈 Estado del Proyecto
+## Endpoints principales (`/api`)
 
-### ✅ Completado
-- [x] Sistema de autenticación multi-rol
-- [x] Gestión completa de productos
-- [x] Flujo end-to-end de pedidos
-- [x] Seguimiento GPS en tiempo real
-- [x] Notificaciones push con FCM
-- [x] Interfaz diferenciada por rol
-- [x] WebSockets para actualizaciones en vivo
-- [x] Base de datos PostgreSQL completa
-- [x] Docker para desarrollo
+| Área | Rutas |
+|---|---|
+| Auth | `POST /auth/register`, `/auth/login`, verificación de correo y recuperación de contraseña |
+| Usuario | `GET /usuarios/perfil`, `PUT /usuarios/actualizar`, `POST /usuarios/cambiar-contrasena`, `POST /usuarios/foto-perfil` |
+| Vendedores / Productos | CRUD con imágenes en base64 |
+| Pedidos | `POST /pedidos`, `GET /pedidos/mis-pedidos`, estado, calificación |
+| Repartidores | `/repartidores/pedidos-disponibles`, `/aceptar`, `/ubicacion`, `/entregas-activas` |
+| Notificaciones | `GET /notificaciones`, `POST /notificaciones/dispositivo` (token push) |
 
-### 🔄 En Progreso
-- [ ] Validación de email en registro
-- [ ] Sistema de recuperación de contraseña
-- [ ] Optimizaciones de rendimiento
+Errores con formato uniforme: `{ "error": "texto", "code": "CODIGO" }`.
 
-### 📋 Pendiente
-- [ ] Tests automatizados completos
-- [ ] Documentación API completa
-- [ ] CI/CD pipeline
+## Variables de entorno
 
-## 🤝 Contribución
+Ver [backend/.env.example](backend/.env.example). Nunca subas `.env` ni el JSON de Firebase al repositorio.
 
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
+## Pendiente antes de producción
 
-## 📝 Licencia
-
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
-
-## 👥 Autor
-
-**Tu Nombre** - *Desarrollo Inicial* - [Tu GitHub](https://github.com/tu-usuario)
-
-## 🙏 Agradecimientos
-
-- Flutter por el framework móvil
-- Node.js por el runtime backend
-- PostgreSQL por la base de datos
-- Socket.IO por la comunicación en tiempo real
-- Firebase por las notificaciones push
-
----
-
-**Versión**: 2.0.2
-**Última actualización**: Enero 2025
+Claves fuertes (`JWT_SECRET`, BD), restringir la API key de Google, `BREVO_API_KEY` real, HTTPS y `trust proxy`, `PUBLIC_URL`, imágenes en S3/R2, JWT con refresh y programar `PURGARLOGS()`. Detalle en [INFORME_AVANCES.md](INFORME_AVANCES.md).

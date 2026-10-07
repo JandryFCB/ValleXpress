@@ -1,179 +1,61 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-
-
-const Pedido = sequelize.define('Pedido', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  numeroPedido: {
-    type: DataTypes.STRING(20),
-    unique: true,
-    field: 'numero_pedido',
-    defaultValue: () => {
-      const timestamp = Date.now().toString().slice(-8);
-      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-      return `PED-${timestamp}-${random}`;
-    }
-  },
-  clienteId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'usuarios',
-      key: 'id'
-    },
-    field: 'cliente_id'
-  },
-  vendedorId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'vendedores',
-      key: 'id'
-    },
-    field: 'vendedor_id'
-  },
-  repartidorId: {
-    type: DataTypes.UUID,
-    references: {
-      model: 'repartidores',
-      key: 'id'
-    },
-    field: 'repartidor_id'
-  },
-  direccionEntregaId: {
-    type: DataTypes.UUID,
-    references: {
-      model: 'direcciones',
-      key: 'id'
-    },
-    field: 'direccion_entrega_id'
-  },
-  estado: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    defaultValue: 'pendiente',
-      validate: {
-        isIn: [[
-          'pendiente',
-          'confirmado',
-          'preparando',
-          'listo',
-          'recogido',
-          'en_camino',
-          'entregado',
-          'recibido_cliente',
-          'cancelado'
-        ]]
-      }
-
-  },
-
-  subtotal: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
-  },
-  costoDelivery: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    field: 'costo_delivery'
-  },
-  total: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
-  },
-  metodoPago: {
-    type: DataTypes.STRING(50),
-    field: 'metodo_pago'
-  },
-  pagado: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  paypalOrderId: {
-    type: DataTypes.STRING(100),
-    field: 'paypal_order_id'
-  },
-  notasCliente: {
-    type: DataTypes.TEXT,
-    field: 'notas_cliente'
-  },
-  tiempoEstimado: {
-    type: DataTypes.INTEGER,
-    field: 'tiempo_estimado'
-  },
-  fechaPedido: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-    field: 'fecha_pedido'
-  },
-  fechaConfirmacion: {
-    type: DataTypes.DATE,
-    field: 'fecha_confirmacion'
-  },
-  fechaPreparacion: {
-    type: DataTypes.DATE,
-    field: 'fecha_preparacion'
-  },
-  fechaListo: {
-    type: DataTypes.DATE,
-    field: 'fecha_listo'
-  },
-  fechaRecogida: {
-    type: DataTypes.DATE,
-    field: 'fecha_recogida'
-  },
-  fechaEntrega: {
-    type: DataTypes.DATE,
-    field: 'fecha_entrega'
-  }
-}, {
-  tableName: 'pedidos',
-  timestamps: true,
-  underscored: true
-});
-
-// Importar modelos para asociaciones
+const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
+const { ESTADOPEDIDO } = require('../../shared/constants/codigos');
 const Usuario = require('../auth/usuario.model');
 const Vendedor = require('../vendedores/vendedor.model');
 const Repartidor = require('../repartidores/repartidor.model');
-const DetallePedido = require('../shared/detallePedido.model');
 const Direccion = require('../direcciones/direccion.model');
+const DetallePedido = require('../shared/detallePedido.model');
 
+// Tabla PEDIDOS. La clave es PEDIDO (PED-20261006-000001), generada por la BD; en el modelo es "id".
+// El estado vive en el catálogo ESTADOPEDIDO (ver shared/constants/codigos.js). Los atributos conservan los
+// nombres que usa la app (clienteId, fechaPedido, costoDelivery...) apuntando a las columnas nuevas.
+const Pedido = sequelize.define('Pedido', {
+  id: clavePrimaria('pedido'),
+  clienteId: { type: DataTypes.STRING(30), allowNull: false, field: 'cliente' },           // USUARIOS.USUARIO
+  vendedorId: { type: DataTypes.STRING(30), allowNull: false, field: 'vendedor' },         // VENDEDORES.VENDEDOR
+  repartidorId: { type: DataTypes.STRING(30), field: 'repartidor' },                       // REPARTIDORES.REPARTIDOR
+  direccionEntregaId: { type: DataTypes.STRING(30), field: 'direccion' },                  // DIRECCIONES.DIRECCION
+  domicilio: { type: DataTypes.TEXT, field: 'domicilio' },                                 // copia de la dirección al pedir
+  latitudEntrega: { type: DataTypes.DECIMAL(10, 8), field: 'latitudentrega' },
+  longitudEntrega: { type: DataTypes.DECIMAL(11, 8), field: 'longitudentrega' },
+  estado: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: ESTADOPEDIDO.PENDIENTE, field: 'estado' },
+  subtotal: { type: DataTypes.DECIMAL(10, 2), allowNull: false, field: 'subtotal' },
+  descuento: { type: DataTypes.DECIMAL(10, 2), field: 'descuento' },
+  impuestos: { type: DataTypes.DECIMAL(10, 2), field: 'impuestos' },
+  costoDelivery: { type: DataTypes.DECIMAL(10, 2), field: 'costodelivery' },
+  propina: { type: DataTypes.DECIMAL(10, 2), field: 'propina' },
+  comision: { type: DataTypes.DECIMAL(10, 2), field: 'comision' },
+  total: { type: DataTypes.DECIMAL(10, 2), allowNull: false, field: 'total' },
+  cuponId: { type: DataTypes.STRING(30), field: 'cupon' },
+  metodoPago: { type: DataTypes.CHAR(3), allowNull: false, field: 'metodopago' },          // METODOPAGO.CODIGO
+  pagado: { type: DataTypes.BOOLEAN, field: 'pagado' },
+  notasCliente: { type: DataTypes.TEXT, field: 'notascliente' },
+  notasVendedor: { type: DataTypes.TEXT, field: 'notasvendedor' },
+  distanciaKm: { type: DataTypes.DECIMAL(6, 2), field: 'distanciakm' },
+  tiempoEstimado: { type: DataTypes.INTEGER, field: 'tiempoestmin' },
+  programadoPara: { type: DataTypes.DATE, field: 'programadopara' },
+  pinEntrega: { type: DataTypes.STRING(6), field: 'pinentrega' },
+  motivoCancel: { type: DataTypes.TEXT, field: 'motivocancel' },
+  canceladoPor: { type: DataTypes.STRING(30), field: 'canceladopor' },
+  fechaPedido: { type: DataTypes.DATE, field: 'pedidoen' },
+  fechaConfirmacion: { type: DataTypes.DATE, field: 'confirmadoen' },
+  fechaPreparacion: { type: DataTypes.DATE, field: 'preparacionen' },
+  fechaListo: { type: DataTypes.DATE, field: 'listoen' },
+  fechaAsignacion: { type: DataTypes.DATE, field: 'asignadoen' },
+  fechaRecogida: { type: DataTypes.DATE, field: 'recogidoen' },
+  fechaEntrega: { type: DataTypes.DATE, field: 'entregadoen' },
+  fechaRecibido: { type: DataTypes.DATE, field: 'recibidoen' },
+  fechaCancelado: { type: DataTypes.DATE, field: 'canceladoen' },
+  ...columnasComunes,
+}, opcionesBase('PEDIDOS'));
 
-
-// Asociaciones
-Pedido.belongsTo(Usuario, {
-  foreignKey: 'clienteId',
-  as: 'cliente'
-});
-
-Pedido.belongsTo(Vendedor, {
-  foreignKey: 'vendedorId',
-  as: 'vendedor'
-});
-
-Pedido.belongsTo(Repartidor, {
-  foreignKey: 'repartidorId',
-  as: 'repartidor'
-});
-
-Pedido.belongsTo(Direccion, {
-  foreignKey: 'direccionEntregaId',
-  as: 'direccionEntrega'
-});
-
-Pedido.hasMany(DetallePedido, {
-  foreignKey: 'pedidoId',
-  as: 'detalles'
-});
-
-DetallePedido.belongsTo(Pedido, {
-  foreignKey: 'pedidoId',
-  as: 'pedido'
-});
+Pedido.belongsTo(Usuario, { foreignKey: 'clienteId', as: 'cliente' });
+Pedido.belongsTo(Vendedor, { foreignKey: 'vendedorId', as: 'vendedor' });
+Pedido.belongsTo(Repartidor, { foreignKey: 'repartidorId', as: 'repartidor' });
+Pedido.belongsTo(Direccion, { foreignKey: 'direccionEntregaId', as: 'direccionEntrega' });
+Pedido.hasMany(DetallePedido, { foreignKey: 'pedidoId', as: 'detalles' });
+DetallePedido.belongsTo(Pedido, { foreignKey: 'pedidoId', as: 'pedido' });
 
 module.exports = Pedido;

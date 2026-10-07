@@ -5,7 +5,12 @@
   "main": "src/server.js",
   "scripts": {
     "start": "cross-env NODE_ENV=production node src/server.js",
-    "dev": "cross-env NODE_ENV=development nodemon src/server.js"
+    "dev": "cross-env NODE_ENV=development nodemon src/server.js",
+    "test:auth": "node test/auth.e2e.js",
+    "test:tienda": "node test/tienda.e2e.js",
+    "test:pedidos": "node test/pedidos.e2e.js",
+    "test": "npm run test:auth && npm run test:tienda && npm run test:pedidos && npm run test:repartidores",
+    "test:repartidores": "node test/repartidores.e2e.js"
   },
   "keywords": [
     "delivery",
@@ -29,16 +34,15 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
-    "multer": "^2.0.2",
-    "nodemailer": "^6.9.4",
     "pg": "^8.11.3",
     "sequelize": "^6.35.1",
+    "sharp": "^0.35.5",
     "sib-api-v3-sdk": "^8.5.0",
-    "socket.io": "^4.6.1",
-    "socket.io-client": "^4.8.3"
+    "socket.io": "^4.6.1"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "socket.io-client": "^4.8.4"
   }
 }

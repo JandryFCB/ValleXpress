@@ -1,106 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const { body } = require('express-validator');
-const pedidoController = require('./pedido.controller');
+const controller = require('./pedido.controller');
+const schema = require('./pedido.schema');
+const validar = require('../../shared/middlewares/validar');
 const { verificarToken, verificarRol } = require('../../middlewares/auth.middleware');
 
+// Cada ruta lista, en orden: autenticación/rol -> reglas de validación -> validar -> controller.
+const cliente = [verificarToken, verificarRol('cliente')];
+const vendedor = [verificarToken, verificarRol('vendedor')];
+const repartidor = [verificarToken, verificarRol('repartidor')];
 
-// Repartidor marca pedido en camino
-router.patch('/:id/en-camino',
-  verificarToken,
-  verificarRol('repartidor'),
-  pedidoController.marcarEnCamino
-);
+// --- Cliente ---
+router.post('/', cliente, schema.crear, validar, controller.crear);
+router.get('/mis-pedidos', cliente, controller.misPedidos);
+router.put('/:id/cancelar', cliente, schema.cancelar, validar, controller.cancelar);
+router.patch('/:id/recibido', cliente, schema.id, validar, controller.marcarRecibidoCliente);
+router.post('/:id/calificar', cliente, schema.calificar, validar, controller.calificar);
 
-// Repartidor marca pedido como recogido
-router.patch('/:id/recogido',
-  verificarToken,
-  verificarRol('repartidor'),
-  pedidoController.marcarRecogido
-);
+// --- Vendedor ---
+router.get('/vendedor/pedidos', vendedor, controller.pedidosVendedor);
+router.put('/:id/estado', vendedor, schema.estado, validar, controller.actualizarEstado);
 
-// Repartidor marca pedido entregado
-router.patch('/:id/entregado',
-  verificarToken,
-  verificarRol('repartidor'),
-  pedidoController.marcarEntregado
-);
+// --- Repartidor ---
+router.patch('/:id/aceptar-repartidor', repartidor, schema.aceptar, validar, controller.aceptarRepartidor);
+router.patch('/:id/en-camino', repartidor, schema.id, validar, controller.marcarEnCamino);
+router.patch('/:id/recogido', repartidor, schema.id, validar, controller.marcarRecogido);
+router.patch('/:id/entregado', repartidor, schema.id, validar, controller.marcarEntregado);
 
-
-// Cliente marca pedido recibido
-router.patch('/:id/recibido',
-  verificarToken,
-  verificarRol('cliente'),
-  pedidoController.marcarRecibidoCliente
-);
-// Repartidor acepta pedido y asigna delivery
-router.patch('/:id/aceptar-repartidor',
-  verificarToken,
-  verificarRol('repartidor'),
-  body('costoDelivery').isFloat({ min: 0 }).withMessage('El costo de delivery es requerido y debe ser >= 0'),
-  pedidoController.aceptarRepartidor
-);
-
-// Validaciones
-const validacionCrear = [
-  body('vendedorId')
-    .notEmpty().withMessage('El vendedor es requerido')
-    .isUUID().withMessage('ID de vendedor inválido'),
-  body('productos')
-    .isArray({ min: 1 }).withMessage('Debe incluir al menos un producto'),
-  body('productos.*.productoId')
-    .notEmpty().withMessage('ID del producto es requerido')
-    .isUUID().withMessage('ID del producto inválido'),
-  body('productos.*.cantidad')
-    .isInt({ min: 1 }).withMessage('La cantidad debe ser al menos 1'),
-  body('metodoPago')
-    .notEmpty().withMessage('El método de pago es requerido')
-];
-
-const validacionEstado = [
-  body('estado')
-    .notEmpty().withMessage('El estado es requerido')
-    .isIn(['confirmado', 'preparando', 'listo'])
-    .withMessage('Estado inválido')
-];
-
-
-// Rutas protegidas
-router.post('/',
-  verificarToken,
-  verificarRol('cliente'),
-  validacionCrear,
-  pedidoController.crear
-);
-
-router.get('/mis-pedidos',
-  verificarToken,
-  verificarRol('cliente'),
-  pedidoController.misPedidos
-);
-
-router.get('/vendedor/pedidos',
-  verificarToken,
-  verificarRol('vendedor'),
-  pedidoController.pedidosVendedor
-);
-
-router.get('/:id',
-  verificarToken,
-  pedidoController.obtenerPorId
-);
-
-router.put('/:id/estado',
-  verificarToken,
-  verificarRol('vendedor'),
-  validacionEstado,
-  pedidoController.actualizarEstado
-);
-
-router.put('/:id/cancelar',
-  verificarToken,
-  verificarRol('cliente'),
-  pedidoController.cancelar
-);
+// --- Cualquier participante: el servicio comprueba que el pedido sea suyo (cliente, vendedor o repartidor) ---
+router.get('/:id', verificarToken, schema.id, validar, controller.obtenerPorId);
 
 module.exports = router;

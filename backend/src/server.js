@@ -1,7 +1,7 @@
-const jwt = require('jsonwebtoken');
-
+// dotenv debe cargarse antes que cualquier otro módulo que lea process.env
 require('dotenv').config();
 
+const jwt = require('jsonwebtoken');
 
 // Inicializar Firebase Admin SDK
 const admin = require('firebase-admin');
@@ -62,6 +62,11 @@ const usuarioRoutes = require('./modules/auth/usuario.routes');
 // Importar base de datos y modelos
 const { sequelize } = require('./index');
 
+// Piezas compartidas (ver src/shared)
+const solicitudId = require('./shared/middlewares/solicitudId');
+const limite = require('./shared/middlewares/limitadores');
+const { notFoundHandler, errorHandler } = require('./shared/middlewares/errorHandler');
+
 
 
 
@@ -91,6 +96,7 @@ app.use((req, res, next) => {
 });
 
 // Middlewares globales
+app.use(solicitudId);          // identificador por petición (une los logs de una misma petición)
 
 app.use(helmet());
 app.use(cors());
@@ -137,8 +143,12 @@ io.use((socket, next) => {
 });
 
 // Servir archivos estáticos
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Las imágenes se llaman como su hash (nunca cambian): el navegador/app puede guardarlas en caché una semana
+app.use('/uploads', express.static(process.env.UPLOADS_DIR || path.join(__dirname, '../uploads'), { maxAge: '7d', immutable: true }));
 
+
+// Límite general de peticiones por IP (cada ruta sensible tiene además el suyo, ver auth.routes.js)
+app.use('/api', limite.general);
 
 // Rutas de la API
 app.use('/api/auth', authRoutes);
@@ -161,23 +171,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Manejo de rutas no encontradas
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Ruta no encontrada',
-    path: req.originalUrl
-  });
-});
-
-// Manejo global de errores
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-
-  res.status(err.status || 500).json({
-    error: err.message || 'Error interno del servidor',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
+// Rutas no encontradas y manejo global de errores (ver shared/middlewares/errorHandler.js).
+// Los errores 5xx se guardan en la tabla LOGERRORES.
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Nota: la lógica de autorización y el cache de ubicaciones
 // se manejan dentro de `src/sockets/pedidos.socket.js`.
@@ -225,25 +222,22 @@ async function startServer() {
   try {
     // Verificar conexión a la base de datos
     await sequelize.authenticate();
-    console.log('✅ Conexión a PostgreSQL establecida');
+    console.log('Conexión a PostgreSQL establecida');
 
-    // Sincronizar modelos (solo en desarrollo)
-    if (process.env.NODE_ENV === 'development') {
-      await sequelize.sync({ alter: false });
-      console.log('✅ Modelos sincronizados');
-    }
+    // El esquema de la BD se gestiona SOLO con database/schema.sql. NO usar sequelize.sync():
+    // crearía tablas con los nombres viejos de los módulos que aún no se migraron.
 
 
 
     // Iniciar servidor
     httpServer.listen(PORT, () => {
       console.log('========================================');
-      console.log('🚀 ValleXpress Backend');
+      console.log('ValleXpress Backend');
       console.log('========================================');
-      console.log(`📡 Servidor: http://localhost:${PORT}`);
-      console.log(`🔗 API: http://localhost:${PORT}/api`);
-      console.log(`💾 Base de datos: PostgreSQL`);
-      console.log(`📊 Entorno: ${process.env.NODE_ENV}`);
+      console.log(`Servidor: http://localhost:${PORT}`);
+      console.log(`API: http://localhost:${PORT}/api`);
+      console.log(`Base de datos: PostgreSQL`);
+      console.log(`Entorno: ${process.env.NODE_ENV}`);
       console.log('========================================');
     });
   } catch (error) {

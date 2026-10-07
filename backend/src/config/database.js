@@ -1,12 +1,19 @@
 const { Sequelize } = require('sequelize');
 
+// Las credenciales NUNCA van en el código: se leen del entorno (.env).
+const requeridas = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
+const faltantes = requeridas.filter((k) => !process.env[k]);
+if (faltantes.length) {
+  throw new Error(`Faltan variables de entorno de la base de datos: ${faltantes.join(', ')}`);
+}
+
 const sequelize = new Sequelize({
   dialect: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5433,
-  database: process.env.DB_NAME || 'vallexpress_db',
-  username: process.env.DB_USER || 'vallexpress_user',
-  password: process.env.DB_PASSWORD || '2003',
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT),
+  database: process.env.DB_NAME,
+  username: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   logging: process.env.NODE_ENV === 'development' ? console.log : false,
   pool: {
     max: 10,

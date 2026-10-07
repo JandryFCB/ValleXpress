@@ -1,61 +1,49 @@
-// backend/src/services/pedido_estado.service.js
+const AppError = require('../../shared/errors/AppError');
+const { ESTADOPEDIDO: E, ESTADOPEDIDOAAPI } = require('../../shared/constants/codigos');
 
-const ESTADOS = Object.freeze({
-  PENDIENTE: 'pendiente',
-  CONFIRMADO: 'confirmado',
-  PREPARANDO: 'preparando',
-  LISTO: 'listo',
-  EN_CAMINO: 'en_camino',
-  ENTREGADO: 'entregado',
-  RECIBIDO_CLIENTE: 'recibido_cliente',
-  CANCELADO: 'cancelado',
-});
-
+// Máquina de estados del pedido (por CÓDIGO del catálogo ESTADOPEDIDO). Define QUÉ transiciones existen y
+// QUIÉN puede hacerlas; ningún endpoint puede saltarse el flujo.
+//
+//   PENDIENTE -> CONFIRMADO -> PREPARANDO -> LISTO -> EN CAMINO -> RECOGIDO -> ENTREGADO -> RECIBIDO
+//        |  \-> RECHAZADO (vendedor)           (EN CAMINO: un repartidor aceptó y va al negocio)
+//        \----> CANCELADO (cliente, solo mientras está pendiente)
 const TRANSICIONES = Object.freeze({
-  [ESTADOS.PENDIENTE]: [ESTADOS.CONFIRMADO, ESTADOS.CANCELADO],
-  [ESTADOS.CONFIRMADO]: [ESTADOS.PREPARANDO, ESTADOS.CANCELADO],
-  [ESTADOS.PREPARANDO]: [ESTADOS.LISTO],
-  [ESTADOS.LISTO]: [ESTADOS.EN_CAMINO],
-  [ESTADOS.EN_CAMINO]: [ESTADOS.ENTREGADO],
-  [ESTADOS.ENTREGADO]: [ESTADOS.RECIBIDO_CLIENTE],
-  [ESTADOS.RECIBIDO_CLIENTE]: [],
-  [ESTADOS.CANCELADO]: [],
+  [E.PENDIENTE]: [E.CONFIRMADO, E.RECHAZADO, E.CANCELADO],
+  [E.CONFIRMADO]: [E.PREPARANDO],
+  [E.PREPARANDO]: [E.LISTO],
+  [E.LISTO]: [E.ENCAMINO],
+  [E.ENCAMINO]: [E.RECOGIDO],
+  [E.RECOGIDO]: [E.ENTREGADO],
+  [E.ENTREGADO]: [E.RECIBIDO],
 });
 
-const ROLES_PUEDEN_LLEGAR_A = Object.freeze({
-  [ESTADOS.CONFIRMADO]: ['vendedor'],
-  [ESTADOS.PREPARANDO]: ['vendedor'],
-  [ESTADOS.LISTO]: ['vendedor'],
-  [ESTADOS.EN_CAMINO]: ['repartidor'],
-  [ESTADOS.ENTREGADO]: ['repartidor'],
-  [ESTADOS.RECIBIDO_CLIENTE]: ['cliente'],
-  [ESTADOS.CANCELADO]: ['cliente'],
+// Quién puede llevar el pedido a cada estado
+const QUIEN = Object.freeze({
+  [E.CONFIRMADO]: 'vendedor', [E.RECHAZADO]: 'vendedor', [E.PREPARANDO]: 'vendedor', [E.LISTO]: 'vendedor',
+  [E.ENCAMINO]: 'repartidor', [E.RECOGIDO]: 'repartidor', [E.ENTREGADO]: 'repartidor',
+  [E.RECIBIDO]: 'cliente', [E.CANCELADO]: 'cliente',
 });
 
-function puedeTransicionar(actual, siguiente) {
-  return (TRANSICIONES[actual] || []).includes(siguiente);
+// Columna de fecha que se completa al entrar a cada estado
+const FECHA = Object.freeze({
+  [E.CONFIRMADO]: 'fechaConfirmacion', [E.PREPARANDO]: 'fechaPreparacion', [E.LISTO]: 'fechaListo',
+  [E.ENCAMINO]: 'fechaAsignacion', [E.RECOGIDO]: 'fechaRecogida', [E.ENTREGADO]: 'fechaEntrega',
+  [E.RECIBIDO]: 'fechaRecibido', [E.CANCELADO]: 'fechaCancelado', [E.RECHAZADO]: 'fechaCancelado',
+});
+
+const nombre = (codigo) => ESTADOPEDIDOAAPI[codigo] || codigo;
+
+// Lanza el error adecuado si la transición no existe o el rol no puede hacerla
+function validarTransicion(actual, siguiente, rol) {
+  if (!(TRANSICIONES[actual] || []).includes(siguiente)) {
+    throw AppError.conflict(`El pedido está "${nombre(actual)}" y no puede pasar a "${nombre(siguiente)}"`, 'TRANSICIONINVALIDA');
+  }
+  if (QUIEN[siguiente] !== rol) {
+    throw AppError.forbidden('No tienes permiso para realizar este cambio de estado', 'ESTADONOPERMITIDO');
+  }
 }
 
-function rolPuedeCambiarA(rol, siguiente) {
-  return (ROLES_PUEDEN_LLEGAR_A[siguiente] || []).includes(rol);
-}
+// Campos a actualizar al entrar a "siguiente": el estado y su fecha
+const cambiosDe = (siguiente) => ({ estado: siguiente, [FECHA[siguiente]]: new Date() });
 
-function buildUpdatesPorEstado(estado) {
-  const now = new Date();
-  const updates = { estado };
-
-  if (estado === ESTADOS.CONFIRMADO) updates.fechaConfirmacion = now;
-  if (estado === ESTADOS.PREPARANDO) updates.fechaPreparacion = now;
-  if (estado === ESTADOS.LISTO) updates.fechaListo = now;
-  if (estado === ESTADOS.EN_CAMINO) updates.fechaRecogida = now;
-  if (estado === ESTADOS.ENTREGADO) updates.fechaEntrega = now;
-
-  return updates;
-}
-
-module.exports = {
-  ESTADOS,
-  puedeTransicionar,
-  rolPuedeCambiarA,
-  buildUpdatesPorEstado,
-};
+module.exports = { TRANSICIONES, validarTransicion, cambiosDe };
