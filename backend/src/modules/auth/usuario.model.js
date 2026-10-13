@@ -5,12 +5,15 @@ const { ROLAAPI, APIAROL } = require('../../shared/constants/codigos');
 const { normalizarEmail } = require('../../shared/utils/normalizers');
 const { compararClave } = require('../../shared/utils/clave');
 
-// Tabla USUARIOS. La clave primaria es el USUARIO (jcayapa): lo genera la BD a partir del nombre y NO se puede
+// Vista VUSUARIOS (usuario + persona + teléfono principal + foto, solo lo vigente). Se puede leer y escribir:
+// los triggers de la BD reparten los datos en TPERSONAS, TUSUARIOS, TPERSONATELEFONOS y TPERSONAIMAGENES, y el historial
+// queda en cada tabla (FDESDE/FHASTA). La clave es el USUARIO (jcayapa): lo genera la BD a partir del nombre y NO se puede
 // cambiar nunca. En el modelo se llama "id" (así findByPk, req.usuario.id y el JWT siguen funcionando).
 // Los demás atributos conservan sus nombres (nombre, apellido, cedula, tipoUsuario...) para que los módulos
 // que aún no se migraron compilen; cada uno apunta a la columna nueva.
 const Usuario = sequelize.define('Usuario', {
   id: clavePrimaria('usuario'),
+  personaId: { type: DataTypes.INTEGER, field: 'cpersona' },               // TPERSONAS.CPERSONA (la BD lo asigna; solo lectura)
   rol: { type: DataTypes.CHAR(3), allowNull: false, field: 'rol' },        // ROLES.CODIGO
   nombre: { type: DataTypes.STRING(100), allowNull: false, field: 'nombres' },
   apellido: { type: DataTypes.STRING(100), allowNull: false, field: 'apellidos' },
@@ -58,7 +61,7 @@ const Usuario = sequelize.define('Usuario', {
   },
 
   ...columnasComunes,
-}, opcionesBase('USUARIOS'));
+}, opcionesBase('VUSUARIOS'));
 
 Usuario.prototype.verificarClave = function verificarClave(clave) {
   return compararClave(clave, this.passwordHash);

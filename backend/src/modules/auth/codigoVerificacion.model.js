@@ -21,7 +21,7 @@ const CodigoVerificacion = sequelize.define('CodigoVerificacion', {
   tokenFcm: { type: DataTypes.TEXT, field: 'tokenfcm' },
   creadoEn: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'creadoen' },
 }, {
-  tableName: 'codigoverificacion',
+  tableName: 'tcodigosverificacion',
   freezeTableName: true,
   timestamps: false,
 });

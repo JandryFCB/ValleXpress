@@ -4,6 +4,8 @@ const service = require('./direccion.service');
 // Controller delgado: la lógica está en direccion.service.js y las validaciones en direccion.schema.js.
 // Las respuestas conservan el formato que ya consume la app.
 
+const tipos = asyncHandler(async (req, res) => res.json({ tipos: await service.tipos() }));
+
 const listar = asyncHandler(async (req, res) => res.json({ direcciones: await service.listar(req.usuario.id) }));
 
 // Sin predeterminada la app espera 404 con { direccion: null }
@@ -26,4 +28,4 @@ const eliminar = asyncHandler(async (req, res) => {
   res.json({ message: 'Dirección eliminada' });
 });
 
-module.exports = { listar, predeterminada, crear, actualizar, marcarPredeterminada, eliminar };
+module.exports = { tipos, listar, predeterminada, crear, actualizar, marcarPredeterminada, eliminar };

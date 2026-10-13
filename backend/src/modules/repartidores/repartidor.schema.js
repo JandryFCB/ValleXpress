@@ -44,6 +44,6 @@ const estadoPedido = [
   body('estado').isIn(['en_camino', 'entregado']).withMessage('Estado no válido. Usa: en_camino o entregado'),
 ];
 
-const ubicacionDe = [param('id').matches(/^REP-\d{6}$/).withMessage('ID de repartidor inválido')];
+const ubicacionDe = [param('id').matches(/^[a-z0-9]{3,30}$/).withMessage('ID de repartidor inválido')];
 
 module.exports = { crear, actualizar, disponibilidad, estadoDisponibilidad, ubicacion, foto, aceptar, estadoPedido, ubicacionDe };

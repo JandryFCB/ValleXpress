@@ -61,7 +61,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
 const INCLUIR = [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'apellido', 'email', 'telefono'] }];
 
 async function delUsuario(usuarioId, mensaje = 'Repartidor no encontrado', opciones = {}) {
-  const r = await Repartidor.findOne({ where: { usuarioId }, include: INCLUIR, ...opciones });
+  const r = await Repartidor.findOne({ where: { id: usuarioId }, include: INCLUIR, ...opciones });
   if (!r) throw AppError.notFound(mensaje, 'REPARTIDORNOENCONTRADO');
   return r;
 }
@@ -73,7 +73,7 @@ const exigirAprobado = (r) => {
 async function crearPerfil(usuarioId, datos, { transaction } = {}) {
   const estado = await ConfiguracionService.aprobacionInicial();
   return Repartidor.create({
-    usuarioId,
+    id: usuarioId,
     ...vehiculoParaGuardar(datos.vehiculo),
     placa: datos.placa ? normalizarPlaca(datos.placa) : null,
     licencia: datos.licencia ? String(datos.licencia).trim().toUpperCase() : null,
@@ -85,11 +85,11 @@ async function crearPerfil(usuarioId, datos, { transaction } = {}) {
 }
 
 async function crear(usuarioId, datos, req) {
-  if (await Repartidor.findOne({ where: { usuarioId } })) throw AppError.conflict('Ya tienes un perfil de repartidor registrado', 'REPARTIDOREXISTENTE');
+  if (await Repartidor.findOne({ where: { id: usuarioId } })) throw AppError.conflict('Ya tienes un perfil de repartidor registrado', 'REPARTIDOREXISTENTE');
   const placa = normalizarPlaca(datos.placa);
   if (await Repartidor.findOne({ where: { placa }, paranoid: false })) throw AppError.conflict('Esta placa ya está registrada por otro repartidor', 'PLACADUPLICADA');
   const nuevo = await withTransaction((t) => crearPerfil(usuarioId, datos, { transaction: t }), { usuarioId });
-  auditar({ usuarioId, accion: 'REPARTIDORCREADO', entidad: 'REPARTIDORES', entidadId: nuevo.id, req });
+  auditar({ usuarioId, accion: 'REPARTIDORCREADO', entidad: 'TREPARTIDORES', entidadId: nuevo.id, req });
   return { repartidor: await aApi(await delUsuario(usuarioId), req, { privado: true }) };
 }
 
@@ -109,7 +109,7 @@ async function actualizar(usuarioId, datos, req) {
   }
   if (datos.licencia) cambios.licencia = String(datos.licencia).trim().toUpperCase();
   await withTransaction((t) => r.update(cambios, { transaction: t }), { usuarioId });
-  auditar({ usuarioId, accion: 'REPARTIDORACTUALIZADO', entidad: 'REPARTIDORES', entidadId: r.id, req });
+  auditar({ usuarioId, accion: 'REPARTIDORACTUALIZADO', entidad: 'TREPARTIDORES', entidadId: r.id, req });
   return { repartidor: await aApi(await delUsuario(usuarioId), req, { privado: true }) };
 }
 
@@ -142,12 +142,12 @@ async function actualizarUbicacion(usuarioId, { latitud, longitud }, req) {
 
 // Solo ve dónde está un repartidor: él mismo, o el cliente o el vendedor de un pedido SUYO que va en curso.
 async function ubicacion(usuario, repartidorId) {
-  const r = await Repartidor.findOne({ where: { id: repartidorId }, attributes: ['id', 'usuarioId', 'latitud', 'longitud'] });
+  const r = await Repartidor.findOne({ where: { id: repartidorId }, attributes: ['id', 'latitud', 'longitud'] });
   let permitido = !!r && r.usuarioId === usuario.id;
   if (r && !permitido) {
     const entrega = await Pedido.findOne({
       where: { repartidorId: r.id, estado: { [Op.in]: ACTIVOS } },
-      include: [{ model: Vendedor, as: 'vendedor', attributes: ['usuarioId'] }],
+      include: [{ model: Vendedor, as: 'vendedor', attributes: ['id'] }],
     });
     permitido = !!entrega && (entrega.clienteId === usuario.id || entrega.vendedor?.usuarioId === usuario.id);
   }

@@ -7,7 +7,7 @@ const { sequelize } = require('../../config/database');
 //     await Usuario.create({ ... }, { transaction: t });
 //   }, { usuarioId: req.usuario.id });
 //
-// Si se pasa usuarioId (el usuario: jcayapa), queda registrado quién hizo el cambio en las tablas HIST (columna CAMBIADOPOR).
+// Si se pasa usuarioId (el usuario: jcayapa), queda registrado quién hizo el cambio en la columna ACTUALIZADOPOR de la tabla (y en sus versiones cerradas).
 module.exports = (fn, { usuarioId } = {}) =>
   sequelize.transaction(async (t) => {
     if (usuarioId) {

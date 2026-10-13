@@ -21,7 +21,7 @@ const crear = campos(true);
 const actualizar = campos(false);
 
 const id = [param('id').matches(/^PRO-\d{6}$/).withMessage('ID de producto inválido')];
-const vendedorId = [param('vendedorId').matches(/^VEN-\d{6}$/).withMessage('ID de vendedor inválido')];
+const vendedorId = [param('vendedorId').matches(/^[a-z0-9]{3,30}$/).withMessage('ID de vendedor inválido')];
 
 const disponible = [
   ...id,

@@ -1,15 +1,17 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
+const { columnasComunes, opcionesVersionada } = require('../../shared/models/columnasComunes');
 const Usuario = require('../auth/usuario.model');
 
-// Tabla REPARTIDORES. La clave primaria es REPARTIDOR (REP-000001), generada por la BD; en el modelo es "id".
-// Se conservan los nombres de atributos que usan los módulos aún no migrados.
-// PENDIENTE al migrar el módulo de repartidores: "foto" ahora es ARCHIVOS (fotoId) y "cedula" ya no está
-// aquí: vive solo en USUARIOS.
+// Tabla TREPARTIDORES (historial en la misma tabla): el repartidor ES un usuario con rol repartidor y su perfil cuelga
+// de CUSUARIO (pruiz), que en el modelo es "id" (igual a usuarioId). "foto" es ARCHIVOS (fotoId); la cédula vive en la persona.
 const Repartidor = sequelize.define('Repartidor', {
-  id: clavePrimaria('repartidor'),
-  usuarioId: { type: DataTypes.STRING(30), allowNull: false, field: 'usuario' },   // USUARIOS.USUARIO
+  id: { type: DataTypes.STRING(30), primaryKey: true, field: 'cusuario' },          // TUSUARIOSID.CUSUARIO
+  usuarioId: {
+    type: DataTypes.VIRTUAL(DataTypes.STRING, ['id']),
+    get() { return this.getDataValue('id'); },
+    set(valor) { this.setDataValue('id', valor); },
+  },
   vehiculo: { type: DataTypes.CHAR(3), field: 'vehiculo' },                // TIPOVEHICULO.CODIGO
   placa: { type: DataTypes.STRING(10), field: 'placa' },
   marca: { type: DataTypes.STRING(50), field: 'marca' },
@@ -34,8 +36,8 @@ const Repartidor = sequelize.define('Repartidor', {
   aprobadoPor: { type: DataTypes.STRING(30), field: 'aprobadopor' },
   aprobadoEn: { type: DataTypes.DATE, field: 'aprobadoen' },
   ...columnasComunes,
-}, opcionesBase('REPARTIDORES'));
+}, opcionesVersionada('TREPARTIDORES'));
 
-Repartidor.belongsTo(Usuario, { foreignKey: 'usuarioId', as: 'usuario' });
+Repartidor.belongsTo(Usuario, { foreignKey: 'id', as: 'usuario' });
 
 module.exports = Repartidor;

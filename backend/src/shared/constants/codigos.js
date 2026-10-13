@@ -8,6 +8,12 @@ const ROLES = Object.freeze({
   ADMINISTRADOR: '004',
 });
 
+// Tipos de los catálogos T (códigos de 3 letras). LOC (local del negocio) lo maneja el módulo de vendedores,
+// por eso el cliente no puede elegirlo como tipo de dirección.
+const TIPOSTELEFONO = Object.freeze(['MOV', 'CAS', 'TRA', 'WAP']);
+const TIPOSDIRECCION = Object.freeze(['DOM', 'TRA', 'FAM', 'OTR']);
+const TIPODIRECCIONLOCAL = 'LOC';
+
 const ESTADOPEDIDO = Object.freeze({
   PENDIENTE: '001',
   CONFIRMADO: '002',
@@ -146,7 +152,7 @@ function interpretarCategoria(valor) {
 }
 
 module.exports = {
-  ROLES, ESTADOPEDIDO, ESTADOPRODUCTO, ESTADOPAGO, APROBACION, METODOPAGO, TIPOVEHICULO,
+  ROLES, TIPOSTELEFONO, TIPOSDIRECCION, TIPODIRECCIONLOCAL, ESTADOPEDIDO, ESTADOPRODUCTO, ESTADOPAGO, APROBACION, METODOPAGO, TIPOVEHICULO,
   CATEGORIA, PROPOSITOCODIGO, ROLAAPI, APIAROL, ROLESREGISTRABLES,
   ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, METODOPAGOAAPI, APIAMETODOPAGO,
   vehiculoACodigo, categoriaACodigo, interpretarCategoria,

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { sequelize } = require('../../config/database');
 
-// Escribe en LOGERRORES, LOGMENSAJES y AUDITORIA. REGLAS:
+// Escribe en TLOGERRORES, TLOGMENSAJES y AUDITORIA. REGLAS:
 //   * Un log NUNCA debe romper la petición: todas las funciones capturan sus propios errores.
 //   * Nunca se guardan contraseñas, tokens ni códigos: limpiar() los oculta antes de insertar.
 // (Los nombres de tablas y columnas se escriben sin comillas: PostgreSQL los toma en minúsculas.)
@@ -44,7 +44,7 @@ function logError(err, req, extra = {}) {
   const codigo = err.code && typeof err.code === 'string' ? err.code.slice(0, 50) : null;
   const huella = crypto.createHash('sha256').update(`${modulo}|${codigo}|${err.message}`).digest('hex');
   return insertar(
-    `INSERT INTO logerrores
+    `INSERT INTO tlogerrores
        (nivel, modulo, origen, codigo, mensaje, stack, huella, metodo, ruta, estadohttp,
         parametros, cuerpo, usuario, pedido, solicitudid, ip, useragent, entorno)
      VALUES (:nivel, :modulo, 'BACKEND', :codigo, :mensaje, :stack, :huella, :metodo, :ruta, :estado,
@@ -74,7 +74,7 @@ function logError(err, req, extra = {}) {
 // Evento del sistema -> LOGMENSAJES  (nivel: DEBUG | INFO | ADVERTENCIA)
 function logMensaje({ nivel = 'INFO', modulo, accion = null, mensaje, detalle = null, req = null, usuarioId = null, pedidoId = null }) {
   return insertar(
-    `INSERT INTO logmensajes
+    `INSERT INTO tlogmensajes
        (nivel, modulo, accion, mensaje, detalle, usuario, pedido, solicitudid, ip, entorno)
      VALUES (:nivel, :modulo, :accion, :mensaje, CAST(:detalle AS jsonb), :usuarioId, :pedidoId, :solicitudId, :ip, :entorno)`,
     {
@@ -92,7 +92,7 @@ function logMensaje({ nivel = 'INFO', modulo, accion = null, mensaje, detalle = 
 // Acción de un usuario -> AUDITORIA  (LOGIN, LOGINFALLIDO, REGISTRO, CAMBIOCLAVE...)
 function auditar({ usuarioId = null, accion, entidad = null, entidadId = null, detalle = null, req = null }) {
   return insertar(
-    `INSERT INTO auditoria (usuario, accion, entidad, entidadid, detalle, ip, useragent)
+    `INSERT INTO tauditoria (usuario, accion, entidad, entidadid, detalle, ip, useragent)
      VALUES (:usuarioId, :accion, :entidad, :entidadId, CAST(:detalle AS jsonb), :ip, :userAgent)`,
     {
       usuarioId, accion, entidad, entidadId: entidadId ? String(entidadId) : null,

@@ -29,7 +29,7 @@ const opcionesBase = (tableName) => ({
   paranoid: true,
 });
 
-// Clave primaria legible (VEN-000001, jcayapa...). La genera la BASE DE DATOS al insertar
+// Clave primaria legible (PRO-000001, PED-20261006-000001, ...). La genera la BASE DE DATOS al insertar
 // (valor por defecto o trigger), así que el backend no la envía: se lee del resultado del create().
 // En el modelo el atributo se llama siempre "id" para que findByPk() y el resto de código funcionen igual.
 const clavePrimaria = (columna, largo = 30) => ({
@@ -39,4 +39,13 @@ const clavePrimaria = (columna, largo = 30) => ({
   defaultValue: Sequelize.literal('DEFAULT'),
 });
 
-module.exports = { columnasComunes, opcionesBase, clavePrimaria };
+// Tablas T (historial en la MISMA tabla): cada cambio deja una fila cerrada (FHASTA = fecha del cambio) y la vigente
+// tiene FHASTA = 2999-12-31. El modelo SOLO ve las vigentes: así findAll/findByPk/include nunca traen versiones viejas.
+// Los UPDATE tampoco tocan el historial: el trigger de la BD ignora las filas cerradas.
+const VIGENTE = new Date('2999-12-31T05:00:00.000Z');         // 2999-12-31 00:00 hora de Ecuador (UTC-5)
+const opcionesVersionada = (tableName) => ({
+  ...opcionesBase(tableName),
+  defaultScope: { where: { fHasta: VIGENTE } },
+});
+
+module.exports = { columnasComunes, opcionesBase, opcionesVersionada, clavePrimaria, VIGENTE };

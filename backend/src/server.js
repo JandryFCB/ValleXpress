@@ -49,6 +49,7 @@ const { Server } = require('socket.io');
 // Importar rutas
 const authRoutes = require('./modules/auth/auth.routes');
 const direccionesRoutes = require('./modules/direcciones/direcciones.routes');
+const telefonosRoutes = require('./modules/telefonos/telefonos.routes');
 const vendedorRoutes = require('./modules/vendedores/vendedor.routes');
 const productoRoutes = require('./modules/productos/producto.routes');
 const pedidoRoutes = require('./modules/pedidos/pedido.routes');
@@ -153,6 +154,7 @@ app.use('/api', limite.general);
 // Rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/direcciones', direccionesRoutes);
+app.use('/api/telefonos', telefonosRoutes);
 app.use('/api/vendedores', vendedorRoutes);
 app.use('/api/productos', productoRoutes);
 app.use('/api/pedidos', pedidoRoutes);

@@ -38,4 +38,15 @@ async function categoriaTexto(registro) {
   return capitalizar((await mapa('categorias'))[registro.categoria] || null);
 }
 
-module.exports = { mapa, categoriaParaGuardar, categoriaTexto };
+// Catálogos T (clave de 3 letras): [{ codigo, descripcion }] en su orden. Tabla y columna vienen de una lista fija.
+const TABLAST = { ttipostelefono: 'ctipotelefono', ttiposdireccion: 'ctipodireccion', ttiposimagen: 'ctipoimagen' };
+async function tipos(tabla, columna, { excluir = [] } = {}) {
+  if (TABLAST[tabla] !== columna) throw new Error(`Catálogo desconocido: ${tabla}`);
+  const filas = await sequelize.query(
+    `SELECT ${columna} AS codigo, descripcion FROM ${tabla} WHERE activo AND eliminadoen IS NULL ORDER BY orden`,
+    { type: QueryTypes.SELECT },
+  );
+  return filas.filter((f) => !excluir.includes(f.codigo));
+}
+
+module.exports = { mapa, tipos, categoriaParaGuardar, categoriaTexto };

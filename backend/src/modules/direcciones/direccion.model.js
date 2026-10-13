@@ -1,13 +1,14 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
-const Usuario = require('../auth/usuario.model');
+const { columnasComunes, opcionesVersionada, clavePrimaria } = require('../../shared/models/columnasComunes');
 
-// Tabla DIRECCIONES. La clave es DIRECCION (DIR-000001), generada por la BD; en el modelo es "id".
+// Tabla TPERSONADIRECCIONES (historial en la misma tabla). La clave es CDIRECCION (DIR-000001), generada por la BD;
+// en el modelo es "id". Cuelga de la PERSONA (personaId = CPERSONA), no del usuario.
 // "nombre" es el ALIAS de la dirección (Casa, Trabajo) y "direccion" es el texto completo (columna DOMICILIO).
 const Direccion = sequelize.define('Direccion', {
-  id: clavePrimaria('direccion'),
-  usuarioId: { type: DataTypes.STRING(30), allowNull: false, field: 'usuario' },     // USUARIOS.USUARIO
+  id: clavePrimaria('cdireccion'),
+  personaId: { type: DataTypes.INTEGER, allowNull: false, field: 'cpersona' },        // TPERSONAS.CPERSONA
+  tipo: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: 'DOM', field: 'ctipodireccion' },   // TTIPOSDIRECCION: DOM, TRA, FAM, OTR, LOC
   nombre: { type: DataTypes.STRING(50), field: 'alias' },
   callePrincipal: { type: DataTypes.STRING(150), field: 'calleprincipal' },
   calleSecundaria: { type: DataTypes.STRING(150), field: 'callesecundaria' },
@@ -24,8 +25,6 @@ const Direccion = sequelize.define('Direccion', {
   longitud: { type: DataTypes.DECIMAL(11, 8), allowNull: false, field: 'longitud' },
   esPredeterminada: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'espredeterminada' },
   ...columnasComunes,
-}, opcionesBase('DIRECCIONES'));
-
-Direccion.belongsTo(Usuario, { foreignKey: 'usuarioId', as: 'usuario' });
+}, opcionesVersionada('TPERSONADIRECCIONES'));
 
 module.exports = Direccion;

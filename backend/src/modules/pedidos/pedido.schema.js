@@ -8,7 +8,7 @@ const crear = [
   body('productos.*.productoId').matches(/^PRO-\d{6}$/).withMessage('ID del producto inválido'),
   body('productos.*.cantidad').isInt({ min: 1, max: 99 }).withMessage('La cantidad debe estar entre 1 y 99'),
   body('productos.*.notas').optional({ values: 'null' }).isString().isLength({ max: 300 }).withMessage('Las notas del producto son muy largas'),
-  body('vendedorId').optional({ values: 'falsy' }).matches(/^VEN-\d{6}$/).withMessage('ID de vendedor inválido'),
+  body('vendedorId').optional({ values: 'falsy' }).matches(/^[a-z0-9]{3,30}$/).withMessage('ID de vendedor inválido'),
   body('metodoPago').isString().trim().notEmpty().withMessage('El método de pago es requerido'),
   body('direccionEntregaId').optional({ values: 'falsy' }).matches(/^DIR-\d{6}$/).withMessage('ID de dirección inválido'),
   body('notasCliente').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('Las notas son muy largas'),

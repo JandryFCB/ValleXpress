@@ -1,14 +1,14 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
+const { columnasComunes, opcionesVersionada, clavePrimaria } = require('../../shared/models/columnasComunes');
 const { ESTADOPRODUCTO } = require('../../shared/constants/codigos');
 const Vendedor = require('../vendedores/vendedor.model');
 
-// Tabla PRODUCTOS. La clave es PRODUCTO (PRO-000001), generada por la BD; en el modelo es "id".
+// Tabla TPRODUCTOS (historial en la misma tabla). La clave es CPRODUCTO (PRO-000001), la asigna la BD; en el modelo es "id".
 // El estado vive en el catálogo ESTADOPRODUCTO (001 disponible, 002 agotado, 003 no disponible, 004 descontinuado).
 const Producto = sequelize.define('Producto', {
-  id: clavePrimaria('producto'),
-  vendedorId: { type: DataTypes.STRING(30), allowNull: false, field: 'vendedor' },    // VENDEDORES.VENDEDOR
+  id: clavePrimaria('cproducto'),
+  vendedorId: { type: DataTypes.STRING(30), allowNull: false, field: 'vendedor' },    // TUSUARIOSID.CUSUARIO (dueño del negocio)
   categoria: { type: DataTypes.CHAR(3), field: 'categoria' },                          // CATEGORIAS.CODIGO
   estado: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: ESTADOPRODUCTO.DISPONIBLE, field: 'estado' },
   nombre: { type: DataTypes.STRING(200), allowNull: false, field: 'nombre' },
@@ -35,7 +35,7 @@ const Producto = sequelize.define('Producto', {
     set(valor) { this.setDataValue('estado', valor ? ESTADOPRODUCTO.DISPONIBLE : ESTADOPRODUCTO.NODISPONIBLE); },
   },
   ...columnasComunes,
-}, opcionesBase('PRODUCTOS'));
+}, opcionesVersionada('TPRODUCTOS'));
 
 Producto.belongsTo(Vendedor, { foreignKey: 'vendedorId', as: 'vendedor' });
 Vendedor.hasMany(Producto, { foreignKey: 'vendedorId', as: 'productos' });

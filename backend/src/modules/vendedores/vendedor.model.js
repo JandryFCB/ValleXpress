@@ -1,16 +1,20 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
+const { columnasComunes, opcionesVersionada } = require('../../shared/models/columnasComunes');
 const Usuario = require('../auth/usuario.model');
+const Direccion = require('../direcciones/direccion.model');
 const HorarioVendedor = require('./horarioVendedor.model');
 
-// Tabla VENDEDORES. La clave primaria es VENDEDOR (VEN-000001), generada por la BD; en el modelo es "id".
-// Se conservan los nombres de atributos que usan los módulos aún no migrados.
-// PENDIENTE al migrar el módulo de vendedores: logo/banner (ahora son ARCHIVOS: logoId, bannerId) y los
-// horarios (ahora son la tabla HORARIOVENDEDOR), que ya no son columnas de esta tabla.
+// Tabla TNEGOCIOS (historial en la misma tabla): el vendedor ES un usuario con rol vendedor y su negocio cuelga de
+// CUSUARIO (jcayapa), que en el modelo es "id" (igual a usuarioId). Teléfono y correo del dueño salen de su PERSONA;
+// el local es una dirección de la persona tipo LOC (direccionId = CDIRECCION): de ahí salen latitud y longitud.
 const Vendedor = sequelize.define('Vendedor', {
-  id: clavePrimaria('vendedor'),
-  usuarioId: { type: DataTypes.STRING(30), allowNull: false, field: 'usuario' },   // USUARIOS.USUARIO
+  id: { type: DataTypes.STRING(30), primaryKey: true, field: 'cusuario' },          // TUSUARIOSID.CUSUARIO
+  usuarioId: {
+    type: DataTypes.VIRTUAL(DataTypes.STRING, ['id']),
+    get() { return this.getDataValue('id'); },
+    set(valor) { this.setDataValue('id', valor); },
+  },
   nombreNegocio: {
     type: DataTypes.STRING(200),
     allowNull: false,
@@ -23,11 +27,7 @@ const Vendedor = sequelize.define('Vendedor', {
   categoria: { type: DataTypes.CHAR(3), field: 'categoria' },              // CATEGORIAS.CODIGO
   logoId: { type: DataTypes.STRING(30), field: 'logo' },                   // ARCHIVOS.ARCHIVO
   bannerId: { type: DataTypes.STRING(30), field: 'banner' },
-  telefonoNegocio: { type: DataTypes.STRING(20), field: 'telefono' },
-  emailNegocio: { type: DataTypes.STRING(150), field: 'email' },
-  direccionNegocio: { type: DataTypes.TEXT, field: 'domicilio' },
-  latitud: { type: DataTypes.DECIMAL(10, 8), field: 'latitud' },
-  longitud: { type: DataTypes.DECIMAL(11, 8), field: 'longitud' },
+  direccionId: { type: DataTypes.STRING(30), field: 'cdireccion' },        // TPERSONADIRECCIONES.CDIRECCION (tipo LOC)
   radioCobertura: { type: DataTypes.DECIMAL(6, 2), field: 'radiokm' },
   costoDelivery: { type: DataTypes.DECIMAL(10, 2), field: 'costodelivery' },
   pedidoMinimo: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, field: 'pedidominimo' },
@@ -42,9 +42,10 @@ const Vendedor = sequelize.define('Vendedor', {
   aprobadoPor: { type: DataTypes.STRING(30), field: 'aprobadopor' },
   aprobadoEn: { type: DataTypes.DATE, field: 'aprobadoen' },
   ...columnasComunes,
-}, opcionesBase('VENDEDORES'));
+}, opcionesVersionada('TNEGOCIOS'));
 
-Vendedor.belongsTo(Usuario, { foreignKey: 'usuarioId', as: 'usuario' });
+Vendedor.belongsTo(Usuario, { foreignKey: 'id', as: 'usuario' });
+Vendedor.belongsTo(Direccion, { foreignKey: 'direccionId', as: 'local' });
 Vendedor.hasMany(HorarioVendedor, { foreignKey: 'vendedorId', as: 'horarios' });
 
 module.exports = Vendedor;

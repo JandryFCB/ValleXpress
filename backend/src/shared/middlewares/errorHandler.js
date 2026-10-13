@@ -11,6 +11,7 @@ const MENSAJESUNICOS = {
   EMAIL: 'El email ya está registrado',
   DOC: 'La cédula ya está registrada',
   TELEFONO: 'El teléfono ya está registrado',
+  NUMERO: 'El teléfono ya está registrado',
   PLACA: 'Esta placa ya está registrada por otro repartidor',
   RUC: 'El RUC ya está registrado',
 };

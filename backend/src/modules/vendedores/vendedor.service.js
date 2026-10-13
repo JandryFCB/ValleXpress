@@ -1,6 +1,7 @@
 const Vendedor = require('./vendedor.model');
 const HorarioVendedor = require('./horarioVendedor.model');
 const Usuario = require('../auth/usuario.model');
+const Direccion = require('../direcciones/direccion.model');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const ArchivoService = require('../../shared/services/archivo.service');
@@ -12,7 +13,8 @@ const { APROBACION } = require('../../shared/constants/codigos');
 // Lógica de negocio de los vendedores. El controller solo llama a estos métodos.
 
 const INCLUIR = [
-  { model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'apellido', 'email', 'telefono'] },
+  { model: Usuario, as: 'usuario', attributes: ['id', 'personaId', 'nombre', 'apellido', 'email', 'telefono'] },
+  { model: Direccion, as: 'local', required: false },
   { model: HorarioVendedor, as: 'horarios', required: false },
 ];
 const VISIBLE = { aprobacion: APROBACION.APROBADO, activo: true };      // lo que ve el público
@@ -47,8 +49,8 @@ async function aApi(entrada, req, { privado = false } = {}) {
       costoDelivery: num(v.costoDelivery),
       radioCobertura: num(v.radioCobertura),
       abiertoAhora: v.abiertoAhora,
-      latitud: num(v.latitud),
-      longitud: num(v.longitud),
+      latitud: num(v.local?.latitud),
+      longitud: num(v.local?.longitud),
       aprobacion: v.aprobacion,
       createdAt: v.creadoEn,
       ...(u && { usuario: privado ? { id: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, telefono: u.telefono } : { id: u.id, nombre: u.nombre, apellido: u.apellido } }),
@@ -58,7 +60,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
 }
 
 async function delUsuario(usuarioId, mensaje = 'Vendedor no encontrado', opciones = {}) {
-  const vendedor = await Vendedor.findOne({ where: { usuarioId }, include: INCLUIR, ...opciones });
+  const vendedor = await Vendedor.findOne({ where: { id: usuarioId }, include: INCLUIR, ...opciones });
   if (!vendedor) throw AppError.notFound(mensaje, 'VENDEDORNOENCONTRADO');
   return vendedor;
 }
@@ -68,7 +70,7 @@ async function crearPerfil(usuarioId, datos, { transaction, nombreUsuario = '' }
   const { categoria, datosExtra } = CatalogoService.categoriaParaGuardar(datos.categoria ?? datos.categoriaNegocio);
   const estado = await ConfiguracionService.aprobacionInicial();
   return Vendedor.create({
-    usuarioId,
+    id: usuarioId,
     nombreNegocio: (datos.nombreNegocio || '').trim() || `Negocio de ${nombreUsuario}`,
     descripcion: (datos.descripcion ?? datos.descripcionNegocio ?? '').trim() || 'Cuéntanos sobre tu negocio',
     categoria,
@@ -98,9 +100,9 @@ async function miPerfil(usuarioId, req) {
 }
 
 async function crear(usuarioId, datos, req) {
-  if (await Vendedor.findOne({ where: { usuarioId } })) throw AppError.conflict('Ya tienes un negocio registrado', 'NEGOCIOEXISTENTE');
+  if (await Vendedor.findOne({ where: { id: usuarioId } })) throw AppError.conflict('Ya tienes un negocio registrado', 'NEGOCIOEXISTENTE');
   const nuevo = await withTransaction((t) => crearPerfil(usuarioId, datos, { transaction: t }), { usuarioId });
-  auditar({ usuarioId, accion: 'NEGOCIOCREADO', entidad: 'VENDEDORES', entidadId: nuevo.id, req });
+  auditar({ usuarioId, accion: 'NEGOCIOCREADO', entidad: 'TNEGOCIOS', entidadId: nuevo.id, req });
   return { vendedor: await aApi(await delUsuario(usuarioId), req, { privado: true }) };
 }
 
@@ -128,20 +130,33 @@ async function actualizar(usuarioId, datos, req) {
       await fijarHorario(vendedor.id, datos.horarioApertura || null, datos.horarioCierre || null, usuarioId, t);
     }
   }, { usuarioId });
-  auditar({ usuarioId, accion: 'NEGOCIOACTUALIZADO', entidad: 'VENDEDORES', req });
+  auditar({ usuarioId, accion: 'NEGOCIOACTUALIZADO', entidad: 'TNEGOCIOS', req });
   return { vendedor: await aApi(await delUsuario(usuarioId), req, { privado: true }) };
 }
 
 async function eliminar(usuarioId, req) {
   const vendedor = await delUsuario(usuarioId);
   await withTransaction((t) => vendedor.destroy({ transaction: t }), { usuarioId });     // borrado lógico (ELIMINADOEN)
-  auditar({ usuarioId, accion: 'NEGOCIOELIMINADO', entidad: 'VENDEDORES', entidadId: vendedor.id, req });
+  auditar({ usuarioId, accion: 'NEGOCIOELIMINADO', entidad: 'TNEGOCIOS', entidadId: vendedor.id, req });
 }
 
+// El local del negocio es una dirección de la persona de tipo LOC: se actualiza la vigente o se crea la primera.
 async function actualizarUbicacion(usuarioId, latitud, longitud) {
-  const vendedor = await delUsuario(usuarioId);
-  await withTransaction((t) => vendedor.update({ latitud: Number(latitud), longitud: Number(longitud), actualizadoPor: usuarioId }, { transaction: t }), { usuarioId });
-  return { latitud: num(vendedor.latitud), longitud: num(vendedor.longitud) };
+  const lat = Number(latitud);
+  const lng = Number(longitud);
+  await withTransaction(async (t) => {
+    const vendedor = await delUsuario(usuarioId, 'Vendedor no encontrado', { transaction: t });
+    if (vendedor.local) {
+      await vendedor.local.update({ latitud: lat, longitud: lng, actualizadoPor: usuarioId }, { transaction: t });
+      return;
+    }
+    const local = await Direccion.create({
+      personaId: vendedor.usuario.personaId, tipo: 'LOC', nombre: 'Local', direccion: `Local de ${vendedor.nombreNegocio}`,
+      latitud: lat, longitud: lng, creadoPor: usuarioId,
+    }, { transaction: t });
+    await vendedor.update({ direccionId: local.id, actualizadoPor: usuarioId }, { transaction: t });
+  }, { usuarioId });
+  return { latitud: lat, longitud: lng };
 }
 
 // campo: 'logo' | 'banner'. Recibe la imagen en base64, la optimiza y guarda su código en ARCHIVOS.

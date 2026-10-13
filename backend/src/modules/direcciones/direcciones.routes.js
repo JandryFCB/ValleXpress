@@ -10,6 +10,7 @@ router.use(verificarToken);
 
 router.get('/', controller.listar);
 router.get('/predeterminada', controller.predeterminada);
+router.get('/tipos', controller.tipos);
 router.post('/', schema.crear, validar, controller.crear);
 router.put('/:id', schema.actualizar, validar, controller.actualizar);
 router.patch('/:id/predeterminada', schema.id, validar, controller.marcarPredeterminada);

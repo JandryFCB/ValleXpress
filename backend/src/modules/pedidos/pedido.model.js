@@ -1,6 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesBase, clavePrimaria } = require('../../shared/models/columnasComunes');
+const { columnasComunes, opcionesVersionada, clavePrimaria } = require('../../shared/models/columnasComunes');
 const { ESTADOPEDIDO } = require('../../shared/constants/codigos');
 const Usuario = require('../auth/usuario.model');
 const Vendedor = require('../vendedores/vendedor.model');
@@ -8,15 +8,15 @@ const Repartidor = require('../repartidores/repartidor.model');
 const Direccion = require('../direcciones/direccion.model');
 const DetallePedido = require('../shared/detallePedido.model');
 
-// Tabla PEDIDOS. La clave es PEDIDO (PED-20261006-000001), generada por la BD; en el modelo es "id".
+// Tabla TPEDIDOS (historial en la misma tabla). La clave es CPEDIDO (PED-20261006-000001), la asigna la BD; en el modelo es "id".
 // El estado vive en el catálogo ESTADOPEDIDO (ver shared/constants/codigos.js). Los atributos conservan los
 // nombres que usa la app (clienteId, fechaPedido, costoDelivery...) apuntando a las columnas nuevas.
 const Pedido = sequelize.define('Pedido', {
-  id: clavePrimaria('pedido'),
+  id: clavePrimaria('cpedido'),
   clienteId: { type: DataTypes.STRING(30), allowNull: false, field: 'cliente' },           // USUARIOS.USUARIO
-  vendedorId: { type: DataTypes.STRING(30), allowNull: false, field: 'vendedor' },         // VENDEDORES.VENDEDOR
-  repartidorId: { type: DataTypes.STRING(30), field: 'repartidor' },                       // REPARTIDORES.REPARTIDOR
-  direccionEntregaId: { type: DataTypes.STRING(30), field: 'direccion' },                  // DIRECCIONES.DIRECCION
+  vendedorId: { type: DataTypes.STRING(30), allowNull: false, field: 'vendedor' },         // TUSUARIOSID.CUSUARIO (dueño del negocio)
+  repartidorId: { type: DataTypes.STRING(30), field: 'repartidor' },                       // TUSUARIOSID.CUSUARIO (repartidor)
+  direccionEntregaId: { type: DataTypes.STRING(30), field: 'cdireccion' },                 // TDIRECCIONESID.CDIRECCION
   domicilio: { type: DataTypes.TEXT, field: 'domicilio' },                                 // copia de la dirección al pedir
   latitudEntrega: { type: DataTypes.DECIMAL(10, 8), field: 'latitudentrega' },
   longitudEntrega: { type: DataTypes.DECIMAL(11, 8), field: 'longitudentrega' },
@@ -28,7 +28,7 @@ const Pedido = sequelize.define('Pedido', {
   propina: { type: DataTypes.DECIMAL(10, 2), field: 'propina' },
   comision: { type: DataTypes.DECIMAL(10, 2), field: 'comision' },
   total: { type: DataTypes.DECIMAL(10, 2), allowNull: false, field: 'total' },
-  cuponId: { type: DataTypes.STRING(30), field: 'cupon' },
+  cuponId: { type: DataTypes.STRING(30), field: 'ccupon' },
   metodoPago: { type: DataTypes.CHAR(3), allowNull: false, field: 'metodopago' },          // METODOPAGO.CODIGO
   pagado: { type: DataTypes.BOOLEAN, field: 'pagado' },
   notasCliente: { type: DataTypes.TEXT, field: 'notascliente' },
@@ -49,7 +49,7 @@ const Pedido = sequelize.define('Pedido', {
   fechaRecibido: { type: DataTypes.DATE, field: 'recibidoen' },
   fechaCancelado: { type: DataTypes.DATE, field: 'canceladoen' },
   ...columnasComunes,
-}, opcionesBase('PEDIDOS'));
+}, opcionesVersionada('TPEDIDOS'));
 
 Pedido.belongsTo(Usuario, { foreignKey: 'clienteId', as: 'cliente' });
 Pedido.belongsTo(Vendedor, { foreignKey: 'vendedorId', as: 'vendedor' });

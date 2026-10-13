@@ -5,7 +5,7 @@ const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MSGHORA = 'La hora debe tener el formato HH:MM (ej: 08:30)';
 const vacio = { values: 'falsy' };
 
-const id = [param('id').matches(/^VEN-\d{6}$/).withMessage('ID de vendedor inválido')];
+const id = [param('id').matches(/^[a-z0-9]{3,30}$/).withMessage('ID de vendedor inválido')];
 
 const crear = [
   body('nombreNegocio').trim().notEmpty().withMessage('El nombre del negocio es requerido')

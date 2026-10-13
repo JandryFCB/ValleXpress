@@ -51,7 +51,7 @@ async function aApi(entrada, req) {
 }
 
 async function vendedorDe(usuarioId, mensaje = 'Vendedor no encontrado') {
-  const vendedor = await Vendedor.findOne({ where: { usuarioId } });
+  const vendedor = await Vendedor.findOne({ where: { id: usuarioId } });
   if (!vendedor) throw AppError.notFound(mensaje, 'VENDEDORNOENCONTRADO');
   return vendedor;
 }

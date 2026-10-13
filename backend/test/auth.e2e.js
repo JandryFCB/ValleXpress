@@ -135,7 +135,7 @@ async function borrarBaseTemporal() {
     const tokenAna = r.body?.token;
     check('devuelve token y usuario con el formato de la app', !!tokenAna && r.body.usuario?.tipoUsuario === 'cliente' && r.body.usuario?.verificado === true && r.body.usuario?.cedula === ced1);
     check('NO devuelve el hash de la clave', !JSON.stringify(r.body).includes('passwordHash') && !JSON.stringify(r.body).includes('$2'));
-    let fila = (await q('SELECT * FROM usuarios WHERE email=$1', ['ana@test.com']))[0];
+    let fila = (await q('SELECT * FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
     check('en la BD: email en minúsculas, ROL=001 y la CLAVE PRIMARIA es el usuario (aperez)', fila && fila.rol === '001' && fila.usuario === 'aperez' && fila.email === 'ana@test.com', JSON.stringify(fila && { r: fila.rol, u: fila.usuario }));
     check('en la BD: clave con bcrypt y términos registrados', fila.clavehash.startsWith('$2') && !!fila.terminosen && fila.terminosver === '1.0');
     check('se registra a sí mismo como creador: CREADOPOR = su usuario', fila.creadopor === fila.usuario);
@@ -151,14 +151,14 @@ async function borrarBaseTemporal() {
     check('verificar email de vendedor', v.ver?.body?.verified === true);
     r = await api('POST', '/api/auth/register', { nombre: 'Luis', apellido: 'Mora', email: 'luis@test.com', telefono: '0991000002', cedula: cedula(17, 1003), password: 'secreto1', tipoUsuario: 'vendedor', nombreNegocio: 'Pizzería Luis' });
     check('vendedor: 201', r.status === 201, JSON.stringify(r.body));
-    const ven = (await q('SELECT v.* FROM vendedores v JOIN usuarios u ON u.usuario=v.usuario WHERE u.email=$1', ['luis@test.com']))[0];
-    check('fila en VENDEDORES: clave VEN-000001, relacionada por el CÓDIGO del usuario (lmora), negocio, categoría OTROS (099), aprobado (002)', ven && /^VEN-\d{6}$/.test(ven.vendedor) && ven.usuario === 'lmora' && ven.negocio === 'Pizzería Luis' && ven.categoria === '099' && ven.aprobacion === '002', JSON.stringify(ven && { v: ven.vendedor, u: ven.usuario }));
+    const ven = (await q('SELECT v.* FROM tnegocios v JOIN vusuarios u ON u.usuario=v.cusuario WHERE v.fhasta>now() AND u.email=$1', ['luis@test.com']))[0];
+    check('fila en TNEGOCIOS: clave = CÓDIGO del usuario (lmora), negocio, categoría OTROS (099), aprobado (002)', ven && ven.cusuario === 'lmora' && ven.negocio === 'Pizzería Luis' && ven.categoria === '099' && ven.aprobacion === '002', JSON.stringify(ven && { u: ven.cusuario }));
 
     const rp = await verificarEmail('pedro@test.com');
     check('verificar email de repartidor', rp.ver?.body?.verified === true);
     r = await api('POST', '/api/auth/register', { nombre: 'Pedro', apellido: 'Ruiz', email: 'pedro@test.com', telefono: '0991000003', cedula: cedula(17, 1004), password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'Moto', placa: 'abc-123' });
     check('repartidor SIN licencia: 201 (antes fallaba siempre)', r.status === 201, JSON.stringify(r.body));
-    const rep = (await q('SELECT * FROM repartidores ORDER BY creadoen DESC LIMIT 1'))[0];
+    const rep = (await q('SELECT * FROM trepartidores WHERE fhasta>now() ORDER BY creadoen DESC LIMIT 1'))[0];
     check('REPARTIDORES: VEHICULO=001 (moto), PLACA=ABC123 normalizada, licencia nula, aprobado', rep && rep.vehiculo === '001' && rep.placa === 'ABC123' && rep.licencia === null && rep.aprobacion === '002', JSON.stringify(rep && { v: rep.vehiculo, p: rep.placa }));
 
     const rp2 = await verificarEmail('maria@test.com');
@@ -166,7 +166,7 @@ async function borrarBaseTemporal() {
     check('placa repetida: 409', r.status === 409 && r.body.code === 'PLACADUPLICADA', JSON.stringify(r.body));
     r = await api('POST', '/api/auth/register', { nombre: 'Maria', apellido: 'Paz', email: 'maria@test.com', telefono: '0991000004', cedula: cedula(17, 1005), password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'Patineta rara', placa: 'XYZ-987' });
     check('tras el 409 la verificación NO se gastó (rollback): registra OK', r.status === 201, JSON.stringify(r.body));
-    const rep2 = (await q('SELECT r.* FROM repartidores r JOIN usuarios u ON u.usuario=r.usuario WHERE u.email=$1', ['maria@test.com']))[0];
+    const rep2 = (await q('SELECT r.* FROM trepartidores r JOIN vusuarios u ON u.usuario=r.cusuario WHERE r.fhasta>now() AND u.email=$1', ['maria@test.com']))[0];
     check('vehículo de texto libre desconocido: VEHICULO nulo y el texto va a DATOSEXTRA', rep2 && rep2.vehiculo === null && /Patineta rara/.test(rep2.datosextra || ''), JSON.stringify(rep2 && { v: rep2.vehiculo, d: rep2.datosextra }));
 
     const rh = await verificarEmail('hack@test.com');
@@ -176,7 +176,7 @@ async function borrarBaseTemporal() {
     check('teléfono ya usado: 409', r.status === 409 && r.body.code === 'TELEFONODUPLICADO', JSON.stringify(r.body));
 
     seccion('6b. Usuario para iniciar sesión (lo genera la BD a partir del nombre)');
-    const us = Object.fromEntries((await q('SELECT email,usuario FROM usuarios')).map((x) => [x.email, x.usuario]));
+    const us = Object.fromEntries((await q('SELECT email,usuario FROM vusuarios')).map((x) => [x.email, x.usuario]));
     check('inicial + primer apellido: Ana Pérez=aperez, Luis Mora=lmora, Pedro Ruiz=pruiz, María Paz=mpaz', us['ana@test.com'] === 'aperez' && us['luis@test.com'] === 'lmora' && us['pedro@test.com'] === 'pruiz' && us['maria@test.com'] === 'mpaz', JSON.stringify(us));
     const reg = async (email, nombre, apellido, n) => {
       await verificarEmail(email);
@@ -192,7 +192,7 @@ async function borrarBaseTemporal() {
     check('otro "J. F. Cayapa": jcayapa ocupado -> usa las dos iniciales: jfcayapa', r.status === 201 && r.body.usuario.usuario === 'jfcayapa', JSON.stringify(r.body.usuario || r.body));
     r = await reg('maria2@test.com', 'María del Carmen', 'De la Torre', 15);
     check('partículas ignoradas (del, de, la): mtorre', r.status === 201 && r.body.usuario.usuario === 'mtorre', JSON.stringify(r.body.usuario || r.body));
-    fila = (await q('SELECT fhasta,versioncontrol FROM usuarios WHERE email=$1', ['ana@test.com']))[0];
+    fila = (await q('SELECT fhasta,versioncontrol FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
     check('FHASTA vigente = 2999-12-31 00:00:00 (hora de Ecuador) y VERSIONCONTROL 0', new Date(fila.fhasta).toISOString() === '2999-12-31T05:00:00.000Z' && fila.versioncontrol === 0, String(fila && fila.fhasta));
 
     seccion('6c. Claves legibles, sin UUID y nombres sin comillas');
@@ -200,10 +200,10 @@ async function borrarBaseTemporal() {
     check('el JWT y la respuesta usan el usuario como id: id=aperez, usuario=aperez', r.status === 200 && r.body.usuario.id === 'aperez' && r.body.usuario.usuario === 'aperez');
     const payload = JSON.parse(Buffer.from(r.body.token.split('.')[1], 'base64url').toString());
     check('el token lleva id=aperez (ya no un UUID)', payload.id === 'aperez' && payload.tipoUsuario === 'cliente', JSON.stringify(payload));
-    const cambio = await db.query("UPDATE usuarios SET usuario='otro' WHERE usuario='aperez'").then(() => 'permitido').catch((e) => e.message);
+    const cambio = await db.query("UPDATE vusuarios SET usuario='otro' WHERE usuario='aperez'").then(() => 'permitido').catch((e) => e.message);
     check('la clave del usuario NO se puede cambiar nunca (la BD lo rechaza)', /no se puede cambiar/.test(cambio), cambio);
-    const sinComillas = await db.query('SELECT count(*)::int n FROM USUARIOS').then((x) => x.rows[0].n).catch((e) => e.message);
-    check('SELECT * FROM USUARIOS sin comillas funciona', typeof sinComillas === 'number' && sinComillas >= 4, String(sinComillas));
+    const sinComillas = await db.query('SELECT count(*)::int n FROM VUSUARIOS').then((x) => x.rows[0].n).catch((e) => e.message);
+    check('SELECT * FROM VUSUARIOS sin comillas funciona', typeof sinComillas === 'number' && sinComillas >= 4, String(sinComillas));
     const uuids = (await q("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='public' AND data_type='uuid'"))[0].n;
     const mayus = (await q("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='public' AND (column_name<>lower(column_name) OR table_name<>lower(table_name))"))[0].n;
     check('no existe ninguna columna UUID ni ningún nombre con mayúsculas guardadas', uuids === 0 && mayus === 0, `uuid=${uuids} mayúsculas=${mayus}`);
@@ -218,10 +218,10 @@ async function borrarBaseTemporal() {
     r = await api('POST', '/api/auth/login', { email: 'ANA@test.com', password: 'secreto1' });
     check('login correcto con email en mayúsculas: 200 + token', r.status === 200 && !!r.body.token && r.body.usuario.tipoUsuario === 'cliente', JSON.stringify(r.body).slice(0, 150));
     const tk = r.body.token;
-    fila = (await q('SELECT * FROM usuarios WHERE email=$1', ['ana@test.com']))[0];
+    fila = (await q('SELECT * FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
     check('login actualiza ULTIMACONEXION y reinicia intentos', !!fila.ultimaconexion && fila.intentosfallidos === 0);
-    const hist = await q('SELECT count(*)::int n FROM histusuarios WHERE email=$1', ['ana@test.com']);
-    check('los logins NO llenan el historial de versiones (columnas volátiles)', hist[0].n === 0, `HIST=${hist[0].n}`);
+    const hist = await q("SELECT count(*)::int n FROM tusuarios WHERE cusuario='aperez'");
+    check('los logins NO crean versiones (columnas volátiles): TUSUARIOS sigue con 1 sola fila', hist[0].n === 1, `filas=${hist[0].n}`);
     r = await api('GET', '/api/auth/profile', null, tk);
     check('perfil con token: 200', r.status === 200 && r.body.usuario.email === 'ana@test.com');
     r = await api('GET', '/api/auth/profile');
@@ -265,8 +265,8 @@ async function borrarBaseTemporal() {
     check('cambio correcto: 200', r.status === 200, JSON.stringify(r.body));
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'nuevaClave1' });
     check('login con la clave nueva: 200', r.status === 200);
-    const h2 = await q('SELECT versioncontrol v FROM histusuarios WHERE email=$1 ORDER BY histid', ['ana@test.com']);
-    check('el cambio de clave SÍ versiona (HIST con la versión anterior)', h2.length === 1 && h2[0].v === 0, JSON.stringify(h2));
+    const h2 = await q("SELECT versioncontrol v, fhasta FROM tusuarios WHERE cusuario='aperez' ORDER BY fdesde");
+    check('el cambio de clave SÍ versiona: la versión 0 queda cerrada (FHASTA) y la 1 es la vigente (2999)', h2.length === 2 && h2[0].v === 0 && h2[1].v === 1 && new Date(h2[0].fhasta) < new Date('2999-01-01') && new Date(h2[1].fhasta).getUTCFullYear() === 2999, JSON.stringify(h2));
 
     seccion('9. Recuperar contraseña');
     marca = salida.length;
@@ -327,12 +327,12 @@ async function borrarBaseTemporal() {
     check('...y ese límite NO gasta el de verificar email (contadores independientes)', sv.status === 200, `status=${sv.status} ${JSON.stringify(sv.body)}`);
 
     seccion('12. Logs y auditoría en la BD');
-    const aud = await q('SELECT accion, count(*)::int n FROM auditoria GROUP BY 1 ORDER BY 1');
+    const aud = await q('SELECT accion, count(*)::int n FROM tauditoria GROUP BY 1 ORDER BY 1');
     const accs = Object.fromEntries(aud.map((x) => [x.accion, x.n]));
     check('AUDITORIA registra REGISTRO, LOGIN, LOGINFALLIDO, CAMBIOCLAVE y RESETCLAVE', accs.REGISTRO >= 4 && accs.LOGIN >= 3 && accs.LOGINFALLIDO >= 5 && accs.CAMBIOCLAVE === 1 && accs.RESETCLAVE === 1, JSON.stringify(accs));
-    const lm = await q('SELECT modulo,accion,nivel, solicitudid FROM logmensajes ORDER BY id LIMIT 1');
+    const lm = await q('SELECT modulo,accion,nivel, solicitudid FROM tlogmensajes ORDER BY id LIMIT 1');
     check('LOGMENSAJES: el fallo de correo quedó como ADVERTENCIA (con SOLICITUDID)', lm[0] && lm[0].modulo === 'CORREO' && lm[0].nivel === 'ADVERTENCIA' && !!lm[0].solicitudid, JSON.stringify(lm[0]));
-    const filtrado = await q(`SELECT count(*)::int n FROM logmensajes WHERE detalle::text ~ '[0-9]{6}'`);
+    const filtrado = await q(`SELECT count(*)::int n FROM tlogmensajes WHERE detalle::text ~ '[0-9]{6}'`);
     check('ningún log contiene un código de 6 dígitos', filtrado[0].n === 0, `n=${filtrado[0].n}`);
 
     seccion('13. Un error 500 real queda en LOGERRORES (con los datos sensibles ocultos)');
@@ -342,7 +342,7 @@ async function borrarBaseTemporal() {
     await db.query('ALTER TABLE configuracionesx RENAME TO configuraciones');
     check('el error interno responde 500 con "error" en texto y código', r.status === 500 && typeof r.body.error === 'string' && r.body.code === 'ERRORINTERNO', JSON.stringify(r.body).slice(0, 150));
     await dormir(500);
-    const le = (await q('SELECT * FROM logerrores ORDER BY id DESC LIMIT 1'))[0];
+    const le = (await q('SELECT * FROM tlogerrores ORDER BY id DESC LIMIT 1'))[0];
     check('LOGERRORES: módulo AUTH, método POST, ruta, estado 500', le && le.modulo === 'AUTH' && le.metodo === 'POST' && le.ruta === '/api/auth/register' && le.estadohttp === 500, JSON.stringify(le && { m: le.modulo, r: le.ruta, e: le.estadohttp }));
     check('LOGERRORES: stack, huella SHA-256 y mensaje del error real', le && !!le.stack && /^[0-9a-f]{64}$/.test((le.huella || '').trim()) && /configuraciones/i.test(le.mensaje), le && le.mensaje);
     check('LOGERRORES: el SOLICITUDID coincide con el X-Request-Id de la respuesta', le && le.solicitudid === r.headers.get('x-request-id'));

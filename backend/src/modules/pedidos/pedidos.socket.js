@@ -37,7 +37,7 @@ async function guardarUbicacion(pedido, data) {
   try {
     await Repartidor.update({ latitud: data.lat, longitud: data.lng, ubicacionEn: new Date() }, { where: { id: pedido.repartidorId } });
     await sequelize.query(
-      `INSERT INTO ubicacionrepartidor (repartidor, pedido, latitud, longitud, precisionm, velocidadkmh, rumbo)
+      `INSERT INTO tubicacionrepartidor (repartidor, cpedido, latitud, longitud, precisionm, velocidadkmh, rumbo)
        VALUES (:repartidor, :pedido, :lat, :lng, :precision, :velocidad, :rumbo)`,
       { replacements: { repartidor: pedido.repartidorId, pedido: pedido.id, lat: data.lat, lng: data.lng, precision: data.accuracy, velocidad: data.speed != null ? data.speed * 3.6 : null, rumbo: data.heading } },
     );

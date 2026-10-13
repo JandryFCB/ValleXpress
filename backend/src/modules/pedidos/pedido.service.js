@@ -32,7 +32,7 @@ const DATOSPERSONA = ['id', 'nombre', 'apellido', 'telefono'];                  
 
 const INCLUIR = [
   { model: Usuario, as: 'cliente', attributes: DATOSPERSONA },
-  { model: Vendedor, as: 'vendedor', include: [{ model: Usuario, as: 'usuario', attributes: DATOSPERSONA }] },
+  { model: Vendedor, as: 'vendedor', include: [{ model: Usuario, as: 'usuario', attributes: DATOSPERSONA }, { model: Direccion, as: 'local', required: false }] },
   { model: Repartidor, as: 'repartidor', required: false, include: [{ model: Usuario, as: 'usuario', attributes: DATOSPERSONA }] },
   { model: DetallePedido, as: 'detalles', required: false, include: [{ model: Producto, as: 'producto' }] },
 ];
@@ -75,7 +75,7 @@ async function aApi(entrada, req, { ocultarCliente = false } = {}) {
     createdAt: p.creadoEn,
     cliente: persona(p.cliente, ocultarCliente),
     vendedor: p.vendedor && {
-      id: p.vendedor.id, nombreNegocio: p.vendedor.nombreNegocio, latitud: num(p.vendedor.latitud), longitud: num(p.vendedor.longitud),
+      id: p.vendedor.id, nombreNegocio: p.vendedor.nombreNegocio, latitud: num(p.vendedor.local?.latitud), longitud: num(p.vendedor.local?.longitud),
       logo: urls[p.vendedor.logoId]?.url || null, usuario: persona(p.vendedor.usuario),
     },
     repartidor: p.repartidor && { id: p.repartidor.id, placa: p.repartidor.placa, usuario: persona(p.repartidor.usuario) },
@@ -104,12 +104,12 @@ const paginacion = ({ page, limit }, total) => ({ page, limit, total, totalPages
 const bloquear = (id, where, t) => Pedido.findOne({ where: { id, ...where }, transaction: t, lock: t.LOCK.UPDATE });
 
 async function vendedorDe(usuarioId, t) {
-  const v = await Vendedor.findOne({ where: { usuarioId }, attributes: ['id', 'usuarioId'], transaction: t });
+  const v = await Vendedor.findOne({ where: { id: usuarioId }, attributes: ['id'], transaction: t });
   if (!v) throw AppError.notFound('Vendedor no encontrado', 'VENDEDORNOENCONTRADO');
   return v;
 }
 async function repartidorDe(usuarioId, t) {
-  const r = await Repartidor.findOne({ where: { usuarioId }, attributes: ['id', 'usuarioId', 'aprobacion'], transaction: t });
+  const r = await Repartidor.findOne({ where: { id: usuarioId }, attributes: ['id', 'aprobacion'], transaction: t });
   if (!r) throw AppError.notFound('Repartidor no encontrado', 'REPARTIDORNOENCONTRADO');
   return r;
 }
@@ -169,7 +169,7 @@ async function crear(cliente, datos, req) {
     // La dirección debe ser del propio cliente; se guarda una COPIA (si la edita luego, el pedido no cambia)
     let direccion = null;
     if (datos.direccionEntregaId) {
-      direccion = await Direccion.findOne({ where: { id: datos.direccionEntregaId, usuarioId: cliente.id }, transaction: t });
+      direccion = await Direccion.findOne({ where: { id: datos.direccionEntregaId, personaId: cliente.personaId }, transaction: t });
       if (!direccion) throw AppError.notFound('Dirección no encontrada', 'DIRECCIONNOENCONTRADA');
     }
 
@@ -248,7 +248,7 @@ async function obtener(usuario, id, req) {
   if (esCliente || esVendedor || esRepartidor) return aApi(pedido, req);
 
   if (usuario.tipoUsuario === 'repartidor' && pedido.estado === E.LISTO && !pedido.repartidorId) {
-    const rep = await Repartidor.findOne({ where: { usuarioId: usuario.id }, attributes: ['aprobacion'] });
+    const rep = await Repartidor.findOne({ where: { id: usuario.id }, attributes: ['id', 'aprobacion'] });
     if (rep?.aprobacion === APROBACION.APROBADO) return aApi(pedido, req, { ocultarCliente: true });
   }
   throw noEncontrado();
@@ -276,7 +276,7 @@ async function cambiarEstadoVendedor(usuario, id, { estado, motivo }, req) {
   auditar({ usuarioId: usuario.id, accion: `PEDIDO${estado.toUpperCase()}`, entidad: 'PEDIDOS', entidadId: id, req });
   if (siguiente === E.LISTO) {
     await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo: 'pedido_listo', titulo: '¡Tu pedido está listo! 🍽️', mensaje: `Tu pedido #${pedido.id} está listo y pronto será asignado a un repartidor`, pedidoId: pedido.id });
-    const repartidores = await Repartidor.findAll({ where: { disponible: true, aprobacion: APROBACION.APROBADO, activo: true }, attributes: ['usuarioId'] });
+    const repartidores = await Repartidor.findAll({ where: { disponible: true, aprobacion: APROBACION.APROBADO, activo: true }, attributes: ['id'] });
     for (const r of repartidores) {
       await NotificacionService.notificar({ io: req.io, usuarioId: r.usuarioId, tipo: 'pedido_listo', titulo: 'Pedido listo', mensaje: `Pedido listo: ${pedido.id}`, pedidoId: pedido.id, extra: { vendedorId: pedido.vendedorId } });
     }
@@ -300,7 +300,7 @@ async function cancelar(usuario, id, { motivo } = {}, req) {
   }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'PEDIDOCANCELADO', entidad: 'PEDIDOS', entidadId: id, req });
-  const vendedor = await Vendedor.findOne({ where: { id: pedido.vendedorId }, attributes: ['usuarioId'] });
+  const vendedor = await Vendedor.findOne({ where: { id: pedido.vendedorId }, attributes: ['id'] });
   if (vendedor) await NotificacionService.notificar({ io: req.io, usuarioId: vendedor.usuarioId, tipo: 'pedido_cancelado', titulo: 'Pedido cancelado', mensaje: `El pedido #${pedido.id} fue cancelado por el cliente`, pedidoId: pedido.id, estado: 'cancelado' });
 }
 
@@ -322,10 +322,10 @@ async function marcarRecibido(usuario, id, req) {
 
   auditar({ usuarioId: usuario.id, accion: 'PEDIDORECIBIDO', entidad: 'PEDIDOS', entidadId: id, req });
   const aviso = { tipo: 'pedido_recibido_cliente', titulo: '¡Pedido recibido por el cliente! ✅', mensaje: `El cliente recibió el pedido #${pedido.id}`, pedidoId: pedido.id };
-  const vendedor = await Vendedor.findOne({ where: { id: pedido.vendedorId }, attributes: ['usuarioId'] });
+  const vendedor = await Vendedor.findOne({ where: { id: pedido.vendedorId }, attributes: ['id'] });
   if (vendedor) await NotificacionService.notificar({ io: req.io, usuarioId: vendedor.usuarioId, ...aviso });
   if (pedido.repartidorId) {
-    const rep = await Repartidor.findOne({ where: { id: pedido.repartidorId }, attributes: ['usuarioId'] });
+    const rep = await Repartidor.findOne({ where: { id: pedido.repartidorId }, attributes: ['id'] });
     if (rep) await NotificacionService.notificar({ io: req.io, usuarioId: rep.usuarioId, ...aviso });
   }
   return { pedido: await aApi(await cargar(id), req) };
@@ -345,12 +345,14 @@ async function calificar(usuario, id, { valoracion, comentario, tipo = 'vendedor
       pedidoId: id, usuarioId: usuario.id, tipo: TIPO, puntuacion: valoracion, comentario: comentario || null,
       vendedorId: TIPO === 'VENDEDOR' ? pedido.vendedorId : null, repartidorId: TIPO === 'REPARTIDOR' ? pedido.repartidorId : null, creadoPor: usuario.id,
     }, { transaction: t });
-    const [tabla, columna, valor] = TIPO === 'VENDEDOR' ? ['vendedores', 'vendedor', pedido.vendedorId] : ['repartidores', 'repartidor', pedido.repartidorId];
+    const [tabla, columna, clave, valor] = TIPO === 'VENDEDOR'
+      ? ['tnegocios', 'vendedor', "cusuario = :valor AND fhasta = '2999-12-31 00:00:00-05'", pedido.vendedorId]
+      : ['trepartidores', 'repartidor', "cusuario = :valor AND fhasta = '2999-12-31 00:00:00-05'", pedido.repartidorId];
     await sequelize.query(   // recalcula el promedio y el total de calificaciones (tabla y columna vienen de una lista fija)
       `UPDATE ${tabla} SET
-         calificacion = COALESCE((SELECT ROUND(AVG(puntuacion), 2) FROM calificaciones WHERE ${columna} = :valor AND visible AND eliminadoen IS NULL), 0),
-         totalcalif   = (SELECT COUNT(*) FROM calificaciones WHERE ${columna} = :valor AND visible AND eliminadoen IS NULL)
-       WHERE ${columna} = :valor`,
+         calificacion = COALESCE((SELECT ROUND(AVG(puntuacion), 2) FROM tcalificaciones WHERE ${columna} = :valor AND visible AND eliminadoen IS NULL AND fhasta = '2999-12-31 00:00:00-05'), 0),
+         totalcalif   = (SELECT COUNT(*) FROM tcalificaciones WHERE ${columna} = :valor AND visible AND eliminadoen IS NULL AND fhasta = '2999-12-31 00:00:00-05')
+       WHERE ${clave}`,
       { replacements: { valor }, transaction: t },
     );
   }, { usuarioId: usuario.id });
