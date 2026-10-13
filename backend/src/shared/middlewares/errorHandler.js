@@ -9,6 +9,7 @@ const ENPRODUCCION = () => process.env.NODE_ENV === 'production';
 // Mensajes según la restricción UNIQUE que se violó (carreras entre dos registros simultáneos)
 const MENSAJESUNICOS = {
   EMAIL: 'El email ya está registrado',
+  CORREO: 'El email ya está registrado',
   DOC: 'La cédula ya está registrada',
   TELEFONO: 'El teléfono ya está registrado',
   NUMERO: 'El teléfono ya está registrado',

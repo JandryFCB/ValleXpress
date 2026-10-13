@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { sequelize } = require('../../config/database');
 
-// Escribe en TLOGERRORES, TLOGMENSAJES y AUDITORIA. REGLAS:
+// Escribe en TLOGERRORES, TLOGMENSAJES y TAUDITORIA. REGLAS:
 //   * Un log NUNCA debe romper la petición: todas las funciones capturan sus propios errores.
 //   * Nunca se guardan contraseñas, tokens ni códigos: limpiar() los oculta antes de insertar.
 // (Los nombres de tablas y columnas se escriben sin comillas: PostgreSQL los toma en minúsculas.)
@@ -46,7 +46,7 @@ function logError(err, req, extra = {}) {
   return insertar(
     `INSERT INTO tlogerrores
        (nivel, modulo, origen, codigo, mensaje, stack, huella, metodo, ruta, estadohttp,
-        parametros, cuerpo, usuario, pedido, solicitudid, ip, useragent, entorno)
+        parametros, cuerpo, cusuario, cpedido, solicitudid, ip, useragent, entorno)
      VALUES (:nivel, :modulo, 'BACKEND', :codigo, :mensaje, :stack, :huella, :metodo, :ruta, :estado,
         CAST(:parametros AS jsonb), CAST(:cuerpo AS jsonb), :usuarioId, :pedidoId, :solicitudId, :ip, :userAgent, :entorno)`,
     {
@@ -75,7 +75,7 @@ function logError(err, req, extra = {}) {
 function logMensaje({ nivel = 'INFO', modulo, accion = null, mensaje, detalle = null, req = null, usuarioId = null, pedidoId = null }) {
   return insertar(
     `INSERT INTO tlogmensajes
-       (nivel, modulo, accion, mensaje, detalle, usuario, pedido, solicitudid, ip, entorno)
+       (nivel, modulo, accion, mensaje, detalle, cusuario, cpedido, solicitudid, ip, entorno)
      VALUES (:nivel, :modulo, :accion, :mensaje, CAST(:detalle AS jsonb), :usuarioId, :pedidoId, :solicitudId, :ip, :entorno)`,
     {
       nivel, modulo, accion, mensaje: String(mensaje).slice(0, 2000),
@@ -92,7 +92,7 @@ function logMensaje({ nivel = 'INFO', modulo, accion = null, mensaje, detalle = 
 // Acción de un usuario -> AUDITORIA  (LOGIN, LOGINFALLIDO, REGISTRO, CAMBIOCLAVE...)
 function auditar({ usuarioId = null, accion, entidad = null, entidadId = null, detalle = null, req = null }) {
   return insertar(
-    `INSERT INTO tauditoria (usuario, accion, entidad, entidadid, detalle, ip, useragent)
+    `INSERT INTO tauditoria (cusuario, accion, entidad, entidadid, detalle, ip, useragent)
      VALUES (:usuarioId, :accion, :entidad, :entidadId, CAST(:detalle AS jsonb), :ip, :userAgent)`,
     {
       usuarioId, accion, entidad, entidadId: entidadId ? String(entidadId) : null,

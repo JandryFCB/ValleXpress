@@ -1,7 +1,12 @@
 const jwt = require('jsonwebtoken');
 const AppError = require('../errors/AppError');
 
-// Todo lo relacionado con JWT en un solo lugar (antes jwt.sign estaba repetido en varios controllers).
+// Todo lo relacionado con JWT en un solo lugar.
+//   * Token de ACCESO: corto (15 min). Va en cada petición. Cuando vence, la app lo renueva con el refresh token
+//     (ver sesion.service.js), por eso el usuario no tiene que volver a escribir su clave.
+//   * Token de RESET: de un solo uso, para restablecer la clave.
+
+const EXPIRAACCESO = process.env.JWT_EXPIRA || '15m';
 
 let avisado = false;
 function secreto() {
@@ -14,12 +19,19 @@ function secreto() {
   return s;
 }
 
-// Token de sesión. El payload conserva "tipoUsuario" en texto porque lo usan los sockets y los módulos aún no migrados.
+// Segundos de vida del token de acceso (la app lo usa para saber cuándo renovarlo)
+const segundosAcceso = () => {
+  const m = /^(\d+)([smhd])$/.exec(EXPIRAACCESO);
+  if (!m) return Number(EXPIRAACCESO) || 900;
+  return Number(m[1]) * { s: 1, m: 60, h: 3600, d: 86400 }[m[2]];
+};
+
+// El payload conserva "tipoUsuario" en texto porque lo usan los sockets. No lleva cédula ni otros datos personales.
 function crear(usuario) {
   return jwt.sign(
-    { id: usuario.id, email: usuario.email, tipoUsuario: usuario.tipoUsuario, cedula: usuario.cedula },
+    { id: usuario.id, email: usuario.email, tipoUsuario: usuario.tipoUsuario },
     secreto(),
-    { expiresIn: process.env.JWT_EXPIRA || '30d' },
+    { expiresIn: EXPIRAACCESO },
   );
 }
 
@@ -50,4 +62,4 @@ function verificarReset(token) {
   return payload;
 }
 
-module.exports = { crear, verificar, crearReset, verificarReset };
+module.exports = { crear, verificar, crearReset, verificarReset, segundosAcceso };

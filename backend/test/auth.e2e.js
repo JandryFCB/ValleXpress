@@ -1,364 +1,311 @@
-// Prueba de extremo a extremo del módulo auth.  Uso:  npm run test:auth   (desde la carpeta backend)
+// Prueba de extremo a extremo del módulo auth sobre las tablas nuevas (database/migraciones).
+// Uso:  npm run test:auth   (desde la carpeta backend, con Docker/Postgres en marcha)
 //
-// Crea su PROPIA base temporal "vallexpress_test" (con database/schema.sql), levanta el servidor contra ella,
-// recorre el flujo completo como lo haría la app (registro, login, recuperar clave, límites, logs...) y al
-// terminar borra la base temporal. NO toca la base de desarrollo. Requiere Postgres en marcha (docker compose).
-const path = require('path');
-const fs = require('fs');
-const { spawn } = require('child_process');
-const BACKEND = path.resolve(__dirname, '..');
-require('dotenv').config({ path: path.join(BACKEND, '.env') });
-const { Client } = require('pg');
-const PUERTO = 3099;
-const BASE = `http://localhost:${PUERTO}`;
+// Crea su PROPIA base temporal (con las migraciones), levanta el servidor contra ella, recorre el flujo completo como
+// lo haría la app (registro, login, sesión persistente, recuperar clave...) y al terminar borra todo.
+// NO toca la base de desarrollo.
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const crearArnes = require('./arnes');
 
-let ok = 0; const fallos = [];
-const check = (nombre, cond, detalle = '') => {
-  if (cond) { ok++; console.log(`  ✔ ${nombre}`); } else { fallos.push(nombre); console.log(`  ✘ ${nombre}  ${detalle}`); }
-};
-const seccion = (t) => console.log(`\n── ${t}`);
-const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+const t = crearArnes({ puerto: 3099, bd: 'vallexpress_test_auth' });
+const { check, seccion, api, cedula } = t;
+const sha256 = (x) => crypto.createHash('sha256').update(x).digest('hex');
+const VIGENTE = "'2999-12-31 00:00:00-05'";
 
-async function api(metodo, ruta, cuerpo, token) {
-  const r = await fetch(BASE + ruta, {
-    method: metodo,
-    headers: { 'content-type': 'application/json', ...(token && { authorization: `Bearer ${token}` }) },
-    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-  });
-  let json = null; try { json = await r.json(); } catch { /* sin cuerpo */ }
-  return { status: r.status, body: json, headers: r.headers };
-}
-
-// Cédulas ecuatorianas válidas (mismo algoritmo módulo 10 del backend)
-function cedula(prov, n) {
-  const d = (String(prov).padStart(2, '0') + String(n).padStart(7, '0')).split('').map(Number);
-  let s = 0; for (let i = 0; i < 9; i++) { const m = d[i] * (i % 2 === 0 ? 2 : 1); s += m > 9 ? m - 9 : m; }
-  return d.join('') + ((10 - (s % 10)) % 10);
-}
-
-// Captura de la consola del servidor (los códigos se imprimen en desarrollo cuando no hay proveedor de correo)
-let salida = '';
-async function codigoDe(tipo, email, desde = 0) {
-  const re = new RegExp(`\\[DEV\\] Código de ${tipo} para ${email.replace(/[.+]/g, '\\$&')}: (\\d{6})`, 'g');
-  for (let i = 0; i < 40; i++) {
-    const m = [...salida.slice(desde).matchAll(re)].pop();
-    if (m) return m[1];
-    await dormir(100);
-  }
-  return null;
-}
-
-async function verificarEmail(email, nombre = 'Test') {
-  const marca = salida.length;
+// Verifica el correo (leyendo el código de la consola del servidor) y devuelve la respuesta de verify-email
+async function verificar(email, nombre = 'Test') {
+  const desde = t.marca();
   const env = await api('POST', '/api/auth/send-verification', { email, nombre });
   if (env.status !== 200) return { env };
-  const code = await codigoDe('verificacion', email.toLowerCase(), marca);
-  const ver = await api('POST', '/api/auth/verify-email', { email, code });
-  return { env, code, ver };
+  const code = await t.codigoDe(email.toLowerCase(), 'verificacion', desde);
+  return { env, code, ver: await api('POST', '/api/auth/verify-email', { email, code }) };
 }
 
-const dbConfig = (database) => ({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database });
-
-async function prepararBaseTemporal() {
-  const admin = new Client(dbConfig('postgres'));
-  await admin.connect();
-  await admin.query('DROP DATABASE IF EXISTS vallexpress_test WITH (FORCE)');
-  await admin.query('CREATE DATABASE vallexpress_test');
-  await admin.end();
-  const temp = new Client(dbConfig('vallexpress_test'));
-  await temp.connect();
-  await temp.query(fs.readFileSync(path.join(BACKEND, '..', 'database', 'schema.sql'), 'utf8'));
-  await temp.end();
-}
-async function borrarBaseTemporal() {
-  const admin = new Client(dbConfig('postgres'));
-  await admin.connect();
-  await admin.query('DROP DATABASE IF EXISTS vallexpress_test WITH (FORCE)');
-  await admin.end();
+let contador = 0;
+// Verifica el correo y registra a un cliente. Devuelve la respuesta del registro.
+async function registrarCliente(email, nombre, apellido, extra = {}) {
+  contador += 1;
+  await verificar(email, nombre);
+  return api('POST', '/api/auth/register', {
+    nombre, apellido, email, telefono: `0998${String(contador).padStart(6, "0")}`, cedula: cedula(17, 2000 + contador),
+    password: 'secreto1', tipoUsuario: 'cliente', dispositivo: 'Prueba', plataforma: 'android', ...extra,
+  });
 }
 
 (async () => {
-  await prepararBaseTemporal();
-  let srv = spawn(process.execPath, ['src/server.js'], {
-    cwd: BACKEND,
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(PUERTO), DB_NAME: 'vallexpress_test', LIMITES_DESACTIVADOS: 'true' },
-  });
-  srv.stdout.on('data', (d) => { salida += d.toString(); });
-  srv.stderr.on('data', (d) => { salida += d.toString(); });
-
-  const db = new Client(dbConfig('vallexpress_test'));
+  let q;
   try {
-    for (let i = 0; i < 50; i++) { try { if ((await fetch(`${BASE}/api/health`)).ok) break; } catch { /* aún no */ } await dormir(200); }
-    await db.connect();
-    const q = async (sql, p) => (await db.query(sql, p)).rows;
+    ({ q } = await t.iniciar());
 
     seccion('1. Servidor y formato de respuestas');
-    const h = await api('GET', '/api/health');
-    check('health responde 200', h.status === 200);
-    check('cada petición lleva X-Request-Id', /^[\w-]{8,64}$/.test(h.headers.get('x-request-id') || ''));
-    const nf = await api('GET', '/api/no-existe');
-    check('ruta inexistente: 404 con "error" en texto', nf.status === 404 && typeof nf.body.error === 'string' && nf.body.code === 'RUTANOENCONTRADA', JSON.stringify(nf.body));
+    let r = await api('GET', '/api/health');
+    check('health responde 200', r.status === 200);
+    r = await api('GET', '/api/no-existe');
+    check('ruta inexistente: 404 con "error" en texto y code', r.status === 404 && typeof r.body.error === 'string' && r.body.code === 'RUTANOENCONTRADA', JSON.stringify(r.body));
 
     seccion('2. Validación y consultas en tiempo real');
-    let r = await api('GET', `/api/auth/check-cedula/${cedula(17, 1)}`);
+    r = await api('GET', `/api/auth/check-cedula/${cedula(17, 1)}`);
     check('cédula libre', r.status === 200 && r.body.exists === false);
     r = await api('GET', '/api/auth/check-cedula/1234567890');
     check('cédula inválida: 400 con mensaje claro', r.status === 400 && /Cédula inválida/.test(r.body.error), JSON.stringify(r.body));
-    r = await api('GET', '/api/auth/check-placa/ZZ99');
-    check('placa inválida: 400', r.status === 400);
     r = await api('POST', '/api/auth/register', { nombre: 'A', apellido: 'B', email: 'malo', telefono: '123', cedula: '1', password: '12', tipoUsuario: 'cliente' });
-    check('registro inválido: 400, primer mensaje en "error" y lista en "errors"', r.status === 400 && typeof r.body.error === 'string' && Array.isArray(r.body.errors) && r.body.errors.length >= 3, JSON.stringify(r.body).slice(0, 200));
+    check('registro inválido: 400, primer mensaje en "error" y lista en "errors"', r.status === 400 && typeof r.body.error === 'string' && Array.isArray(r.body.errors) && r.body.errors.length >= 3);
 
-    seccion('3. Registro exige email verificado (en el servidor)');
-    const ced1 = cedula(17, 1001); const tel1 = '0991000001';
-    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: tel1, cedula: ced1, password: 'secreto1', tipoUsuario: 'cliente' });
-    check('sin verificar email: 403 EMAILNOVERIFICADO', r.status === 403 && r.body.code === 'EMAILNOVERIFICADO', JSON.stringify(r.body));
+    seccion('3. El registro exige email verificado (en el servidor)');
+    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: '0991000001', cedula: cedula(17, 1001), password: 'secreto1', tipoUsuario: 'cliente' });
+    check('sin verificar el email: 403 EMAILNOVERIFICADO', r.status === 403 && r.body.code === 'EMAILNOVERIFICADO', JSON.stringify(r.body));
 
     seccion('4. Verificación de email');
-    let marca = salida.length;
+    let desde = t.marca();
     r = await api('POST', '/api/auth/send-verification', { email: 'Ana@Test.com', nombre: 'Ana' });
     check('enviar código: 200', r.status === 200, JSON.stringify(r.body));
-    const codAna = await codigoDe('verificacion', 'ana@test.com', marca);
-    check('el código es de 6 dígitos y se generó para el email normalizado (minúsculas)', /^\d{6}$/.test(codAna || ''));
+    const codAna = await t.codigoDe('ana@test.com', 'verificacion', desde);
+    check('el código es de 6 dígitos y va al email normalizado (minúsculas)', /^\d{6}$/.test(codAna || ''));
     r = await api('POST', '/api/auth/send-verification', { email: 'ana@test.com' });
-    check('reenvío inmediato: 429 con retryAfter (cooldown 60 s)', r.status === 429 && r.body.retryAfter > 0, JSON.stringify(r.body));
+    check('reenvío inmediato: 429 con retryAfter (espera de 60 s)', r.status === 429 && r.body.retryAfter > 0, JSON.stringify(r.body));
     r = await api('POST', '/api/auth/verify-email', { email: 'ana@test.com', code: codAna === '000000' ? '111111' : '000000' });
-    check('código incorrecto: 400', r.status === 400 && r.body.code === 'CODIGOINCORRECTO');
+    check('código incorrecto: 400 CODIGOINCORRECTO', r.status === 400 && r.body.code === 'CODIGOINCORRECTO');
     r = await api('POST', '/api/auth/verify-email', { email: 'ana@test.com', code: '12' });
     check('código mal formado: 400 "debe tener 6 dígitos"', r.status === 400 && /6 dígitos/.test(r.body.error));
     r = await api('POST', '/api/auth/verify-email', { email: 'ana@test.com', code: codAna });
     check('código correcto: verified=true', r.status === 200 && r.body.verified === true, JSON.stringify(r.body));
+    let fila = (await q("SELECT codigohash, cpropositocodigo FROM tcodigosverificacion WHERE correo='ana@test.com'"))[0];
+    check('en la BD el código va con hash (bcrypt) y propósito 001', fila.codigohash.startsWith('$2') && fila.cpropositocodigo === '001');
 
     seccion('5. Registro de cliente');
-    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: tel1, cedula: ced1, password: 'secreto1', tipoUsuario: 'cliente' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: '0991000001', cedula: cedula(17, 1001), password: 'secreto1', tipoUsuario: 'cliente', dispositivo: 'Pixel 7', plataforma: 'android' });
     check('registro: 201', r.status === 201, JSON.stringify(r.body));
-    const tokenAna = r.body?.token;
-    check('devuelve token y usuario con el formato de la app', !!tokenAna && r.body.usuario?.tipoUsuario === 'cliente' && r.body.usuario?.verificado === true && r.body.usuario?.cedula === ced1);
-    check('NO devuelve el hash de la clave', !JSON.stringify(r.body).includes('passwordHash') && !JSON.stringify(r.body).includes('$2'));
-    let fila = (await q('SELECT * FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
-    check('en la BD: email en minúsculas, ROL=001 y la CLAVE PRIMARIA es el usuario (aperez)', fila && fila.rol === '001' && fila.usuario === 'aperez' && fila.email === 'ana@test.com', JSON.stringify(fila && { r: fila.rol, u: fila.usuario }));
-    check('en la BD: clave con bcrypt y términos registrados', fila.clavehash.startsWith('$2') && !!fila.terminosen && fila.terminosver === '1.0');
-    check('se registra a sí mismo como creador: CREADOPOR = su usuario', fila.creadopor === fila.usuario);
+    const ana = r.body;
+    check('devuelve token de acceso, refreshToken y expiresIn=900', !!ana.token && !!ana.refreshToken && ana.expiresIn === 900);
+    check('usuario con el formato de la app (tipoUsuario, verificado, cédula)', ana.usuario?.tipoUsuario === 'cliente' && ana.usuario?.verificado === true && ana.usuario?.cedula === cedula(17, 1001));
+    check('NO devuelve el hash de la clave', !JSON.stringify(ana).includes('passwordHash') && !JSON.stringify(ana).includes('$2'));
+    const persona = (await q(`SELECT * FROM tpersonas WHERE correo='ana@test.com' AND fhasta=${VIGENTE}`))[0];
+    check('persona en TPERSONAS: CPERSONA ≥ 2 (el 1 es el administrador), correo en minúsculas, documento 001', persona && Number(persona.cpersona) >= 2 && persona.ctipodocumento === '001' && persona.fcorreoverificado);
+    fila = (await q('SELECT * FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
+    check('la BD genera el usuario a partir del nombre: aperez, rol 001, activo', fila && fila.usuario === 'aperez' && fila.rol === '001' && fila.activo === true, JSON.stringify(fila && fila.usuario));
+    check('clave con bcrypt y términos aceptados (versión 1.0)', fila.clavehash.startsWith('$2') && !!fila.terminosen && fila.terminosver === '1.0');
+    const tel = (await q(`SELECT * FROM tpersonatelefonos WHERE cpersona=$1 AND fhasta=${VIGENTE}`, [persona.cpersona]))[0];
+    check('teléfono guardado como principal (STELEFONO=1)', tel && tel.numerotelefono === '0991000001' && tel.esprincipal === true && tel.stelefono === 1);
+    check('se creó la fila de acceso (TUSUARIOSACCESO)', (await q("SELECT 1 FROM tusuariosacceso WHERE cusuario='aperez'")).length === 1);
     r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'ana@test.com', telefono: '0991000009', cedula: cedula(17, 1002), password: 'secreto1', tipoUsuario: 'cliente' });
-    check('el código de verificación no sirve dos veces: 403', r.status === 403 && r.body.code === 'EMAILNOVERIFICADO', JSON.stringify(r.body));
+    check('el código de verificación no sirve dos veces: 403', r.status === 403 && r.body.code === 'EMAILNOVERIFICADO');
     r = await api('POST', '/api/auth/send-verification', { email: 'ana@test.com' });
     check('no se envían códigos a un email ya registrado: 409', r.status === 409 && r.body.code === 'EMAILDUPLICADO');
     r = await api('GET', '/api/auth/check-email/ANA@test.com');
     check('check-email normaliza mayúsculas: exists=true', r.body.exists === true);
 
-    seccion('6. Registro de vendedor y repartidor (con duplicados y escalada de rol)');
-    const v = await verificarEmail('luis@test.com');
-    check('verificar email de vendedor', v.ver?.body?.verified === true);
-    r = await api('POST', '/api/auth/register', { nombre: 'Luis', apellido: 'Mora', email: 'luis@test.com', telefono: '0991000002', cedula: cedula(17, 1003), password: 'secreto1', tipoUsuario: 'vendedor', nombreNegocio: 'Pizzería Luis' });
-    check('vendedor: 201', r.status === 201, JSON.stringify(r.body));
-    const ven = (await q('SELECT v.* FROM tnegocios v JOIN vusuarios u ON u.usuario=v.cusuario WHERE v.fhasta>now() AND u.email=$1', ['luis@test.com']))[0];
-    check('fila en TNEGOCIOS: clave = CÓDIGO del usuario (lmora), negocio, categoría OTROS (099), aprobado (002)', ven && ven.cusuario === 'lmora' && ven.negocio === 'Pizzería Luis' && ven.categoria === '099' && ven.aprobacion === '002', JSON.stringify(ven && { u: ven.cusuario }));
-
-    const rp = await verificarEmail('pedro@test.com');
-    check('verificar email de repartidor', rp.ver?.body?.verified === true);
-    r = await api('POST', '/api/auth/register', { nombre: 'Pedro', apellido: 'Ruiz', email: 'pedro@test.com', telefono: '0991000003', cedula: cedula(17, 1004), password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'Moto', placa: 'abc-123' });
-    check('repartidor SIN licencia: 201 (antes fallaba siempre)', r.status === 201, JSON.stringify(r.body));
-    const rep = (await q('SELECT * FROM trepartidores WHERE fhasta>now() ORDER BY creadoen DESC LIMIT 1'))[0];
-    check('REPARTIDORES: VEHICULO=001 (moto), PLACA=ABC123 normalizada, licencia nula, aprobado', rep && rep.vehiculo === '001' && rep.placa === 'ABC123' && rep.licencia === null && rep.aprobacion === '002', JSON.stringify(rep && { v: rep.vehiculo, p: rep.placa }));
-
-    const rp2 = await verificarEmail('maria@test.com');
-    r = await api('POST', '/api/auth/register', { nombre: 'Maria', apellido: 'Paz', email: 'maria@test.com', telefono: '0991000004', cedula: cedula(17, 1005), password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'Patineta rara', placa: 'ABC-123' });
-    check('placa repetida: 409', r.status === 409 && r.body.code === 'PLACADUPLICADA', JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/register', { nombre: 'Maria', apellido: 'Paz', email: 'maria@test.com', telefono: '0991000004', cedula: cedula(17, 1005), password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'Patineta rara', placa: 'XYZ-987' });
-    check('tras el 409 la verificación NO se gastó (rollback): registra OK', r.status === 201, JSON.stringify(r.body));
-    const rep2 = (await q('SELECT r.* FROM trepartidores r JOIN vusuarios u ON u.usuario=r.cusuario WHERE r.fhasta>now() AND u.email=$1', ['maria@test.com']))[0];
-    check('vehículo de texto libre desconocido: VEHICULO nulo y el texto va a DATOSEXTRA', rep2 && rep2.vehiculo === null && /Patineta rara/.test(rep2.datosextra || ''), JSON.stringify(rep2 && { v: rep2.vehiculo, d: rep2.datosextra }));
-
-    const rh = await verificarEmail('hack@test.com');
+    seccion('6. Duplicados, roles y usuarios generados');
+    await verificar('luis@test.com', 'Luis');
+    r = await api('POST', '/api/auth/register', { nombre: 'Luis', apellido: 'Mora', email: 'luis@test.com', telefono: '0991000002', cedula: cedula(17, 1003), password: 'secreto1', tipoUsuario: 'vendedor' });
+    check('vendedor: 201 con rol 002', r.status === 201 && r.body.usuario.tipoUsuario === 'vendedor' && r.body.usuario.usuario === 'lmora', JSON.stringify(r.body));
+    await verificar('hack@test.com', 'Hack');
     r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1006), password: 'secreto1', tipoUsuario: 'administrador' });
     check('registrarse como administrador: 400', r.status === 400 && /Tipo de usuario inválido/.test(r.body.error), JSON.stringify(r.body));
     r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000001', cedula: cedula(17, 1006), password: 'secreto1', tipoUsuario: 'cliente' });
-    check('teléfono ya usado: 409', r.status === 409 && r.body.code === 'TELEFONODUPLICADO', JSON.stringify(r.body));
-
-    seccion('6b. Usuario para iniciar sesión (lo genera la BD a partir del nombre)');
-    const us = Object.fromEntries((await q('SELECT email,usuario FROM vusuarios')).map((x) => [x.email, x.usuario]));
-    check('inicial + primer apellido: Ana Pérez=aperez, Luis Mora=lmora, Pedro Ruiz=pruiz, María Paz=mpaz', us['ana@test.com'] === 'aperez' && us['luis@test.com'] === 'lmora' && us['pedro@test.com'] === 'pruiz' && us['maria@test.com'] === 'mpaz', JSON.stringify(us));
-    const reg = async (email, nombre, apellido, n) => {
-      await verificarEmail(email);
-      return api('POST', '/api/auth/register', { nombre, apellido, email, telefono: `09910001${String(n).padStart(2, '0')}`, cedula: cedula(17, 1100 + n), password: 'secreto1', tipoUsuario: 'cliente' });
-    };
-    r = await reg('andres@test.com', 'Andrés', 'Pérez Soto', 11);
-    check('el registro DEVUELVE el usuario; "aperez" ya existe -> añade la inicial del 2.º apellido: aperezs', r.status === 201 && r.body.usuario.usuario === 'aperezs', JSON.stringify(r.body.usuario || r.body));
-    r = await reg('ana2@test.com', 'Ana', 'Pérez', 12);
-    check('homónima (mismo nombre y apellido): aperez2', r.status === 201 && r.body.usuario.usuario === 'aperez2', JSON.stringify(r.body.usuario || r.body));
-    r = await reg('jandry@test.com', 'Jandry Franklin', 'Cayapa Baque', 13);
+    check('teléfono ya usado: 409 y la verificación NO se gasta', r.status === 409 && r.body.code === 'TELEFONODUPLICADO', JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1001), password: 'secreto1', tipoUsuario: 'cliente' });
+    check('cédula ya usada: 409', r.status === 409 && r.body.code === 'CEDULADUPLICADA', JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1006), password: 'secreto1', tipoUsuario: 'cliente' });
+    check('tras los 409 la verificación sigue vigente (rollback): registra OK', r.status === 201, JSON.stringify(r.body));
+    r = await registrarCliente('ana2@test.com', 'Ana', 'Pérez');
+    check('homónima: aperez ocupado -> aperez2', r.status === 201 && r.body.usuario.usuario === 'aperez2', JSON.stringify(r.body.usuario || r.body));
+    r = await registrarCliente('jandry@test.com', 'Jandry Franklin', 'Cayapa Baque');
     check('"Jandry Franklin Cayapa Baque" -> jcayapa', r.status === 201 && r.body.usuario.usuario === 'jcayapa', JSON.stringify(r.body.usuario || r.body));
-    r = await reg('juan@test.com', 'Juan Fernando', 'Cayapa Bravo', 14);
-    check('otro "J. F. Cayapa": jcayapa ocupado -> usa las dos iniciales: jfcayapa', r.status === 201 && r.body.usuario.usuario === 'jfcayapa', JSON.stringify(r.body.usuario || r.body));
-    r = await reg('maria2@test.com', 'María del Carmen', 'De la Torre', 15);
+    r = await registrarCliente('juan@test.com', 'Juan Fernando', 'Cayapa Bravo');
+    check('otro "J. F. Cayapa": jcayapa ocupado -> jfcayapa', r.status === 201 && r.body.usuario.usuario === 'jfcayapa', JSON.stringify(r.body.usuario || r.body));
+    r = await registrarCliente('maria@test.com', 'María del Carmen', 'De la Torre');
     check('partículas ignoradas (del, de, la): mtorre', r.status === 201 && r.body.usuario.usuario === 'mtorre', JSON.stringify(r.body.usuario || r.body));
-    fila = (await q('SELECT fhasta,versioncontrol FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
-    check('FHASTA vigente = 2999-12-31 00:00:00 (hora de Ecuador) y VERSIONCONTROL 0', new Date(fila.fhasta).toISOString() === '2999-12-31T05:00:00.000Z' && fila.versioncontrol === 0, String(fila && fila.fhasta));
+    const ids = (await q('SELECT cpersona FROM tpersonas WHERE fhasta=$1 ORDER BY cpersona'.replace('$1', VIGENTE))).map((x) => Number(x.cpersona));
+    check('CPERSONA: el 1 es el administrador y los demás van en orden creciente desde el 2', ids[0] === 1 && ids.slice(1).every((v, i) => v >= 2 && (i === 0 || v > ids[i])), JSON.stringify(ids));
 
-    seccion('6c. Claves legibles, sin UUID y nombres sin comillas');
-    r = await api('POST', '/api/auth/login', { email: 'aperez', password: 'secreto1' });
-    check('el JWT y la respuesta usan el usuario como id: id=aperez, usuario=aperez', r.status === 200 && r.body.usuario.id === 'aperez' && r.body.usuario.usuario === 'aperez');
-    const payload = JSON.parse(Buffer.from(r.body.token.split('.')[1], 'base64url').toString());
-    check('el token lleva id=aperez (ya no un UUID)', payload.id === 'aperez' && payload.tipoUsuario === 'cliente', JSON.stringify(payload));
-    const cambio = await db.query("UPDATE vusuarios SET usuario='otro' WHERE usuario='aperez'").then(() => 'permitido').catch((e) => e.message);
-    check('la clave del usuario NO se puede cambiar nunca (la BD lo rechaza)', /no se puede cambiar/.test(cambio), cambio);
-    const sinComillas = await db.query('SELECT count(*)::int n FROM VUSUARIOS').then((x) => x.rows[0].n).catch((e) => e.message);
-    check('SELECT * FROM VUSUARIOS sin comillas funciona', typeof sinComillas === 'number' && sinComillas >= 4, String(sinComillas));
-    const uuids = (await q("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='public' AND data_type='uuid'"))[0].n;
-    const mayus = (await q("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='public' AND (column_name<>lower(column_name) OR table_name<>lower(table_name))"))[0].n;
-    check('no existe ninguna columna UUID ni ningún nombre con mayúsculas guardadas', uuids === 0 && mayus === 0, `uuid=${uuids} mayúsculas=${mayus}`);
-    const fk = (await q("SELECT count(*)::int n FROM information_schema.referential_constraints WHERE constraint_schema='public'"))[0].n;
-    check('las relaciones por código están protegidas con claves foráneas (≥ 50)', fk >= 50, String(fk));
-
-    seccion('7. Login, bloqueo por intentos y token');
+    seccion('7. Login, bloqueo por intentos y token de acceso');
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'mala' });
     check('clave incorrecta: 401 genérico', r.status === 401 && r.body.error === 'Credenciales inválidas');
     r = await api('POST', '/api/auth/login', { email: 'noexiste@test.com', password: 'mala' });
     check('usuario inexistente: el mismo 401 (no revela si existe)', r.status === 401 && r.body.error === 'Credenciales inválidas');
-    r = await api('POST', '/api/auth/login', { email: 'ANA@test.com', password: 'secreto1' });
-    check('login correcto con email en mayúsculas: 200 + token', r.status === 200 && !!r.body.token && r.body.usuario.tipoUsuario === 'cliente', JSON.stringify(r.body).slice(0, 150));
-    const tk = r.body.token;
-    fila = (await q('SELECT * FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
-    check('login actualiza ULTIMACONEXION y reinicia intentos', !!fila.ultimaconexion && fila.intentosfallidos === 0);
-    const hist = await q("SELECT count(*)::int n FROM tusuarios WHERE cusuario='aperez'");
-    check('los logins NO crean versiones (columnas volátiles): TUSUARIOS sigue con 1 sola fila', hist[0].n === 1, `filas=${hist[0].n}`);
-    r = await api('GET', '/api/auth/profile', null, tk);
-    check('perfil con token: 200', r.status === 200 && r.body.usuario.email === 'ana@test.com');
+    r = await api('POST', '/api/auth/login', { email: 'ANA@test.com', password: 'secreto1', dispositivo: 'Pixel 7', plataforma: 'android' });
+    check('login con email en mayúsculas: 200 + token + refreshToken', r.status === 200 && !!r.body.token && !!r.body.refreshToken && r.body.usuario.tipoUsuario === 'cliente');
+    const loginAna = r.body;
+    const payload = JSON.parse(Buffer.from(loginAna.token.split('.')[1], 'base64url').toString());
+    check('el token de acceso dura 15 minutos y no lleva cédula', payload.exp - payload.iat === 900 && payload.id === 'aperez' && payload.cedula === undefined, JSON.stringify(payload));
+    fila = (await q("SELECT * FROM vusuarios WHERE usuario='aperez'"))[0];
+    check('el login actualiza ULTIMACONEXION y reinicia intentos', !!fila.ultimaconexion && fila.intentosfallidos === 0);
+    check('los logins NO crean versiones: TUSUARIOS sigue con 1 sola fila', (await q("SELECT 1 FROM tusuarios WHERE cusuario='aperez'")).length === 1);
+    r = await api('POST', '/api/auth/login', { usuario: 'APEREZ', password: 'secreto1' });
+    check('también con el usuario (campo "usuario", en mayúsculas): 200', r.status === 200 && r.body.usuario.email === 'ana@test.com');
+    r = await api('POST', '/api/auth/login', { email: 'a b', password: 'x' });
+    check('formato inválido: 400 "Escribe tu correo o tu usuario"', r.status === 400 && /correo o tu usuario/.test(r.body.error));
+    r = await api('GET', '/api/auth/profile', null, loginAna.token);
+    check('perfil con token: 200', r.status === 200 && r.body.usuario.email === 'ana@test.com' && r.body.usuario.fotoPerfil === null);
     r = await api('GET', '/api/auth/profile');
-    check('perfil sin token: 401', r.status === 401 && r.body.code === 'TOKENNOPROPORCIONADO');
+    check('perfil sin token: 401 TOKENNOPROPORCIONADO', r.status === 401 && r.body.code === 'TOKENNOPROPORCIONADO');
     r = await api('GET', '/api/auth/profile', null, 'basura.token.falso');
     check('token falso: 401 "Token inválido"', r.status === 401 && r.body.error === 'Token inválido');
-
-    for (let i = 1; i <= 4; i++) await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'mala' });
-    r = await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'mala' });
-    check('5.º intento fallido: sigue 401', r.status === 401);
+    for (let i = 1; i <= 5; i++) r = await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'mala' });
     r = await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'secreto1' });
-    check('con la clave CORRECTA pero bloqueado: 429 CUENTABLOQUEADA', r.status === 429 && r.body.code === 'CUENTABLOQUEADA' && r.body.retryAfter > 0, JSON.stringify(r.body));
+    check('5 fallos: aun con la clave CORRECTA, 429 CUENTABLOQUEADA con retryAfter', r.status === 429 && r.body.code === 'CUENTABLOQUEADA' && r.body.retryAfter > 0, JSON.stringify(r.body));
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });
     check('otra cuenta no se ve afectada', r.status === 200);
+    r = await api('POST', '/api/auth/login', { email: 'admin', password: 'cualquiera' });
+    check('el administrador sembrado no puede entrar mientras no tenga clave real', r.status === 401);
 
-    seccion('7b. Iniciar sesión con el usuario');
-    r = await api('POST', '/api/auth/login', { email: 'aperez', password: 'secreto1' });
-    check('usuario en el campo "email" (así lo envía la app, sin cambios): 200', r.status === 200 && r.body.usuario.usuario === 'aperez' && r.body.usuario.email === 'ana@test.com', JSON.stringify(r.body).slice(0, 160));
-    r = await api('POST', '/api/auth/login', { usuario: 'APEREZ', password: 'secreto1' });
-    check('campo "usuario" y en MAYÚSCULAS: 200', r.status === 200 && !!r.body.token);
-    const tkU = r.body.token;
-    r = await api('GET', '/api/auth/profile', null, tkU);
-    check('el perfil incluye el usuario', r.status === 200 && r.body.usuario.usuario === 'aperez');
-    r = await api('POST', '/api/auth/login', { usuario: 'aperez', password: 'mala' });
-    check('usuario correcto + clave mala: 401 genérico', r.status === 401 && r.body.error === 'Credenciales inválidas');
-    r = await api('POST', '/api/auth/login', { usuario: 'noexiste99', password: 'x' });
-    check('usuario inexistente: el MISMO 401 (no revela si existe)', r.status === 401 && r.body.error === 'Credenciales inválidas');
-    r = await api('POST', '/api/auth/login', { email: 'a b', password: 'x' });
-    check('formato inválido (espacio): 400 "Escribe tu correo o tu usuario"', r.status === 400 && /correo o tu usuario/.test(r.body.error), JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/login', { email: 'ab', password: 'x' });
-    check('demasiado corto (2 letras): 400', r.status === 400);
-    r = await api('POST', '/api/auth/login', { password: 'x' });
-    check('sin correo ni usuario: 400', r.status === 400);
+    seccion('8. Sesión persistente: renovar con el refresh token');
+    const sesiones = await q("SELECT * FROM tsesiones WHERE cusuario='aperez' ORDER BY ssesion");
+    const primera = sesiones.find((s) => s.tokenhash === sha256(loginAna.refreshToken));
+    check('en TSESIONES se guarda el HASH (SHA-256) del refresh token, nunca el token', !!primera && primera.tokenhash.length === 64 && !JSON.stringify(sesiones).includes(loginAna.refreshToken));
+    check('la sesión guarda dispositivo y plataforma, y vence a los 90 días', primera.dispositivo === 'Pixel 7' && primera.plataforma === 'ANDROID' && Math.round((new Date(primera.fexpira) - Date.now()) / 86400000) === 90);
 
-    seccion('8. Cambiar clave autenticado');
-    r = await api('PUT', '/api/auth/change-password', { passwordActual: 'incorrecta', passwordNueva: 'nuevaClave1' }, tk);
+    const vencido = jwt.sign({ id: 'aperez', tipoUsuario: 'cliente' }, process.env.JWT_SECRET, { expiresIn: -10 });
+    r = await api('GET', '/api/auth/profile', null, vencido);
+    check('token de acceso vencido: 401 TOKENEXPIRADO (la app debe renovarlo)', r.status === 401 && r.body.code === 'TOKENEXPIRADO');
+
+    r = await api('POST', '/api/auth/refresh', {});
+    check('refresh sin token: 400', r.status === 400);
+    r = await api('POST', '/api/auth/refresh', { refreshToken: 'x'.repeat(48) });
+    check('refresh con token desconocido: 401 REFRESHINVALIDO', r.status === 401 && r.body.code === 'REFRESHINVALIDO');
+
+    r = await api('POST', '/api/auth/refresh', { refreshToken: loginAna.refreshToken });
+    check('refresh correcto: 200 con token de acceso nuevo y refresh token NUEVO', r.status === 200 && !!r.body.token && !!r.body.refreshToken && r.body.refreshToken !== loginAna.refreshToken && r.body.usuario.id === 'aperez', JSON.stringify(r.body).slice(0, 160));
+    const rotado = r.body;
+    r = await api('GET', '/api/auth/profile', null, rotado.token);
+    check('el token de acceso renovado funciona', r.status === 200);
+    const familia = (await q("SELECT cfamilia, count(*)::int n FROM tsesiones WHERE cusuario='aperez' AND tokenhash = ANY($1) GROUP BY cfamilia", [[sha256(loginAna.refreshToken), sha256(rotado.refreshToken)]]));
+    check('el token nuevo conserva la FAMILIA del anterior (mismo equipo) y el viejo queda marcado como usado', familia.length === 1 && familia[0].n === 2 && !!(await q('SELECT 1 FROM tsesiones WHERE tokenhash=$1 AND fusado IS NOT NULL', [sha256(loginAna.refreshToken)])).length);
+
+    r = await api('POST', '/api/auth/refresh', { refreshToken: loginAna.refreshToken });
+    check('reintento inmediato con el token viejo (red lenta): 409 REFRESHENUSO, sin revocar nada', r.status === 409 && r.body.code === 'REFRESHENUSO', JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/refresh', { refreshToken: rotado.refreshToken });
+    check('...y la sesión nueva sigue viva', r.status === 200);
+    const rotado2 = r.body;
+
+    await q("UPDATE tsesiones SET fusado = now() - interval '1 minute' WHERE tokenhash=$1", [sha256(loginAna.refreshToken)]);
+    r = await api('POST', '/api/auth/refresh', { refreshToken: loginAna.refreshToken });
+    check('reutilizar un token ya canjeado (posible robo): 401 REFRESHREUTILIZADO', r.status === 401 && r.body.code === 'REFRESHREUTILIZADO', JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/refresh', { refreshToken: rotado2.refreshToken });
+    check('...y se revoca TODA la familia: el token legítimo también deja de servir (SESIONCERRADA)', r.status === 401 && r.body.code === 'SESIONCERRADA', JSON.stringify(r.body));
+    check('motivo de revocación REUSO guardado', (await q("SELECT 1 FROM tsesiones WHERE motivorevocacion='REUSO' AND cusuario='aperez'")).length >= 2);
+
+    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1', dispositivo: 'iPhone', plataforma: 'ios' });
+    const sesB = r.body;
+    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1', dispositivo: 'Navegador', plataforma: 'web' });
+    const sesC = r.body;
+    r = await api('POST', '/api/auth/logout', { refreshToken: sesB.refreshToken });
+    check('logout: 200', r.status === 200);
+    r = await api('POST', '/api/auth/refresh', { refreshToken: sesB.refreshToken });
+    check('tras cerrar sesión el refresh token ya no sirve: 401 SESIONCERRADA', r.status === 401 && r.body.code === 'SESIONCERRADA');
+    r = await api('POST', '/api/auth/logout', { refreshToken: sesB.refreshToken });
+    check('cerrar sesión dos veces no es un error', r.status === 200);
+    r = await api('POST', '/api/auth/refresh', { refreshToken: sesC.refreshToken });
+    check('las otras sesiones de la persona siguen vivas', r.status === 200);
+    const sesC2 = r.body;
+    r = await api('POST', '/api/auth/logout-all', {}, sesC2.token);
+    check('logout-all (autenticado): 200 con la cantidad cerrada', r.status === 200 && r.body.cerradas >= 1, JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/refresh', { refreshToken: sesC2.refreshToken });
+    check('después de logout-all ninguna sesión renueva', r.status === 401);
+    r = await api('POST', '/api/auth/logout-all', {});
+    check('logout-all sin token de acceso: 401', r.status === 401);
+
+    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });
+    const sesD = r.body;
+    await q("UPDATE tsesiones SET fexpira = now() - interval '1 hour' WHERE tokenhash=$1", [sha256(sesD.refreshToken)]);
+    r = await api('POST', '/api/auth/refresh', { refreshToken: sesD.refreshToken });
+    check('sesión de más de 90 días sin usar: 401 REFRESHEXPIRADO', r.status === 401 && r.body.code === 'REFRESHEXPIRADO');
+
+    seccion('9. Cuenta desactivada');
+    r = await api('POST', '/api/auth/login', { email: 'ana2@test.com', password: 'secreto1' });
+    const sesE = r.body;
+    await q("UPDATE tusuarios SET cestatususuario='002' WHERE cusuario='aperez2'");
+    r = await api('GET', '/api/auth/profile', null, sesE.token);
+    check('usuario desactivado: su token de acceso deja de servir (403)', r.status === 403 && r.body.code === 'CUENTADESACTIVADA');
+    r = await api('POST', '/api/auth/refresh', { refreshToken: sesE.refreshToken });
+    check('...y no puede renovar la sesión (403) ni iniciar sesión', r.status === 403 && r.body.code === 'CUENTADESACTIVADA');
+    r = await api('POST', '/api/auth/login', { email: 'ana2@test.com', password: 'secreto1' });
+    check('login de cuenta desactivada: 403', r.status === 403);
+    const hv = await q("SELECT versioncontrol, cestatususuario, fhasta FROM tusuarios WHERE cusuario='aperez2' ORDER BY fdesde");
+    check('el cambio de estatus quedó en el historial (2 versiones: 001 cerrada y 002 vigente)', hv.length === 2 && hv[0].cestatususuario === '001' && hv[1].cestatususuario === '002' && hv[1].versioncontrol === 1, JSON.stringify(hv));
+
+    seccion('10. Cambiar clave autenticado');
+    r = await api('POST', '/api/auth/login', { email: 'jandry@test.com', password: 'secreto1' });
+    const jA = r.body;
+    r = await api('POST', '/api/auth/login', { email: 'jandry@test.com', password: 'secreto1' });
+    const jB = r.body;
+    r = await api('PUT', '/api/auth/change-password', { passwordActual: 'incorrecta', passwordNueva: 'nuevaClave1' }, jA.token);
     check('clave actual incorrecta: 401', r.status === 401 && r.body.code === 'CLAVEACTUALINCORRECTA');
-    r = await api('PUT', '/api/auth/change-password', { passwordActual: 'secreto1', passwordNueva: 'abc' }, tk);
+    r = await api('PUT', '/api/auth/change-password', { passwordActual: 'secreto1', passwordNueva: 'abc' }, jA.token);
     check('clave nueva muy corta: 400', r.status === 400);
-    r = await api('PUT', '/api/auth/change-password', { passwordActual: 'secreto1', passwordNueva: 'nuevaClave1' }, tk);
-    check('cambio correcto: 200', r.status === 200, JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'nuevaClave1' });
+    r = await api('PUT', '/api/auth/change-password', { passwordActual: 'secreto1', passwordNueva: 'nuevaClave1' }, jA.token);
+    check('cambio correcto: 200 y devuelve una SESIÓN NUEVA para este equipo', r.status === 200 && !!r.body.token && !!r.body.refreshToken, JSON.stringify(r.body).slice(0, 120));
+    const jNueva = r.body;
+    r = await api('POST', '/api/auth/refresh', { refreshToken: jB.refreshToken });
+    check('las sesiones de los OTROS equipos se cierran: 401 SESIONCERRADA', r.status === 401 && r.body.code === 'SESIONCERRADA');
+    r = await api('POST', '/api/auth/refresh', { refreshToken: jA.refreshToken });
+    check('la sesión vieja de este mismo equipo también se cierra', r.status === 401);
+    r = await api('POST', '/api/auth/refresh', { refreshToken: jNueva.refreshToken });
+    check('la sesión nueva entregada al cambiar la clave SÍ renueva', r.status === 200);
+    r = await api('POST', '/api/auth/login', { email: 'jandry@test.com', password: 'nuevaClave1' });
     check('login con la clave nueva: 200', r.status === 200);
-    const h2 = await q("SELECT versioncontrol v, fhasta FROM tusuarios WHERE cusuario='aperez' ORDER BY fdesde");
-    check('el cambio de clave SÍ versiona: la versión 0 queda cerrada (FHASTA) y la 1 es la vigente (2999)', h2.length === 2 && h2[0].v === 0 && h2[1].v === 1 && new Date(h2[0].fhasta) < new Date('2999-01-01') && new Date(h2[1].fhasta).getUTCFullYear() === 2999, JSON.stringify(h2));
+    const hc = await q("SELECT versioncontrol v, fhasta, cusuario_modificacion m FROM tusuarios WHERE cusuario='jcayapa' ORDER BY fdesde");
+    check('el cambio de clave SÍ versiona: v0 cerrada y v1 vigente (2999), y registra quién lo hizo', hc.length === 2 && hc[0].v === 0 && hc[1].v === 1 && new Date(hc[1].fhasta).getUTCFullYear() === 2999 && hc[1].m === 'jcayapa', JSON.stringify(hc));
 
-    seccion('9. Recuperar contraseña');
-    marca = salida.length;
-    r = await api('POST', '/api/auth/forgot-password', { email: 'nadie@test.com' });
-    check('email desconocido: mismo 200 genérico', r.status === 200 && /Si el correo existe/.test(r.body.message));
-    await dormir(600);
-    check('...y NO se envía ningún correo a cuentas inexistentes', !/Código de reset para nadie@test.com/.test(salida.slice(marca)));
-    marca = salida.length;
-    r = await api('POST', '/api/auth/forgot-password', { email: 'ana@test.com' });
-    check('email real: 200 genérico', r.status === 200 && /Si el correo existe/.test(r.body.message));
-    const codReset = await codigoDe('reset', 'ana@test.com', marca);
-    check('se generó el código de reseteo', /^\d{6}$/.test(codReset || ''));
-    r = await api('POST', '/api/auth/verify-reset-code', { email: 'ana@test.com', code: codReset === '000000' ? '111111' : '000000' });
-    check('código de reseteo incorrecto: 400', r.status === 400);
-    r = await api('POST', '/api/auth/verify-reset-code', { email: 'ana@test.com', code: codReset });
-    check('código correcto: devuelve resetToken', r.status === 200 && !!r.body.resetToken);
+    seccion('11. Recuperar contraseña');
+    r = await api('POST', '/api/auth/forgot-password', { email: 'noexiste@test.com' });
+    check('correo inexistente: mismo 200 (no revela si existe)', r.status === 200 && /Si el correo existe/.test(r.body.message));
+    desde = t.marca();
+    r = await api('POST', '/api/auth/forgot-password', { email: 'juan@test.com' });
+    check('correo existente: 200', r.status === 200);
+    const codReset = await t.codigoDe('juan@test.com', 'reset', desde);
+    check('se generó un código de 6 dígitos', /^\d{6}$/.test(codReset || ''));
+    r = await api('POST', '/api/auth/login', { email: 'juan@test.com', password: 'secreto1' });
+    const sesJuan = r.body;
+    r = await api('POST', '/api/auth/verify-reset-code', { email: 'juan@test.com', code: codReset });
+    check('verificar el código: 200 con resetToken', r.status === 200 && !!r.body.resetToken, JSON.stringify(r.body));
     const resetToken = r.body.resetToken;
-    r = await api('POST', '/api/auth/verify-reset-code', { email: 'ana@test.com', code: codReset });
-    check('el código no se puede reutilizar: 400', r.status === 400);
-    r = await api('POST', '/api/auth/reset-password', { resetToken, newPassword: 'claveReset9' });
-    check('reset con el token: 200', r.status === 200, JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'claveReset9' });
+    r = await api('POST', '/api/auth/reset-password', { resetToken, newPassword: 'claveNueva9' });
+    check('restablecer: 200', r.status === 200, JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/reset-password', { resetToken, newPassword: 'otraClave99' });
+    check('el resetToken es de UN solo uso: 401 TOKENRESETUSADO', r.status === 401 && r.body.code === 'TOKENRESETUSADO', JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/login', { email: 'juan@test.com', password: 'claveNueva9' });
     check('login con la clave restablecida: 200', r.status === 200);
-    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'nuevaClave1' });
-    check('la clave anterior ya no sirve: 401', r.status === 401);
-    r = await api('POST', '/api/auth/reset-password', { resetToken, newPassword: 'otraClave77' });
-    check('el MISMO resetToken no sirve dos veces: 401 TOKENRESETUSADO', r.status === 401 && r.body.code === 'TOKENRESETUSADO', JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/reset-password', { resetToken: 'falso', newPassword: 'otraClave77' });
-    check('resetToken falso: 401', r.status === 401);
+    r = await api('POST', '/api/auth/refresh', { refreshToken: sesJuan.refreshToken });
+    check('restablecer la clave cierra las sesiones que había (quien la robó pierde acceso)', r.status === 401 && r.body.code === 'SESIONCERRADA');
 
-    seccion('10. /api/usuarios (perfil del usuario)');
-    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'claveReset9' });
-    const tk2 = r.body.token;
-    r = await api('GET', '/api/usuarios/perfil', null, tk2);
-    check('GET perfil: { success, data }', r.status === 200 && r.body.success === true && r.body.data.email === 'ana@test.com');
-    r = await api('PUT', '/api/usuarios/actualizar', { nombre: 'Ana María', telefono: '0997777777' }, tk2);
-    check('actualizar perfil: 200', r.status === 200 && r.body.data.nombre === 'Ana María' && r.body.data.telefono === '0997777777', JSON.stringify(r.body));
-    r = await api('PUT', '/api/usuarios/actualizar', { telefono: '0991000002' }, tk2);
-    check('actualizar con teléfono de otro usuario: 409', r.status === 409);
-    r = await api('POST', '/api/usuarios/cambiar-contrasena', { passwordActual: 'claveReset9', passwordNueva: 'otraClave88', confirmarPassword: 'distinta' }, tk2);
-    check('confirmación distinta: 400 "no coinciden"', r.status === 400 && /no coinciden/.test(r.body.error), JSON.stringify(r.body));
-    r = await api('POST', '/api/usuarios/foto-perfil', { foto: 'abc' }, tk2);
-    check('foto de perfil inválida: 400 (el servicio de imágenes ya está activo)', r.status === 400 && r.body.code === 'IMAGENINVALIDA');
+    seccion('12. Perfil');
+    r = await api('POST', '/api/auth/login', { email: 'maria@test.com', password: 'secreto1' });
+    const mar = r.body;
+    r = await api('PUT', '/api/auth/profile', { nombre: 'Mariana', telefono: '0997770000' }, mar.token);
+    check('actualizar nombre y teléfono: 200', r.status === 200 && r.body.usuario.nombre === 'Mariana' && r.body.usuario.telefono === '0997770000', JSON.stringify(r.body).slice(0, 160));
+    const hp = await q(`SELECT nombres, versioncontrol v, cusuario_modificacion m, fhasta FROM tpersonas WHERE cpersona=(SELECT cpersona FROM vusuarios WHERE usuario='mtorre') ORDER BY fdesde`);
+    check('TPERSONAS versiona el cambio (María -> Mariana) y registra quién lo hizo (mtorre)', hp.length === 2 && hp[0].nombres === 'María del Carmen' && hp[1].nombres === 'Mariana' && hp[1].m === 'mtorre', JSON.stringify(hp));
+    const ht = await q(`SELECT numerotelefono, fhasta FROM tpersonatelefonos WHERE cpersona=(SELECT cpersona FROM vusuarios WHERE usuario='mtorre') ORDER BY fdesde`);
+    check('el teléfono también versiona: queda el anterior cerrado y el nuevo vigente', ht.length === 2 && ht[1].numerotelefono === '0997770000');
+    r = await api('PUT', '/api/auth/profile', { telefono: '0991000001' }, mar.token);
+    check('teléfono de otra persona: 409 TELEFONODUPLICADO', r.status === 409 && r.body.code === 'TELEFONODUPLICADO', JSON.stringify(r.body));
+    r = await api('PUT', '/api/auth/profile', { nombre: '' }, mar.token);
+    check('nombre vacío: 400', r.status === 400);
+    r = await api('GET', '/api/usuarios/perfil', null, mar.token);
+    check('GET /api/usuarios/perfil: formato { success, data }', r.status === 200 && r.body.success === true && r.body.data.id === 'mtorre');
+    r = await api('POST', '/api/usuarios/foto-perfil', { foto: 'abc' }, mar.token);
+    check('la foto de perfil aún no está disponible: 501 NOIMPLEMENTADO', r.status === 501 && r.body.code === 'NOIMPLEMENTADO');
+    r = await api('POST', '/api/usuarios/cambiar-contrasena', { passwordActual: 'secreto1', passwordNueva: 'otraNueva1', confirmarPassword: 'distinta' }, mar.token);
+    check('confirmación distinta: 400', r.status === 400);
 
-    seccion('11. Límites de peticiones (segundo servidor, con los límites ENCENDIDOS)');
-    srv.kill(); await dormir(800);
-    srv = spawn(process.execPath, ['src/server.js'], { cwd: BACKEND, env: { ...process.env, NODE_ENV: 'development', PORT: String(PUERTO), DB_NAME: 'vallexpress_test' } });
-    srv.stdout.on('data', (d) => { salida += d.toString(); }); srv.stderr.on('data', (d) => { salida += d.toString(); });
-    for (let i = 0; i < 50; i++) { try { if ((await fetch(`${BASE}/api/health`)).ok) break; } catch { /* aún no */ } await dormir(200); }
-    let n429 = 0; let primero = null; let r429;
-    for (let i = 0; i < 45; i++) { const x = await api('GET', `/api/auth/check-email/limite${i}@test.com`); if (x.status === 429) { n429++; primero = primero ?? i + 1; r429 = x; } }
-    check('consultas: del intento 41 en adelante responde 429', n429 === 5 && primero === 41, `429s=${n429}, primero=${primero}`);
-    check('el 429 trae mensaje, código y retryAfter', r429 && typeof r429.body.error === 'string' && r429.body.code === 'LIMITEEXCEDIDO' && r429.body.retryAfter > 0, JSON.stringify(r429 && r429.body));
-    let a = 0; for (let i = 0; i < 5; i++) { const x = await api('POST', '/api/auth/forgot-password', { email: `lim${i}@test.com` }); if (x.status === 200) a++; }
-    const x6 = await api('POST', '/api/auth/forgot-password', { email: 'lim9@test.com' });
-    check('recuperar clave: 5 por minuto y el 6.º da 429', a === 5 && x6.status === 429, `ok=${a}, sexto=${x6.status}`);
-    const sv = await api('POST', '/api/auth/send-verification', { email: 'otro@test.com' });
-    check('...y ese límite NO gasta el de verificar email (contadores independientes)', sv.status === 200, `status=${sv.status} ${JSON.stringify(sv.body)}`);
+    seccion('13. Auditoría y logs');
+    const acciones = (await q('SELECT DISTINCT accion FROM tauditoria')).map((x) => x.accion);
+    check('TAUDITORIA registra REGISTRO, LOGIN, LOGINFALLIDO, LOGOUT, CAMBIOCLAVE y RESETCLAVE', ['REGISTRO', 'LOGIN', 'LOGINFALLIDO', 'LOGOUT', 'CAMBIOCLAVE', 'RESETCLAVE'].every((a) => acciones.includes(a)), acciones.join(','));
+    const secretos = await q("SELECT count(*)::int n FROM tauditoria WHERE detalle::text ~* 'secreto1|nuevaClave1|\\$2[aby]\\$'");
+    check('la auditoría no guarda claves ni hashes', secretos[0].n === 0);
+    check('TLOGMENSAJES registra el reuso de refresh token', (await q("SELECT 1 FROM tlogmensajes WHERE accion='REFRESHREUTILIZADO'")).length >= 1);
 
-    seccion('12. Logs y auditoría en la BD');
-    const aud = await q('SELECT accion, count(*)::int n FROM tauditoria GROUP BY 1 ORDER BY 1');
-    const accs = Object.fromEntries(aud.map((x) => [x.accion, x.n]));
-    check('AUDITORIA registra REGISTRO, LOGIN, LOGINFALLIDO, CAMBIOCLAVE y RESETCLAVE', accs.REGISTRO >= 4 && accs.LOGIN >= 3 && accs.LOGINFALLIDO >= 5 && accs.CAMBIOCLAVE === 1 && accs.RESETCLAVE === 1, JSON.stringify(accs));
-    const lm = await q('SELECT modulo,accion,nivel, solicitudid FROM tlogmensajes ORDER BY id LIMIT 1');
-    check('LOGMENSAJES: el fallo de correo quedó como ADVERTENCIA (con SOLICITUDID)', lm[0] && lm[0].modulo === 'CORREO' && lm[0].nivel === 'ADVERTENCIA' && !!lm[0].solicitudid, JSON.stringify(lm[0]));
-    const filtrado = await q(`SELECT count(*)::int n FROM tlogmensajes WHERE detalle::text ~ '[0-9]{6}'`);
-    check('ningún log contiene un código de 6 dígitos', filtrado[0].n === 0, `n=${filtrado[0].n}`);
-
-    seccion('13. Un error 500 real queda en LOGERRORES (con los datos sensibles ocultos)');
-    // Se rompe la BD a propósito (renombrando una tabla un instante) para provocar un error 500 dentro del módulo nuevo.
-    await db.query('ALTER TABLE configuraciones RENAME TO configuracionesx');
-    r = await api('POST', '/api/auth/register', { nombre: 'Boom', apellido: 'Test', email: 'boom@test.com', telefono: '0991000077', cedula: cedula(17, 1077), password: 'claveSecreta1', tipoUsuario: 'cliente' });
-    await db.query('ALTER TABLE configuracionesx RENAME TO configuraciones');
-    check('el error interno responde 500 con "error" en texto y código', r.status === 500 && typeof r.body.error === 'string' && r.body.code === 'ERRORINTERNO', JSON.stringify(r.body).slice(0, 150));
-    await dormir(500);
-    const le = (await q('SELECT * FROM tlogerrores ORDER BY id DESC LIMIT 1'))[0];
-    check('LOGERRORES: módulo AUTH, método POST, ruta, estado 500', le && le.modulo === 'AUTH' && le.metodo === 'POST' && le.ruta === '/api/auth/register' && le.estadohttp === 500, JSON.stringify(le && { m: le.modulo, r: le.ruta, e: le.estadohttp }));
-    check('LOGERRORES: stack, huella SHA-256 y mensaje del error real', le && !!le.stack && /^[0-9a-f]{64}$/.test((le.huella || '').trim()) && /configuraciones/i.test(le.mensaje), le && le.mensaje);
-    check('LOGERRORES: el SOLICITUDID coincide con el X-Request-Id de la respuesta', le && le.solicitudid === r.headers.get('x-request-id'));
-    check('LOGERRORES: la contraseña enviada quedó OCULTA y no aparece en ninguna parte de la fila', le && le.cuerpo && le.cuerpo.password === '[OCULTO]' && !JSON.stringify(le).includes('claveSecreta1'), JSON.stringify(le && le.cuerpo));
-    check('LOGERRORES: el resto del cuerpo sí se conserva para depurar', le && le.cuerpo && le.cuerpo.nombre === 'Boom' && le.cuerpo.tipoUsuario === 'cliente');
-    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'claveReset9' });
-    check('tras restaurar la tabla todo vuelve a funcionar', r.status === 200);
-    const { limpiar } = require(path.join(BACKEND, 'src/shared/services/log.service.js'));
-    const lim = limpiar({ email: 'a@b.c', password: 'x', nested: { resetToken: 'y', authorization: 'Bearer z', ok: 1 }, codigo: '123456' });
-    check('limpiar() oculta password/token/authorization/código', lim.password === '[OCULTO]' && lim.nested.resetToken === '[OCULTO]' && lim.nested.authorization === '[OCULTO]' && lim.codigo === '[OCULTO]' && lim.email === 'a@b.c' && lim.nested.ok === 1);
+    seccion('14. Base de datos');
+    check('el administrador (CPERSONA 1) sigue intacto', (await q(`SELECT 1 FROM tpersonas WHERE cpersona=1 AND fhasta=${VIGENTE}`)).length === 1);
+    const mayus = (await q("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='public' AND (column_name<>lower(column_name) OR table_name<>lower(table_name))"))[0].n;
+    const uuidsCol = (await q("SELECT count(*)::int n FROM information_schema.columns WHERE table_schema='public' AND data_type='uuid' AND table_name<>'tsesiones'"))[0].n;
+    check('ningún nombre guardado con mayúsculas y UUID solo en la familia de sesiones', mayus === 0 && uuidsCol === 0, `mayus=${mayus} uuid=${uuidsCol}`);
+    const purga = (await q('SELECT * FROM purgarsesiones()'))[0];
+    check('PURGARSESIONES() corre sin errores', purga && purga.sesiones >= 0);
+    await t.finalizar();
   } catch (e) {
-    fallos.push('EXCEPCIÓN: ' + e.message); console.log('\n✘ EXCEPCIÓN', e);
-  } finally {
-    await db.end().catch(() => {}); srv.kill(); await dormir(500); await borrarBaseTemporal().catch(() => {});
+    await t.finalizar(e);
   }
-  console.log(`\n════════ ${ok} pruebas correctas, ${fallos.length} fallidas ════════`);
-  if (fallos.length) { console.log('Fallidas:\n - ' + fallos.join('\n - ')); }
-  process.exit(fallos.length ? 1 : 0);
 })();

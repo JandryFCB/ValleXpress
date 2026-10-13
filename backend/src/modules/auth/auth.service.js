@@ -1,30 +1,33 @@
 const Usuario = require('./usuario.model');
-const VendedorService = require('../vendedores/vendedor.service');
-const RepartidorService = require('../repartidores/repartidor.service');
-const ArchivoService = require('../../shared/services/archivo.service');
-const Repartidor = require('../repartidores/repartidor.model');
+const Persona = require('./persona.model');
+const UsuarioCuenta = require('./usuarioCuenta.model');
+const UsuarioAcceso = require('./usuarioAcceso.model');
+const Telefono = require('../telefonos/telefono.model');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const TokenService = require('../../shared/services/token.service');
+const SesionService = require('../../shared/services/sesion.service');
 const CodigoService = require('../../shared/services/codigo.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const { logMensaje, auditar } = require('../../shared/services/log.service');
 const { hashClave, compararClave, HASHRELLENO } = require('../../shared/utils/clave');
-const { normalizarEmail, normalizarTelefono, normalizarPlaca } = require('../../shared/utils/normalizers');
-const {
-  ROLES, APIAROL, ROLESREGISTRABLES, PROPOSITOCODIGO,
-} = require('../../shared/constants/codigos');
+const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
+const { ROLES, APIAROL, ROLESREGISTRABLES, PROPOSITOCODIGO } = require('../../shared/constants/codigos');
 
 // Toda la lógica de negocio de autenticación. El controller solo llama a estos métodos.
+//
+// Sesión persistente: el login y el registro devuelven un token de ACCESO corto (15 min, campo "token") y un
+// REFRESH TOKEN largo (campo "refreshToken") que la app guarda cifrado y canjea en POST /auth/refresh.
 
 const MAXINTENTOSFALLIDOS = 5;       // tras 5 claves incorrectas seguidas...
 const MINUTOSBLOQUEO = 15;           // ...la cuenta se bloquea 15 minutos
+const TIPODOCCEDULA = '001';         // TTIPOSDOCUMENTO: 001 cédula
 const ipDe = (req) => (req?.ip ? String(req.ip).replace(/^::ffff:/, '') : null);
 
 // Lo que se devuelve del usuario a la app (nunca el hash de la clave)
 const usuarioPublico = (u) => ({
   id: u.id,
-  usuario: u.id,                 // jcayapa: clave primaria y nombre para iniciar sesión
+  usuario: u.id,                 // jcayapa: clave y nombre para iniciar sesión
   nombre: u.nombre,
   apellido: u.apellido,
   email: u.email,
@@ -35,15 +38,25 @@ const usuarioPublico = (u) => ({
   verificado: u.verificado,
 });
 
-// Perfil completo. fotoPerfil es la URL de la imagen (guardada en ARCHIVOS) o null.
-const usuarioPerfil = (u, fotoPerfil = null) => ({
+// Perfil completo. fotoPerfil queda en null hasta que exista el módulo de archivos.
+const usuarioPerfil = (u) => ({
   ...usuarioPublico(u),
-  fotoPerfil,
+  fotoPerfil: null,
   createdAt: u.creadoEn,
   ultimaConexion: u.ultimaConexion,
 });
 
-// Envía un correo con código. Devuelve true/false; si falla lo deja en LOGMENSAJES (no rompe la petición).
+// Abre una sesión persistente para el usuario y arma el par de tokens que recibe la app
+async function abrirSesion(usuario, req, opciones = {}) {
+  const refreshToken = await SesionService.crear(
+    usuario.id,
+    { dispositivo: req?.body?.dispositivo, plataforma: req?.body?.plataforma, ip: ipDe(req) },
+    opciones,
+  );
+  return { token: TokenService.crear(usuario), refreshToken, expiresIn: TokenService.segundosAcceso() };
+}
+
+// Envía un correo con código. Devuelve true/false; si falla lo deja en TLOGMENSAJES (no rompe la petición).
 // Solo en desarrollo el código se imprime en consola (para probar sin proveedor de correo).
 async function enviarCorreoCodigo(tipo, { email, codigo, nombre }, req) {
   const mailer = require('../../services/mailer.service');
@@ -61,65 +74,55 @@ async function enviarCorreoCodigo(tipo, { email, codigo, nombre }, req) {
 // ---------------------------------------------------------------------------------------------
 // Registro
 // ---------------------------------------------------------------------------------------------
+// Crea la persona, la cuenta (el CUSUARIO lo genera la BD a partir del nombre) y el teléfono principal.
+// El perfil de negocio (vendedor) o de reparto (repartidor) se completa en sus propios módulos.
 async function registrar(datos, req) {
   const tipo = datos.tipoUsuario || 'cliente';
   if (!ROLESREGISTRABLES.includes(tipo)) throw AppError.badRequest('Tipo de usuario inválido', 'TIPOUSUARIOINVALIDO');
 
   const email = normalizarEmail(datos.email);
   const telefono = normalizarTelefono(datos.telefono);
-  const placa = tipo === 'repartidor' ? normalizarPlaca(datos.placa) : null;
-  const nombre = datos.nombre.trim();
-
-  const terminosVer = await ConfiguracionService.obtener('VERSIONTERMINOS', '1.0');
+  const terminosVer = String(await ConfiguracionService.obtener('VERSIONTERMINOS', '1.0'));
   const claveHash = await hashClave(datos.password);
   const ahora = new Date();
 
-  const usuario = await withTransaction(async (t) => {
+  const cuenta = await withTransaction(async (t) => {
     // 1) El email debe haberse verificado (la app ya lo exige; ahora también el servidor)
     const verificacion = await CodigoService.exigirEmailVerificado(email, { transaction: t });
 
-    // 2) Datos únicos (también cuentan los usuarios borrados lógicamente)
-    const existe = (where) => Usuario.findOne({ where, transaction: t, paranoid: false });
-    if (await existe({ email })) throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
-    if (await existe({ tipoDoc: 'CEDULA', cedula: datos.cedula })) throw AppError.conflict('La cédula ya está registrada', 'CEDULADUPLICADA');
-    if (await existe({ telefono })) throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
-    if (placa && await Repartidor.findOne({ where: { placa }, transaction: t, paranoid: false })) {
-      throw AppError.conflict('Esta placa ya está registrada por otro repartidor', 'PLACADUPLICADA');
-    }
+    // 2) Datos únicos entre las personas vigentes
+    if (await Persona.findOne({ where: { correo: email }, transaction: t })) throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
+    if (await Persona.findOne({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: datos.cedula }, transaction: t })) throw AppError.conflict('La cédula ya está registrada', 'CEDULADUPLICADA');
+    if (await Telefono.findOne({ where: { numero: telefono }, transaction: t })) throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
 
-    // 3) Usuario + perfil según el rol
-    // La BD genera el USUARIO (clave primaria) a partir del nombre y se registra a sí mismo como creador
-    const nuevo = await Usuario.create({
-      rol: APIAROL[tipo],
-      nombre,
-      apellido: datos.apellido.trim(),
-      email,
-      telefono,
-      cedula: datos.cedula,
-      passwordHash: claveHash,
-      verificado: true,
-      emailVerificadoEn: ahora,
-      terminosEn: ahora,
-      terminosVer: String(terminosVer),
+    // 3) Persona -> cuenta -> teléfono (la BD asigna CPERSONA desde el 2 y genera el CUSUARIO)
+    const persona = await Persona.create({
+      tipoDoc: TIPODOCCEDULA,
+      numeroDoc: datos.cedula,
+      nombres: datos.nombre.trim(),
+      apellidos: datos.apellido.trim(),
+      correo: email,
+      correoVerificadoEn: verificacion.verificadoEn || ahora,
     }, { transaction: t });
 
-    if (tipo === 'vendedor') {
-      await VendedorService.crearPerfil(nuevo.id, {
-        nombreNegocio: datos.nombreNegocio, descripcion: datos.descripcionNegocio, categoria: datos.categoriaNegocio,
-      }, { transaction: t, nombreUsuario: nombre });
-    }
+    const nueva = await UsuarioCuenta.create({
+      personaId: persona.id,
+      rol: APIAROL[tipo],
+      claveHash,
+      terminosEn: ahora,
+      terminosVer,
+    }, { transaction: t });
 
-    if (tipo === 'repartidor') {
-      await RepartidorService.crearPerfil(nuevo.id, datos, { transaction: t });     // la licencia es opcional: se completa luego
-    }
+    await Telefono.create({ personaId: persona.id, numero: telefono, principal: true }, { transaction: t });
 
     // 4) El código de verificación queda consumido (no sirve para registrar otra cuenta)
     await CodigoService.consumir(verificacion, { transaction: t });
-    return nuevo;
+    return nueva;
   });
 
+  const usuario = await Usuario.findByPk(cuenta.id);
   auditar({ usuarioId: usuario.id, accion: 'REGISTRO', entidad: 'USUARIOS', entidadId: usuario.id, detalle: { tipoUsuario: tipo }, req });
-  return { usuario: usuarioPublico(usuario), token: TokenService.crear(usuario) };
+  return { usuario: usuarioPublico(usuario), ...(await abrirSesion(usuario, req)) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -148,72 +151,103 @@ async function login({ email: identificador, password }, req) {
   if (!(await usuario.verificarClave(password))) {
     const intentos = usuario.intentosFallidos + 1;
     const bloquear = intentos >= MAXINTENTOSFALLIDOS;
-    await usuario.update({
-      intentosFallidos: bloquear ? 0 : intentos,
+    await UsuarioAcceso.update({
+      intentos: bloquear ? 0 : intentos,
       bloqueadoHasta: bloquear ? new Date(Date.now() + MINUTOSBLOQUEO * 60 * 1000) : null,
-    });
+    }, { where: { id: usuario.id } });
     auditar({ usuarioId: usuario.id, accion: 'LOGINFALLIDO', entidad: 'USUARIOS', entidadId: usuario.id, detalle: { intentos, bloqueado: bloquear }, req });
     throw AppError.unauthorized('Credenciales inválidas', 'CREDENCIALESINVALIDAS');
   }
 
-  await usuario.update({ intentosFallidos: 0, bloqueadoHasta: null, ultimaConexion: new Date(), ultimaIp: ipDe(req) });
+  await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null, ultimaConexion: new Date(), ultimaIp: ipDe(req) }, { where: { id: usuario.id } });
   auditar({ usuarioId: usuario.id, accion: 'LOGIN', entidad: 'USUARIOS', entidadId: usuario.id, req });
-  return { usuario: usuarioPublico(usuario), token: TokenService.crear(usuario) };
+  return { usuario: usuarioPublico(usuario), ...(await abrirSesion(usuario, req)) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sesión persistente: renovar y cerrar
+// ---------------------------------------------------------------------------------------------
+// Canjea el refresh token por un token de acceso nuevo y un refresh token nuevo (rotación).
+async function refrescar({ refreshToken }, req) {
+  const { usuario, refreshToken: nuevo } = await SesionService.rotar(refreshToken, ipDe(req));
+  await UsuarioAcceso.update({ ultimaConexion: new Date(), ultimaIp: ipDe(req) }, { where: { id: usuario.id } });
+  return { usuario: usuarioPublico(usuario), token: TokenService.crear(usuario), refreshToken: nuevo, expiresIn: TokenService.segundosAcceso() };
+}
+
+// Cierra la sesión de este equipo
+async function cerrarSesion({ refreshToken }, req) {
+  await SesionService.cerrar(refreshToken);
+  auditar({ accion: 'LOGOUT', entidad: 'USUARIOS', req });
+}
+
+// Cierra la sesión en todos los equipos del usuario
+async function cerrarTodasLasSesiones(usuarioId, req) {
+  const cerradas = await SesionService.cerrarTodas(usuarioId, 'CIERRETODAS');
+  auditar({ usuarioId, accion: 'LOGOUTTODAS', entidad: 'USUARIOS', entidadId: usuarioId, detalle: { cerradas }, req });
+  return { cerradas };
 }
 
 // ---------------------------------------------------------------------------------------------
 // Perfil
 // ---------------------------------------------------------------------------------------------
-const fotoDe = async (usuario, req) => (await ArchivoService.mapaUrls(req, [usuario.fotoId]))[usuario.fotoId]?.url || null;
-
-async function obtenerPerfil(id, req) {
+async function cargarUsuario(id) {
   const usuario = await Usuario.findByPk(id);
   if (!usuario) throw AppError.notFound('Usuario no encontrado', 'USUARIONOENCONTRADO');
-  return usuarioPerfil(usuario, await fotoDe(usuario, req));
+  return usuario;
 }
 
-// Recibe la foto en base64, la optimiza (WebP) y guarda su código en USUARIOS.FOTO. Devuelve la URL.
-async function subirFoto(id, base64, req) {
-  const usuario = await Usuario.findByPk(id);
-  if (!usuario) throw AppError.notFound('Usuario no encontrado', 'USUARIONOENCONTRADO');
-  const archivo = await ArchivoService.guardarBase64({ base64, categoria: 'PERFIL', propietario: id });
-  await withTransaction((t) => usuario.update({ fotoId: archivo.id, actualizadoPor: id }, { transaction: t }), { usuarioId: id });
-  auditar({ usuarioId: id, accion: 'FOTOACTUALIZADA', entidad: 'USUARIOS', entidadId: id, req });
-  return (await ArchivoService.mapaUrls(req, [archivo.id]))[archivo.id].url;
+async function obtenerPerfil(id) {
+  return usuarioPerfil(await cargarUsuario(id));
+}
+
+// Pendiente: la foto de perfil se guarda en el módulo de archivos (aún no migrado a las tablas nuevas)
+async function subirFoto() {
+  throw new AppError('La foto de perfil estará disponible pronto', 501, 'NOIMPLEMENTADO');
 }
 
 async function actualizarPerfil(id, { nombre, apellido, telefono }, req) {
-  const usuario = await Usuario.findByPk(id);
-  if (!usuario) throw AppError.notFound('Usuario no encontrado', 'USUARIONOENCONTRADO');
+  const usuario = await cargarUsuario(id);
 
-  if (telefono && telefono !== usuario.telefono
-      && await Usuario.findOne({ where: { telefono }, paranoid: false })) {
-    throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
+  if (telefono && telefono !== usuario.telefono) {
+    const existente = await Telefono.findOne({ where: { numero: telefono } });
+    if (existente && String(existente.personaId) !== String(usuario.personaId)) {
+      throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
+    }
   }
 
-  await withTransaction((t) => usuario.update({
-    ...(nombre && { nombre: nombre.trim() }),
-    ...(apellido && { apellido: apellido.trim() }),
-    ...(telefono && { telefono }),
-    actualizadoPor: id,
-  }, { transaction: t }), { usuarioId: id });
+  await withTransaction(async (t) => {
+    if (nombre || apellido) {
+      await Persona.update({
+        ...(nombre && { nombres: nombre.trim() }),
+        ...(apellido && { apellidos: apellido.trim() }),
+      }, { where: { id: usuario.personaId }, transaction: t });
+    }
+    if (telefono && telefono !== usuario.telefono) {
+      const principal = await Telefono.findOne({ where: { personaId: usuario.personaId, principal: true }, transaction: t });
+      if (principal) await Telefono.update({ numero: telefono }, { where: { personaId: usuario.personaId, secuencia: principal.secuencia }, transaction: t });
+      else await Telefono.create({ personaId: usuario.personaId, numero: telefono, principal: true }, { transaction: t });
+    }
+  }, { usuarioId: id });
 
   auditar({ usuarioId: id, accion: 'PERFILACTUALIZADO', entidad: 'USUARIOS', entidadId: id, req });
-  return usuarioPerfil(usuario, await fotoDe(usuario, req));
+  return usuarioPerfil(await cargarUsuario(id));
 }
 
+// Cambia la clave, cierra las sesiones de TODOS los equipos y deja abierta una sesión nueva en este
+// (así quien cambia su clave no queda fuera, pero un ladrón con una sesión vieja sí).
 async function cambiarClave(id, { passwordActual, passwordNueva }, req) {
-  const usuario = await Usuario.findByPk(id);
-  if (!usuario) throw AppError.notFound('Usuario no encontrado', 'USUARIONOENCONTRADO');
+  const usuario = await cargarUsuario(id);
   if (!(await usuario.verificarClave(passwordActual))) {
     throw AppError.unauthorized('Contraseña actual incorrecta', 'CLAVEACTUALINCORRECTA');
   }
   const claveHash = await hashClave(passwordNueva);
-  await withTransaction((t) => usuario.update(
-    { passwordHash: claveHash, claveCambiadaEn: new Date(), actualizadoPor: id },
-    { transaction: t },
-  ), { usuarioId: id });
+  const sesion = await withTransaction(async (t) => {
+    await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id }, transaction: t });
+    await SesionService.cerrarTodas(id, 'CLAVE', { transaction: t });
+    return abrirSesion(usuario, req, { transaction: t });
+  }, { usuarioId: id });
   auditar({ usuarioId: id, accion: 'CAMBIOCLAVE', entidad: 'USUARIOS', entidadId: id, req });
+  return sesion;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -256,9 +290,11 @@ async function restablecerClave({ resetToken, newPassword }, req) {
   if (cambioActual !== (payload.cc || 0)) throw AppError.unauthorized('Este enlace ya fue utilizado', 'TOKENRESETUSADO');
 
   const claveHash = await hashClave(newPassword);
-  await withTransaction((t) => usuario.update({
-    passwordHash: claveHash, claveCambiadaEn: new Date(), intentosFallidos: 0, bloqueadoHasta: null, actualizadoPor: usuario.id,
-  }, { transaction: t }), { usuarioId: usuario.id });
+  await withTransaction(async (t) => {
+    await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id: usuario.id }, transaction: t });
+    await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null }, { where: { id: usuario.id }, transaction: t });
+    await SesionService.cerrarTodas(usuario.id, 'CLAVE', { transaction: t });     // las sesiones viejas dejan de servir
+  }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'RESETCLAVE', entidad: 'USUARIOS', entidadId: usuario.id, req });
 }
@@ -270,7 +306,7 @@ async function enviarCodigoEmail({ email: emailEntrada, nombre, fcmToken }, req)
   const email = normalizarEmail(emailEntrada);
 
   // No se envían códigos a cuentas que ya existen (evita spam a usuarios registrados)
-  if (await Usuario.findOne({ where: { email }, paranoid: false })) {
+  if (await Persona.findOne({ where: { correo: email } })) {
     throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
   }
 
@@ -301,14 +337,14 @@ async function verificarCodigoEmail({ email: emailEntrada, code }) {
 // ---------------------------------------------------------------------------------------------
 // Consultas en tiempo real del formulario de registro
 // ---------------------------------------------------------------------------------------------
-const existeCedula = async (cedula) => (await Usuario.count({ where: { tipoDoc: 'CEDULA', cedula }, paranoid: false })) > 0;
-const existeEmail = async (email) => (await Usuario.count({ where: { email: normalizarEmail(email) }, paranoid: false })) > 0;
-const existePlaca = async (placa) => (await Repartidor.count({ where: { placa: normalizarPlaca(placa) }, paranoid: false })) > 0;
+const existeCedula = async (cedula) => (await Persona.count({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: cedula } })) > 0;
+const existeEmail = async (email) => (await Persona.count({ where: { correo: normalizarEmail(email) } })) > 0;
 
 module.exports = {
   ROLES,
-  registrar, login, obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave,
+  registrar, login, refrescar, cerrarSesion, cerrarTodasLasSesiones,
+  obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave,
   solicitarCodigoReset, verificarCodigoReset, restablecerClave,
   enviarCodigoEmail, verificarCodigoEmail,
-  existeCedula, existeEmail, existePlaca,
+  existeCedula, existeEmail,
 };

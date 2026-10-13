@@ -1,11 +1,11 @@
+const { Op } = require('sequelize');
 const CodigoVerificacion = require('../../modules/auth/codigoVerificacion.model');
 const { PROPOSITOCODIGO } = require('../constants/codigos');
 const { generarCodigo6 } = require('../utils/codes');
 const { hashClave, compararClave } = require('../utils/clave');
 const AppError = require('../errors/AppError');
 
-// Códigos de 6 dígitos (verificar email, recuperar clave). Antes esta lógica estaba duplicada
-// en dos pares de métodos del controller.
+// Códigos de 6 dígitos (verificar el correo, recuperar la clave). Viven en TCODIGOSVERIFICACION.
 
 // Crea un código nuevo y devuelve el código EN CLARO (solo para enviarlo por correo/push; en la BD va con hash).
 async function generar({ proposito, email, usuarioId = null, ip = null, tokenFcm = null, minutosExpira = 15, esperaSeg = 60 }) {
@@ -62,9 +62,8 @@ async function verificar({ proposito, email, codigo }) {
 
 const consumir = (registro, opciones = {}) => registro.update({ usadoEn: new Date() }, opciones);
 
-// El registro exige que el email se haya verificado hace poco y que ese código no se haya usado ya.
+// El registro exige que el correo se haya verificado hace poco y que ese código no se haya usado ya.
 async function exigirEmailVerificado(email, { minutos = 60, transaction } = {}) {
-  const { Op } = require('sequelize');
   const registro = await CodigoVerificacion.findOne({
     where: {
       proposito: PROPOSITOCODIGO.EMAIL,

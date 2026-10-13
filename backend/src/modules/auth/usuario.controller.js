@@ -6,7 +6,7 @@ const authService = require('./auth.service');
 // Formato de respuesta { success, data } que ya usa la app.
 
 const obtenerPerfil = asyncHandler(async (req, res) => {
-  res.json({ success: true, data: await authService.obtenerPerfil(req.usuario.id, req) });
+  res.json({ success: true, data: await authService.obtenerPerfil(req.usuario.id) });
 });
 
 const actualizarPerfil = asyncHandler(async (req, res) => {
@@ -19,8 +19,8 @@ const actualizarPerfil = asyncHandler(async (req, res) => {
 });
 
 const cambiarContrasena = asyncHandler(async (req, res) => {
-  await authService.cambiarClave(req.usuario.id, req.body, req);
-  res.json({ success: true, message: 'Contraseña actualizada correctamente' });
+  const sesion = await authService.cambiarClave(req.usuario.id, req.body, req);
+  res.json({ success: true, message: 'Contraseña actualizada correctamente', data: sesion });
 });
 
 // La foto llega en base64 (como la envía la app); se optimiza a WebP, se guarda en disco y su código en ARCHIVOS.

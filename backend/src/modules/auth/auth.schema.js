@@ -1,5 +1,5 @@
 const { body, param } = require('express-validator');
-const { validarEmail, validarCedula, validarTelefono, validarPlaca, validarIdentificador } = require('../../shared/utils/validators');
+const { validarEmail, validarCedula, validarTelefono, validarIdentificador } = require('../../shared/utils/validators');
 const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
 const { ROLESREGISTRABLES } = require('../../shared/constants/codigos');
 
@@ -7,7 +7,6 @@ const { ROLESREGISTRABLES } = require('../../shared/constants/codigos');
 // Los validadores (email, cédula, teléfono, placa) viven en shared/utils/validators.js.
 
 const MSGTELEFONO = 'El teléfono debe tener 10 dígitos y empezar con 09 (ej: 0991234567)';
-const MSGPLACA = 'Placa inválida. Formatos válidos: AB1234 o ABC-123 (2-3 letras + 3-4 números)';
 
 const email = (campo = 'email', origen = body) => origen(campo)
   .trim()
@@ -20,6 +19,11 @@ const clave = (campo) => body(campo)
 
 const codigo6 = body('code').trim().matches(/^\d{6}$/).withMessage('El código debe tener 6 dígitos');
 
+const dispositivo = [
+  body('dispositivo').optional({ values: 'falsy' }).isString().isLength({ max: 100 }).withMessage('Nombre de dispositivo demasiado largo'),
+  body('plataforma').optional({ values: 'falsy' }).isString().toUpperCase().isIn(['ANDROID', 'IOS', 'WEB']).withMessage('Plataforma inválida'),
+];
+
 const registro = [
   body('nombre').trim().notEmpty().withMessage('El nombre es requerido')
     .isLength({ min: 2, max: 100 }).withMessage('Nombre inválido'),
@@ -30,12 +34,8 @@ const registro = [
   body('cedula').trim().custom(validarCedula).withMessage('Cédula inválida: verifica los 10 dígitos'),
   clave('password'),
   body('tipoUsuario').isIn(ROLESREGISTRABLES).withMessage('Tipo de usuario inválido'),
-  body('nombreNegocio').optional({ values: 'falsy' }).trim().isLength({ max: 200 }).withMessage('Nombre de negocio demasiado largo'),
-  // Solo para repartidores
-  body('vehiculo').if(body('tipoUsuario').equals('repartidor')).trim()
-    .isLength({ min: 2, max: 50 }).withMessage('El tipo de vehículo es requerido (mínimo 2 caracteres)'),
-  body('placa').if(body('tipoUsuario').equals('repartidor')).custom(validarPlaca).withMessage(MSGPLACA),
-  body('licencia').optional({ values: 'falsy' }).trim().isLength({ max: 30 }).withMessage('Licencia demasiado larga'),
+  // Datos del dispositivo (opcionales): se guardan en la sesión para poder mostrar "dispositivos con sesión iniciada"
+  ...dispositivo,
 ];
 
 // Se puede entrar con el correo O con el usuario (jcayapa). La app envía el valor en "email" (así ya funciona sin
@@ -45,6 +45,12 @@ const login = [
     .customSanitizer((valor, { req }) => normalizarEmail(valor ?? req.body.usuario))
     .custom(validarIdentificador).withMessage('Escribe tu correo o tu usuario'),
   body('password').isString().notEmpty().withMessage('La contraseña es requerida'),
+  ...dispositivo,
+];
+
+// Renovar o cerrar la sesión: el refresh token es obligatorio
+const refrescar = [
+  body('refreshToken').isString().withMessage('refreshToken es requerido').isLength({ min: 20, max: 200 }).withMessage('refreshToken inválido'),
 ];
 
 const correo = [email()];                                           // forgot-password
@@ -74,9 +80,8 @@ const cambiarClave = [
 // Consultas en tiempo real del formulario de registro
 const consultaCedula = [param('cedula').custom(validarCedula).withMessage('Cédula inválida')];
 const consultaEmail = [email('email', param)];
-const consultaPlaca = [param('placa').custom(validarPlaca).withMessage('Placa inválida')];
 
 module.exports = {
-  registro, login, correo, verificarCodigo, enviarVerificacion, restablecer,
-  actualizarPerfil, cambiarClave, consultaCedula, consultaEmail, consultaPlaca,
+  registro, login, refrescar, correo, verificarCodigo, enviarVerificacion, restablecer,
+  actualizarPerfil, cambiarClave, consultaCedula, consultaEmail,
 };

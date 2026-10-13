@@ -15,8 +15,25 @@ const login = asyncHandler(async (req, res) => {
   res.json({ message: 'Inicio de sesión exitoso', ...resultado });
 });
 
+// Sesión persistente: canjea el refresh token por un token de acceso nuevo (y un refresh token nuevo)
+const refresh = asyncHandler(async (req, res) => {
+  res.json(await authService.refrescar(req.body, req));
+});
+
+// Cierra la sesión de este equipo (el refresh token es la credencial, no hace falta el token de acceso)
+const logout = asyncHandler(async (req, res) => {
+  await authService.cerrarSesion(req.body, req);
+  res.json({ message: 'Sesión cerrada' });
+});
+
+// Cierra la sesión en todos los equipos del usuario
+const logoutAll = asyncHandler(async (req, res) => {
+  const resultado = await authService.cerrarTodasLasSesiones(req.usuario.id, req);
+  res.json({ message: 'Sesiones cerradas en todos tus dispositivos', ...resultado });
+});
+
 const getProfile = asyncHandler(async (req, res) => {
-  res.json({ usuario: await authService.obtenerPerfil(req.usuario.id, req) });
+  res.json({ usuario: await authService.obtenerPerfil(req.usuario.id) });
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
@@ -24,9 +41,10 @@ const updateProfile = asyncHandler(async (req, res) => {
   res.json({ message: 'Perfil actualizado exitosamente', usuario });
 });
 
+// Cambiar la clave cierra las demás sesiones y devuelve una sesión nueva para este equipo
 const changePassword = asyncHandler(async (req, res) => {
-  await authService.cambiarClave(req.usuario.id, req.body, req);
-  res.json({ message: 'Contraseña actualizada exitosamente' });
+  const sesion = await authService.cambiarClave(req.usuario.id, req.body, req);
+  res.json({ message: 'Contraseña actualizada exitosamente', ...sesion });
 });
 
 const forgotPassword = asyncHandler(async (req, res) => {
@@ -60,14 +78,9 @@ const checkEmail = asyncHandler(async (req, res) => {
   res.json({ exists, message: exists ? 'Este email ya está registrado' : 'Email disponible' });
 });
 
-const checkPlaca = asyncHandler(async (req, res) => {
-  const exists = await authService.existePlaca(req.params.placa);
-  res.json({ exists, message: exists ? 'Esta placa ya está registrada' : 'Placa disponible' });
-});
-
 module.exports = {
-  register, login, getProfile, updateProfile, changePassword,
+  register, login, refresh, logout, logoutAll, getProfile, updateProfile, changePassword,
   forgotPassword, verifyResetCode, resetPassword,
   sendEmailVerification, verifyEmailCode,
-  checkCedula, checkEmail, checkPlaca,
+  checkCedula, checkEmail,
 };

@@ -47,21 +47,17 @@ const { Server } = require('socket.io');
 
 
 // Importar rutas
+// La base de datos se está reconstruyendo por bloques (database/migraciones). Solo se montan los módulos que ya
+// usan las tablas nuevas; el resto vuelve a activarse al migrarlo.
 const authRoutes = require('./modules/auth/auth.routes');
-const direccionesRoutes = require('./modules/direcciones/direcciones.routes');
-const telefonosRoutes = require('./modules/telefonos/telefonos.routes');
-const vendedorRoutes = require('./modules/vendedores/vendedor.routes');
-const productoRoutes = require('./modules/productos/producto.routes');
-const pedidoRoutes = require('./modules/pedidos/pedido.routes');
-const repartidorRoutes = require('./modules/repartidores/repartidor.routes');
-const notificacionRoutes = require('./modules/notificaciones/notificacion.routes');
 const usuarioRoutes = require('./modules/auth/usuario.routes');
+// Pendientes de migrar: direcciones, telefonos, vendedores, productos, pedidos, repartidores, notificaciones
 
 
 
 
 // Importar base de datos y modelos
-const { sequelize } = require('./index');
+const { sequelize, Usuario } = require('./index');
 
 // Piezas compartidas (ver src/shared)
 const solicitudId = require('./shared/middlewares/solicitudId');
@@ -110,7 +106,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // =======================
 // Socket.IO Auth Middleware
 // =======================
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   try {
     // 1) token por handshake.auth.token (recomendado)
     // 2) o por header Authorization: Bearer xxx
@@ -123,6 +119,10 @@ io.use((socket, next) => {
     if (!token) return next(new Error('NO_TOKEN'));
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Igual que en HTTP: la cuenta debe existir y seguir activa (un usuario desactivado no conserva su conexión)
+    const cuenta = await Usuario.findByPk(decoded.id);
+    if (!cuenta || !cuenta.activo) return next(new Error('INVALID_TOKEN'));
 
       // Guarda el usuario en el socket (equivalente a req.usuario)
       socket.usuario = decoded;
@@ -153,13 +153,6 @@ app.use('/api', limite.general);
 
 // Rutas de la API
 app.use('/api/auth', authRoutes);
-app.use('/api/direcciones', direccionesRoutes);
-app.use('/api/telefonos', telefonosRoutes);
-app.use('/api/vendedores', vendedorRoutes);
-app.use('/api/productos', productoRoutes);
-app.use('/api/pedidos', pedidoRoutes);
-app.use('/api/repartidores', repartidorRoutes);
-app.use('/api/notificaciones', notificacionRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 
 
@@ -178,11 +171,7 @@ app.get('/api/health', (req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Nota: la lógica de autorización y el cache de ubicaciones
-// se manejan dentro de `src/sockets/pedidos.socket.js`.
-// Se eliminaron funciones/variables duplicadas para evitar confusión.
-
-const registerPedidosSocket = require('./modules/pedidos/pedidos.socket');
+// El seguimiento del pedido en tiempo real (modules/pedidos/pedidos.socket.js) se reactiva al migrar los pedidos.
 
 
 
@@ -193,8 +182,6 @@ io.on('connection', (socket) => {
     socket.usuario?.tipoUsuario,
     socket.usuario?.id
   );
-
-  registerPedidosSocket(io, socket);
 
   // Unir socket a sala por usuario para notificaciones directas
   try {
@@ -226,8 +213,7 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Conexión a PostgreSQL establecida');
 
-    // El esquema de la BD se gestiona SOLO con database/schema.sql. NO usar sequelize.sync():
-    // crearía tablas con los nombres viejos de los módulos que aún no se migraron.
+    // El esquema de la BD se gestiona SOLO con database/migraciones/*.sql. NO usar sequelize.sync().
 
 
 

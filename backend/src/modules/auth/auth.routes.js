@@ -12,6 +12,10 @@ const { verificarToken } = require('../../middlewares/auth.middleware');
 router.post('/register', limite.registro(), schema.registro, validar, controller.register);
 router.post('/login', limite.login(), schema.login, validar, controller.login);
 
+// Sesión persistente: renovar y cerrar (el refresh token es la credencial)
+router.post('/refresh', limite.refrescar(), schema.refrescar, validar, controller.refresh);
+router.post('/logout', schema.refrescar, validar, controller.logout);
+
 // Recuperar contraseña
 router.post('/forgot-password', limite.enviarCodigo(), schema.correo, validar, controller.forgotPassword);
 router.post('/verify-reset-code', limite.verificarCodigo(), schema.verificarCodigo, validar, controller.verifyResetCode);
@@ -24,9 +28,9 @@ router.post('/verify-email', limite.verificarCodigo(), schema.verificarCodigo, v
 // Validación en tiempo real de campos únicos
 router.get('/check-cedula/:cedula', limite.consultas(), schema.consultaCedula, validar, controller.checkCedula);
 router.get('/check-email/:email', limite.consultas(), schema.consultaEmail, validar, controller.checkEmail);
-router.get('/check-placa/:placa', limite.consultas(), schema.consultaPlaca, validar, controller.checkPlaca);
 
 // --- Protegidas ---
+router.post('/logout-all', verificarToken, controller.logoutAll);
 router.get('/profile', verificarToken, controller.getProfile);
 router.put('/profile', verificarToken, schema.actualizarPerfil, validar, controller.updateProfile);
 router.put('/change-password', verificarToken, schema.cambiarClave, validar, controller.changePassword);

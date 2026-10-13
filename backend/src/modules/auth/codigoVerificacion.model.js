@@ -1,29 +1,23 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
+const { opcionesSimple } = require('../../shared/models/columnasComunes');
 
-// Tabla CODIGOVERIFICACION: reemplaza a las dos tablas anteriores (email_verification_codes y
-// password_reset_codes). El PROPOSITO distingue: EMAIL | RESETCLAVE | TELEFONO.
-// Es una tabla de registro: solo se inserta y se actualiza el estado del código (sin versionado).
-// Su clave es un número 1, 2, 3 (ID) que genera la BD.
+// Tabla TCODIGOSVERIFICACION (simple): códigos de 6 dígitos para verificar el correo o restablecer la clave.
+// Solo se inserta y se actualiza su estado. El código va con hash, nunca en claro.
 const CodigoVerificacion = sequelize.define('CodigoVerificacion', {
-  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true, field: 'id' },
-  proposito: { type: DataTypes.STRING(12), allowNull: false, field: 'proposito' },
-  email: { type: DataTypes.STRING(150), field: 'email' },
-  telefono: { type: DataTypes.STRING(20), field: 'telefono' },
-  usuarioId: { type: DataTypes.STRING(30), field: 'usuario' },             // USUARIOS.USUARIO
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true, field: 'scodigo' },
+  proposito: { type: DataTypes.CHAR(3), allowNull: false, field: 'cpropositocodigo' },     // 001 correo · 002 clave
+  email: { type: DataTypes.STRING(150), allowNull: false, field: 'correo' },
+  usuarioId: { type: DataTypes.STRING(30), field: 'cusuario' },
   codigoHash: { type: DataTypes.STRING(255), allowNull: false, field: 'codigohash' },
-  expiraEn: { type: DataTypes.DATE, allowNull: false, field: 'expiraen' },
-  intentos: { type: DataTypes.SMALLINT, allowNull: false, defaultValue: 0, field: 'intentos' },
+  intentos: { type: DataTypes.SMALLINT, allowNull: false, defaultValue: 0, field: 'numerointentos' },
   maxIntentos: { type: DataTypes.SMALLINT, allowNull: false, defaultValue: 5, field: 'maxintentos' },
-  verificadoEn: { type: DataTypes.DATE, field: 'verificadoen' },
-  usadoEn: { type: DataTypes.DATE, field: 'usadoen' },
-  ip: { type: DataTypes.INET, field: 'ip' },
-  tokenFcm: { type: DataTypes.TEXT, field: 'tokenfcm' },
-  creadoEn: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'creadoen' },
-}, {
-  tableName: 'tcodigosverificacion',
-  freezeTableName: true,
-  timestamps: false,
-});
+  ip: { type: DataTypes.INET, field: 'ipsolicitud' },
+  tokenFcm: { type: DataTypes.STRING(255), field: 'tokenfcm' },
+  creadoEn: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'fcreacion' },
+  expiraEn: { type: DataTypes.DATE, allowNull: false, field: 'fexpira' },
+  verificadoEn: { type: DataTypes.DATE, field: 'fverificado' },
+  usadoEn: { type: DataTypes.DATE, field: 'fusado' },
+}, opcionesSimple('TCODIGOSVERIFICACION'));
 
 module.exports = CodigoVerificacion;

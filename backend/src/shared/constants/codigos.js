@@ -1,5 +1,5 @@
 // Códigos de los catálogos de la BD. UNA sola fuente de verdad: en el código nunca se escribe '006',
-// se escribe ESTADOPEDIDO.ENCAMINO. Deben coincidir con los INSERT de database/schema.sql.
+// se escribe ESTADOPEDIDO.ENCAMINO. Deben coincidir con los INSERT de database/migraciones/.
 
 const ROLES = Object.freeze({
   CLIENTE: '001',
@@ -77,10 +77,10 @@ const CATEGORIA = Object.freeze({
   OTROS: '099',
 });
 
+// Propósito de un código de verificación (catálogo TPROPOSITOSCODIGO)
 const PROPOSITOCODIGO = Object.freeze({
-  EMAIL: 'EMAIL',
-  RESETCLAVE: 'RESETCLAVE',
-  TELEFONO: 'TELEFONO',
+  EMAIL: '001',
+  RESETCLAVE: '002',
 });
 
 // --- Traducción con la API actual -------------------------------------------------------------

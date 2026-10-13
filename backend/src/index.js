@@ -1,33 +1,22 @@
-// Carga todos los modelos para que Sequelize los registre
+// Carga los modelos para que Sequelize los registre. Solo los que ya usan las tablas nuevas
+// (database/migraciones); el resto se agrega aquí cuando se migra su módulo.
 const { sequelize } = require('./config/database');
 
-const Usuario = require('./modules/auth/usuario.model');
+const Usuario = require('./modules/auth/usuario.model');                    // vista VUSUARIOS (lectura)
+const Persona = require('./modules/auth/persona.model');                    // TPERSONAS
+const UsuarioCuenta = require('./modules/auth/usuarioCuenta.model');        // TUSUARIOS
+const UsuarioAcceso = require('./modules/auth/usuarioAcceso.model');        // TUSUARIOSACCESO
+const Telefono = require('./modules/telefonos/telefono.model');             // TPERSONATELEFONOS
 const CodigoVerificacion = require('./modules/auth/codigoVerificacion.model');
-const Direccion = require('./modules/direcciones/direccion.model');
-const Archivo = require('./modules/archivos/archivo.model');
-const Vendedor = require('./modules/vendedores/vendedor.model');
-const HorarioVendedor = require('./modules/vendedores/horarioVendedor.model');
-const Repartidor = require('./modules/repartidores/repartidor.model');
-const Producto = require('./modules/productos/producto.model');
-const Pedido = require('./modules/pedidos/pedido.model');
-const DetallePedido = require('./modules/shared/detallePedido.model');
-const Notificacion = require('./modules/notificaciones/notificacion.model');
-const Dispositivo = require('./modules/notificaciones/dispositivo.model');
-const Calificacion = require('./modules/pedidos/calificacion.model');
+const Sesion = require('./modules/auth/sesion.model');
 
 module.exports = {
   sequelize,
   Usuario,
+  Persona,
+  UsuarioCuenta,
+  UsuarioAcceso,
+  Telefono,
   CodigoVerificacion,
-  Direccion,
-  Archivo,
-  Vendedor,
-  HorarioVendedor,
-  Repartidor,
-  Producto,
-  Pedido,
-  DetallePedido,
-  Notificacion,
-  Dispositivo,
-  Calificacion,
+  Sesion,
 };

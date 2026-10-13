@@ -11,7 +11,7 @@ const { Client } = require('pg');
 const sharp = require('sharp');
 const { io } = require('socket.io-client');
 
-module.exports = function crearArnes({ puerto, bd }) {
+module.exports = function crearArnes({ puerto, bd, env = {} }) {
   const BASE = `http://localhost:${puerto}`;
   const UPLOADS = fs.mkdtempSync(path.join(os.tmpdir(), 'vallex_uploads_'));
   const dbConfig = (database) => ({ host: process.env.DB_HOST, port: Number(process.env.DB_PORT), user: process.env.DB_USER, password: process.env.DB_PASSWORD, database });
@@ -36,9 +36,12 @@ module.exports = function crearArnes({ puerto, bd }) {
   }
   const imagen = async (w, h, fmt = 'png') => (await sharp({ create: { width: w, height: h, channels: 3, background: { r: 200, g: 60, b: 40 } } })[fmt]().toBuffer()).toString('base64');
 
-  async function codigoDe(email) {
-    const re = new RegExp(`\\[DEV\\] Código de verificacion para ${email.replace(/[.+]/g, '\\$&')}: (\\d{6})`);
-    for (let i = 0; i < 40; i++) { const m = salida.match(re); if (m) return m[1]; await dormir(100); }
+  // Los códigos se imprimen en la consola del servidor en desarrollo (en las pruebas no hay proveedor de correo).
+  // tipo: 'verificacion' | 'reset'. "desde" = posición de la consola desde la que buscar (ver marca()).
+  const marca = () => salida.length;
+  async function codigoDe(email, tipo = 'verificacion', desde = 0) {
+    const re = new RegExp(`\\[DEV\\] Código de ${tipo} para ${email.replace(/[.+]/g, '\\$&')}: (\\d{6})`, 'g');
+    for (let i = 0; i < 40; i++) { const m = [...salida.slice(desde).matchAll(re)].pop(); if (m) return m[1]; await dormir(100); }
     return null;
   }
 
@@ -48,7 +51,7 @@ module.exports = function crearArnes({ puerto, bd }) {
     await api('POST', '/api/auth/send-verification', { email, nombre });
     await api('POST', '/api/auth/verify-email', { email, code: await codigoDe(email) });
     const r = await api('POST', '/api/auth/register', { nombre, apellido, email, telefono: `09930000${String(contador).padStart(2, '0')}`, cedula: cedula(17, 3000 + contador), password: 'secreto1', tipoUsuario: tipo, ...extra });
-    return { token: r.body?.token, usuario: r.body?.usuario };
+    return { token: r.body?.token, refreshToken: r.body?.refreshToken, usuario: r.body?.usuario };
   }
 
   // Socket.IO: conectar con un token, emitir con respuesta (ack) y esperar un evento
@@ -67,8 +70,12 @@ module.exports = function crearArnes({ puerto, bd }) {
     const admin = new Client(dbConfig('postgres')); await admin.connect();
     await admin.query(`DROP DATABASE IF EXISTS ${bd} WITH (FORCE)`); await admin.query(`CREATE DATABASE ${bd}`); await admin.end();
     db = new Client(dbConfig(bd)); await db.connect();
-    await db.query(fs.readFileSync(path.join(BACKEND, '..', 'database', 'schema.sql'), 'utf8'));
-    srv = spawn(process.execPath, ['src/server.js'], { cwd: BACKEND, env: { ...process.env, NODE_ENV: 'development', PORT: String(puerto), DB_NAME: bd, LIMITES_DESACTIVADOS: 'true', UPLOADS_DIR: UPLOADS } });
+    // La base se arma con las mismas migraciones que usa Docker, en orden
+    const carpeta = path.join(BACKEND, '..', 'database', 'migraciones');
+    for (const archivo of fs.readdirSync(carpeta).filter((f) => f.endsWith('.sql')).sort()) {
+      await db.query(fs.readFileSync(path.join(carpeta, archivo), 'utf8'));
+    }
+    srv = spawn(process.execPath, ['src/server.js'], { cwd: BACKEND, env: { ...process.env, NODE_ENV: 'development', PORT: String(puerto), DB_NAME: bd, LIMITES_DESACTIVADOS: 'true', UPLOADS_DIR: UPLOADS, ...env } });
     srv.stdout.on('data', (d) => { salida += d.toString(); }); srv.stderr.on('data', (d) => { salida += d.toString(); });
     for (let i = 0; i < 50; i++) { try { if ((await fetch(`${BASE}/api/health`)).ok) break; } catch { /* aún no */ } await dormir(200); }
     return { db, q: async (sql, p) => (await db.query(sql, p)).rows };
@@ -85,5 +92,5 @@ module.exports = function crearArnes({ puerto, bd }) {
     process.exit(fallos.length ? 1 : 0);
   }
 
-  return { check, seccion, dormir, api, cedula, imagen, iniciar, registrar, finalizar, conectar, emitir, esperar, BASE };
+  return { check, seccion, dormir, marca, codigoDe, api, cedula, imagen, iniciar, registrar, finalizar, conectar, emitir, esperar, BASE };
 };
