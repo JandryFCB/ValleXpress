@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'cliente_profile_screen.dart';
 import 'vendedor_profile_screen.dart';
 import 'repartidor_profile_screen.dart';
+import '../../services/session_store.dart';
 
 /// Router que redirige al perfil correcto según el tipo de usuario
 class ProfileRouter extends StatefulWidget {
@@ -25,8 +26,7 @@ class _ProfileRouterState extends State<ProfileRouter> {
 
   Future<void> _determinarTipoUsuario() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
+      final token = await SessionStore.accessToken();
 
       if (token == null || token.isEmpty) {
         // No hay token, redirigir a login

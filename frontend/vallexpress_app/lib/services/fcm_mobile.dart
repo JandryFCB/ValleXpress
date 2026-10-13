@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:firebase_core/firebase_core.dart';
-import 'package:http/http.dart' as http;
+import 'api_http.dart' as http;
+import 'session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -52,8 +53,7 @@ class NotificationService {
   /// Registra el token FCM en el backend (POST /notificaciones/dispositivo).
   /// Necesita sesión iniciada: si no hay JWT guardado no hace nada.
   static Future<void> registerDeviceToken(String token, String platform) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jwt = prefs.getString(AppConstants.tokenKey);
+    final jwt = await SessionStore.accessToken();
     if (jwt == null) return;
     final res = await http.post(
       Uri.parse('${AppConstants.baseUrl}/notificaciones/dispositivo'),

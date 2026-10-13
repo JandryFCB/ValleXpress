@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_http.dart' as http;
 import '../config/constants.dart';
+import 'dispositivo.dart';
 
 class AuthService {
   // Login
@@ -9,7 +10,7 @@ class AuthService {
       final response = await http.post(
         Uri.parse('${AppConstants.baseUrl}/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'email': email, 'password': password}),
+        body: json.encode({'email': email, 'password': password, ...await datosDispositivo()}),
       );
 
       if (response.statusCode == 200) {
@@ -45,6 +46,7 @@ class AuthService {
         'cedula': cedula,
         'password': password,
         'tipoUsuario': tipoUsuario,
+        ...await datosDispositivo(),
       };
 
       // Agregar campos opcionales según el tipo de usuario
@@ -70,6 +72,23 @@ class AuthService {
       }
     } catch (e) {
       throw Exception('Error de conexión: $e');
+    }
+  }
+
+  // Cierra la sesión de este equipo en el servidor (el refresh token deja de servir). Nunca lanza error:
+  // si no hay internet, igual se cierra la sesión local.
+  Future<void> logout(String? refreshToken) async {
+    if (refreshToken == null) return;
+    try {
+      await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/auth/logout'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'refreshToken': refreshToken}),
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // sin red: la sesión local se cierra igual
     }
   }
 

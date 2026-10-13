@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
+import 'api_http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
+import 'session_store.dart';
+import 'session_manager.dart';
 
 class ProfileService {
   static Future<String> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+    final token = await SessionStore.accessToken();
     if (token == null || token.isEmpty) throw Exception('Token no encontrado');
     return token;
   }
@@ -98,6 +99,20 @@ class ProfileService {
     if (response.statusCode != 200) {
       final body = response.body.isNotEmpty ? jsonDecode(response.body) : null;
       throw Exception(body?['error'] ?? 'Error al cambiar contraseña');
+    }
+
+    // El servidor cierra las sesiones de los demás equipos y entrega una sesión nueva para este: hay que guardarla,
+    // si no, esta app también quedaría fuera.
+    try {
+      final datos = jsonDecode(response.body) as Map<String, dynamic>;
+      if (datos['token'] != null && datos['refreshToken'] != null) {
+        await SessionManager.instance.guardarSesion(
+          acceso: datos['token'] as String,
+          refresh: datos['refreshToken'] as String,
+        );
+      }
+    } catch (_) {
+      // respuesta sin sesión nueva (servidor viejo): no pasa nada
     }
   }
 

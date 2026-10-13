@@ -1,13 +1,12 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_http.dart' as http;
+import 'session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 
 class AddressService {
   static Future<String> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token =
-        prefs.getString(AppConstants.tokenKey) ?? prefs.getString('token');
+    final token = await SessionStore.accessToken();
     if (token == null || token.isEmpty) {
       throw Exception('Token no encontrado');
     }

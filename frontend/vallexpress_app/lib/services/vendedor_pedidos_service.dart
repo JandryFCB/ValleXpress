@@ -1,12 +1,12 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
+import 'session_store.dart';
 
 class VendedorPedidosService {
   static Future<String> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+    final token = await SessionStore.accessToken();
     if (token == null || token.isEmpty) {
       throw Exception('Token no encontrado');
     }
