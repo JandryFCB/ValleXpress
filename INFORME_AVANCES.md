@@ -416,3 +416,160 @@ Todos los módulos están migrados al esquema nuevo, en capas y con pruebas: aut
 - Se quitó de los documentos la clave antigua de la BD.
 - **Commit del backend** a `main`: incluye `backend/`, `database/`, `docker-compose.yml`, `.gitignore` y los .md. **No incluye** los cambios de Flutter (van en un commit aparte). `node_modules` sale del repositorio.
 - Pendiente de seguridad: la clave antigua de la BD y el `JWT_SECRET` anterior ya están en el historial de git, así que hay que **rotarlos** antes de producción.
+
+---
+
+## Bloque 10: App Flutter, primera pasada (2026-10-06)
+
+- **Entornos sin tocar código** (`lib/config/constants.dart`): se elige al compilar con `--dart-define`.
+  - `flutter run` → local (`localhost`, web/escritorio)
+  - `flutter run --dart-define=ENTORNO=emulador` → emulador Android (`10.0.2.2`)
+  - `flutter run --dart-define=ENTORNO=lan --dart-define=IP_LAN=192.168.1.50` → celular real en la misma red
+  - `flutter build apk --dart-define=ENTORNO=prod --dart-define=API_PROD=https://api.tudominio.com` → producción
+- **Tema nuevo "Medianoche eléctrica"** (`lib/config/theme.dart`): violeta eléctrico `#8B5CF6` sobre azul medianoche, turquesa neón de acento. Colores por rol distintos entre sí: cliente menta, vendedor ámbar, repartidor azul cielo. Las pantallas leen todo de `AppTheme`, así que **cambiar los valores de ese bloque recolorea toda la app**. Los dorados fijos que había en las pantallas ahora usan los colores del tema.
+- **Login** con "Correo o usuario" (el backend ya aceptaba ambos).
+- **Notificaciones push:** la app nunca registraba el token. Ahora lo envía a `POST /notificaciones/dispositivo` al abrir la app y al iniciar sesión (y si Firebase lo renueva), y lo quita al cerrar sesión.
+- **Datos falsos eliminados:** si el servidor fallaba, el repartidor veía pedidos y perfil de mentira (`mock_data`); ahora ve vacío.
+- **Código muerto borrado:** 3 pantallas duplicadas sin uso (`*_fixed`, `*_old`, `*_new`), `client_service.dart` (ids numéricos) y `mock_data.dart`. Ids de producto en `VendedorService` pasan a texto (`PRO-000001`).
+- Revisado: **todas** las rutas que usa la app existen en el backend. `flutter analyze`: 0 errores.
+
+### Pendiente en la app
+Probar en emulador de punta a punta (registro, pedido, repartidor, seguimiento), revisar visualmente cada pantalla con el tema nuevo, rediseño de pantallas (home, tarjetas, animaciones), modo claro, ids `VEN-000001` mostrados al usuario, pantallas de mensajes de error de red.
+
+---
+
+## Bloque 11: Identidad V3, historial en la misma tabla (2026-10-07)
+
+Primer bloque del rediseño que pediste: tablas con prefijo `T`, columnas de código con prefijo `C`, y **sin tablas `HIST`** para lo nuevo.
+
+### Qué hay ahora
+| Tabla | Para qué |
+|---|---|
+| `TPERSONASID` | Ancla: `CPERSONA` 1, 2, 3… (número entero que crece solo) |
+| `TPERSONAS` | Datos de la persona (nombres, documento, correo) |
+| `TUSUARIOSID` | Ancla: `CUSUARIO` (`jcayapa`) |
+| `TUSUARIOS` | Login: `CUSUARIO` + `CPERSONA` + `CROL` + `CESTATUSUARIO` (`ACT`/`INA`/`BLQ`) |
+| `TPERSONATELEFONOS` | Varios teléfonos por persona, con tipo, uno principal |
+| `TDIRECCIONESID` | Ancla de las direcciones (`DIR-000001`) |
+| `TPERSONADIRECCIONES` | Direcciones por persona, con tipo |
+| `TPERSONAIMAGENES` | Imágenes por persona (foto de perfil vigente, portada, documento) |
+| `TESTATUSUARIO`, `TTIPOSTELEFONO`, `TTIPOSDIRECCION`, `TTIPOSIMAGEN` | Catálogos con códigos de 3 letras |
+| `TLOGMENSAJES`, `TLOGERRORES` | Las bitácoras, renombradas |
+| `VUSUARIOS` | **Vista** con el usuario + persona + teléfono principal + foto, solo lo vigente. Se puede consultar **e insertar/actualizar**: reparte los datos en las tablas T |
+
+Catálogos: `ACT` activo · `INA` inactivo · `BLQ` bloqueado. Teléfono: `MOV` móvil · `CAS` casa · `TRA` trabajo · `WAP` WhatsApp. Dirección: `DOM` domicilio · `TRA` trabajo · `FAM` familiar · `OTR` otro · `LOC` local del vendedor. Imagen: `PER` perfil · `POR` portada · `DOC` documento.
+
+### Cómo funciona el historial en la misma tabla
+- Cada cambio **cierra** la fila vigente (`FHASTA` = ahora) y deja la nueva con `FHASTA = 2999-12-31`. Lo vigente es siempre `WHERE FHASTA = '2999-12-31'`.
+- Lo hace un trigger (`FNVERSION`): el código sigue haciendo `UPDATE` normal.
+- Cada versión tiene su `ID` interno; el código (`CPERSONA`, `CUSUARIO`…) se repite en todas las versiones y **no se puede cambiar**.
+- Las filas del historial no se pueden modificar (el `UPDATE` se ignora).
+- Un `UPDATE` que no cambia nada no crea versión. Las columnas **volátiles** (`ULTIMACONEXION`, `ULTIMAIP`, `INTENTOSFALLIDOS`, `BLOQUEADOHASTA`) se guardan en la misma fila sin versionar.
+- **`ACTUALIZADOPOR` ya no queda vacío:** guarda al usuario del backend o, si editas desde Adminer o psql, tu usuario de la base de datos.
+- Un `DELETE` físico deja la copia cerrada en la misma tabla (con `ELIMINADOEN`).
+- Para activarlo en una tabla nueva: `SELECT ACTIVARVERSION('NOMBRETABLA', 'columnaclave')`.
+
+### Qué cambió en el código (la API y la app NO cambian)
+- El modelo `Usuario` lee y escribe en `VUSUARIOS`, así que el registro, el login y el perfil siguen igual.
+- **Direcciones** ahora son de la persona (`TPERSONADIRECCIONES`); la API sigue igual. Los pedidos apuntan al ancla `TDIRECCIONESID`.
+- La foto de perfil vive en `TPERSONAIMAGENES`: al subir una nueva, la anterior queda en el historial de esa fila.
+- Los modelos con historial en la misma tabla usan `opcionesVersionada()` (solo ven lo vigente).
+
+### Lo que sigue igual por ahora
+Vendedores, repartidores, productos, pedidos y demás tablas conservan el esquema anterior (con `HIST`): se migran cuando lleguemos a cada módulo. Ya apuntan a `TUSUARIOSID` y `TDIRECCIONESID`.
+
+### Verificación: `npm run test:identidad` (70 pruebas nuevas) y `npm test` corre las cinco suites
+| Suite | Pruebas |
+|---|---|
+| identidad (nueva) | 70 |
+| auth | 103 |
+| tienda | 85 |
+| pedidos | 106 |
+| repartidores | 47 |
+| **Total** | **411, 0 fallidas** |
+
+### Base de desarrollo
+Se hizo un respaldo (`C:\Users\USUARIO\Backups\vallexpress\antes_v3_*.dump`), se recreó con el esquema nuevo y se restauró tu usuario `jcayapa` (ahora es la persona `1`).
+
+### Cosas que debes saber
+- **`CPERSONA` puede saltar números:** si un `INSERT` falla (por ejemplo, un correo repetido), el contador ya avanzó. Es el comportamiento normal de los números automáticos de PostgreSQL; sigue siendo único y creciente.
+- Una persona puede tener **varios usuarios** (uno por rol).
+- Para consultar el historial de una persona: `SELECT * FROM TPERSONAS WHERE CPERSONA = 1 ORDER BY FDESDE`.
+
+### Pendiente de este rediseño
+Teléfonos y direcciones aún no tienen pantallas ni endpoints propios (solo el teléfono principal, que sigue en el perfil). Migrar el resto de las tablas al mismo estilo, quitar el código duplicado y limpiar servicios (anotado).
+
+---
+
+## Bloque 12: el negocio del vendedor (2026-10-07)
+
+Basado en `PATRON_TABLAS_FITBANK.md`. **Decisión:** el vendedor deja de ser una entidad aparte (`VEN-000001`): es un **usuario con rol vendedor** y su negocio cuelga de `CUSUARIO` (un negocio por vendedor). Más adelante, si hace falta (empleados, varios negocios), se agrega `TNEGOCIOUSUARIOS` al estilo `TCOMPANIAUSUARIOS`.
+
+### Qué cambió en la BD (`schema.sql`)
+| Antes | Ahora |
+|---|---|
+| `VENDEDORES` + `HISTVENDEDORES` | **`TNEGOCIOS`** (historial en la misma tabla, clave `CUSUARIO`) |
+| `HORARIOVENDEDOR` + hist | **`THORARIOSNEGOCIO`** (clave `CHORARIO`, un día por fila) |
+| teléfono, correo, domicilio, latitud y longitud propios del vendedor | se quitan: salen de la PERSONA; el local es una dirección tipo `LOC` y `TNEGOCIOS.CDIRECCION` apunta a ella |
+| `PRODUCTOS`, `CUPONES`, `PEDIDOS`, `CALIFICACIONES`: `VENDEDOR` → `VENDEDORES` | `VENDEDOR` → `TUSUARIOSID.CUSUARIO` (ahora vale `lmora`, no `VEN-000001`) |
+
+Se eliminaron `SECVENDEDORES` y los `HIST` de vendedores. Columnas volátiles (no crean versión): `TOTALPEDIDOS`, `CALIFICACION`, `TOTALCALIF`.
+
+### Qué cambió en el código
+Modelos `Vendedor` y `HorarioVendedor` sobre las tablas nuevas (el atributo `id` es el usuario); `actualizarUbicacion` crea o mueve la dirección `LOC`; las validaciones de id de vendedor aceptan un usuario; el promedio de calificaciones apunta a `TNEGOCIOS`. La forma de la API no cambia, **pero los ids de vendedor ahora son el usuario** (importante para la app).
+
+### Verificación: `npm test`, 5 suites, **413 pruebas, 0 fallidas** (tienda 87: +2 del local `LOC`)
+
+### Repartidores (mismo bloque)
+`REPARTIDORES` + `HISTREPARTIDORES` → **`TREPARTIDORES`** (clave `CUSUARIO`, historial en la misma tabla, placa única solo entre vigentes). `PEDIDOS`, `CALIFICACIONES` y `UBICACIONREPARTIDOR` apuntan a `TUSUARIOSID`; el id de repartidor ahora es el usuario (`pruiz`, no `REP-000001`). Volátiles (no crean versión): ubicación, `ENSERVICIO`, calificación y contadores, saldo y ganancias. `SECREPARTIDORES` eliminada. **413 pruebas, 0 fallidas** (tienda 87, repartidores 47).
+
+### Base de desarrollo recreada
+Respaldo previo: `C:\Users\USUARIO\Backups\vallexpress\antes_v4_negocios_20261007_215209.dump`. Se recreó con el esquema nuevo (69 tablas) y se restauró tu usuario `jcayapa` (persona `1`). Estaba vacía de vendedores, repartidores, productos y pedidos.
+
+### Pendiente
+- `DOCUMENTOUSUARIO` (documentos de repartidor y vendedor) sigue en el estilo viejo con `HIST`; no tiene modelo en el código todavía, se pasa a estilo T cuando se use.
+- Siguiente: productos (+ imágenes), cupones, pedidos (+ detalle, pagos, seguimiento), transversales (notificaciones, dispositivos, sesiones, auditoría); quitar los `HIST` restantes y agregar `comment on`.
+
+---
+
+## Bloque 13: cierre del backend (2026-10-07)
+
+Se terminó la migración de **todas** las tablas al patrón (inspirado en `PATRON_TABLAS_FITBANK.md`). Ya no queda ninguna tabla de datos con `HIST`.
+
+### Qué cambió en la BD
+| Antes | Ahora |
+|---|---|
+| `PRODUCTOS`, `IMAGENPRODUCTO` | `TPRODUCTOSID` (ancla `PRO-000001`) + `TPRODUCTOS`, `TPRODUCTOIMAGENES` |
+| `CUPONES` | `TCUPONESID` (ancla `CUP-000001`) + `TCUPONES` |
+| `PEDIDOS`, `DETALLEPEDIDO` | `TPEDIDOSID` (ancla `PED-AAAAMMDD-000001`) + `TPEDIDOS`, `TPEDIDODETALLE` |
+| `PAGOS`, `CALIFICACIONES` | `TPAGOS`, `TCALIFICACIONES` |
+| `NOTIFICACIONES`, `DISPOSITIVOS` | `TNOTIFICACIONES` (leída/enviada no crean versión), `TDISPOSITIVOSID` + `TDISPOSITIVOS` |
+| `DOCUMENTOUSUARIO` | `TDOCUMENTOSUSUARIO` |
+| `SEGUIMIENTOPEDIDO`, `UBICACIONREPARTIDOR`, `AUDITORIA`, `CODIGOVERIFICACION`, `SESIONES` | `TSEGUIMIENTOPEDIDO`, `TUBICACIONREPARTIDOR`, `TAUDITORIA`, `TCODIGOSVERIFICACION`, `TSESIONES` (solo se insertan) |
+
+- Las anclas se llenan solas con el trigger genérico `FNASIGNARANCLA`. Las FK de pedidos, detalle, pagos, calificaciones, notificaciones, seguimiento y ubicación apuntan a las anclas (`CPEDIDO`, `CPRODUCTO`, `CCUPON`, `CDISPOSITIVO`).
+- El seguimiento de estados ignora las copias cerradas del historial (si no, cada cambio habría registrado un estado falso).
+- **Catálogos** (`ROLES`, `ESTADOPEDIDO`, `CATEGORIAS`, `TTIPOS…`, 15 en total) siguen con su tabla gemela `HIST*`: su clave es el propio código y no necesitan ancla.
+- **Todas las tablas (63) y todas las columnas llevan `COMMENT ON`** (813 descripciones).
+
+### Endpoints nuevos
+- `GET/POST/PUT/DELETE /api/telefonos` y `PATCH /api/telefonos/:id/principal`, `GET /api/telefonos/tipos`: varios teléfonos con tipo (MOV, CAS, TRA, WAP), máximo 5, uno principal, número único; al borrar el principal el siguiente pasa a serlo.
+- Direcciones con **tipo** (`DOM`, `TRA`, `FAM`, `OTR`) y `GET /api/direcciones/tipos`. El tipo `LOC` (local del negocio) no se ofrece al cliente y no aparece en sus direcciones.
+
+### Verificación: `npm test`, 5 suites, **435 pruebas, 0 fallidas**
+| Suite | Pruebas |
+|---|---|
+| identidad (+ teléfonos, tipos, estructura) | 92 |
+| auth | 103 |
+| tienda | 87 |
+| pedidos | 106 |
+| repartidores | 47 |
+
+### Base de desarrollo
+Recreada con el esquema final (respaldo: `C:\Users\USUARIO\Backups\vallexpress\antes_v5_backend_completo_20261007_224117.dump`) y con tu usuario `jcayapa` restaurado. El backend arranca contra ella.
+
+### Pendiente (no es de esquema)
+- **Reglas de negocio por definir:** IVA, propina, cupones (no hay endpoints), comisión, pagos (no hay endpoints ni pasarela), reasignación de pedidos. Las tablas ya existen.
+- **Antes de producción:** `PENDIENTES_USUARIO.md` (claves fuertes, API key de Google, `BREVO_API_KEY`, HTTPS, S3/R2, refresh de JWT, programar `PURGARLOGS`).
+- **App Flutter:** ids de vendedor y repartidor ahora son el usuario; teléfonos y direcciones con tipos; "Correo o usuario" en el login.
+

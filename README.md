@@ -3,7 +3,7 @@
 App de delivery (proyecto de tesis) que conecta **clientes**, **vendedores** y **repartidores**.
 Backend en Node.js/Express + PostgreSQL y app móvil en Flutter.
 
-> Estado: **backend completo y probado (341 pruebas)**. La app Flutter está en revisión para conectarla al backend nuevo.
+> Estado: **backend completo y probado (411 pruebas)**. La app Flutter está en revisión para conectarla al backend nuevo.
 > Avances: [INFORME_AVANCES.md](INFORME_AVANCES.md) · Plan: [ROADMAP_TOP.md](ROADMAP_TOP.md)
 
 ## Tecnologías
@@ -43,11 +43,11 @@ flutter run
 
 ```bash
 cd backend
-npm test                    # 4 suites, 341 pruebas
+npm test                    # 5 suites, 411 pruebas
 ```
 
 Cada suite crea su propia base y carpeta temporales y las borra al terminar:
-`test:auth` (103), `test:tienda` (85), `test:pedidos` (106), `test:repartidores` (47).
+`test:identidad` (70), `test:auth` (103), `test:tienda` (85), `test:pedidos` (106), `test:repartidores` (47).
 
 ## Estructura del backend
 
@@ -60,17 +60,23 @@ backend/src/
 │                           # servicios (token, código, log, catálogo, archivo), constantes
 ├── services/fcm.service.js # Push (FCM)
 └── server.js
-database/schema.sql         # Esquema v2 (tablas, catálogos, triggers de versionado)
+database/schema.sql         # Esquema (tablas T, anclas, catálogos, triggers de versionado, comentarios)
 ```
 
-## Base de datos (esquema v2)
+## Base de datos
 
-- Tablas en **MAYÚSCULAS, sin guion bajo** (`USUARIOS`, `PEDIDOS`, `ESTADOPEDIDO`…). Se consultan sin comillas: `SELECT * FROM USUARIOS`.
-- **Ids legibles** generados por la BD: `VEN-000001`, `ARC-000001`; el usuario inicia sesión con su código (por ejemplo `jcayapa`) o con su correo.
-- **Catálogos de estados** con códigos numéricos (`'001'`…).
-- **Versionado** por registro (`FDESDE`, `FHASTA`, `VERSIONCONTROL`) con tablas `HIST*` y registro de quién cambió.
-- Columna `DATOSEXTRA` (VARCHAR, nula) para ampliar sin migrar.
-- **Bitácoras:** `LOGERRORES`, `LOGMENSAJES` y `AUDITORIA`, con datos sensibles ocultos.
+- Tablas en **MAYÚSCULAS, sin guion bajo**. Se consultan sin comillas: `SELECT * FROM VUSUARIOS`.
+- **Identidad (prefijo `T`, columnas de código con prefijo `C`):** `TPERSONAS` (datos de la persona, atados por `CPERSONA` = 1, 2, 3…), `TUSUARIOS` (login: `CUSUARIO` como `jcayapa`, `CPERSONA`, `CROL`, `CESTATUSUARIO` = ACT/INA/BLQ), `TPERSONATELEFONOS`, `TPERSONADIRECCIONES`, `TPERSONAIMAGENES` y sus catálogos de tipos. Las tablas `TPERSONASID`, `TUSUARIOSID` y `TDIRECCIONESID` guardan el código estable al que apuntan las demás.
+- **Historial en la misma tabla:** cada cambio cierra la fila vigente (`FHASTA` = ahora) y crea la nueva con `FHASTA = 2999-12-31`. Lo vigente es `WHERE FHASTA = '2999-12-31'`. `ACTUALIZADOPOR` guarda quién cambió.
+- `VUSUARIOS`: vista con el usuario, la persona, el teléfono principal y la foto (solo lo vigente); se puede consultar e insertar.
+- **El vendedor y el repartidor son un usuario con rol:** su perfil cuelga de `CUSUARIO` (`TNEGOCIOS` + `THORARIOSNEGOCIO`, `TREPARTIDORES`); su teléfono y correo salen de la persona y el local del negocio es una dirección tipo `LOC`.
+- **Negocio:** `TPRODUCTOS`, `TPRODUCTOIMAGENES`, `TCUPONES`, `TPEDIDOS`, `TPEDIDODETALLE`, `TPAGOS`, `TCALIFICACIONES`, `TNOTIFICACIONES`, `TDISPOSITIVOS`, `TDOCUMENTOSUSUARIO`. Lo que otras tablas referencian (producto, cupón, pedido, dispositivo, persona, usuario, dirección) tiene su **ancla** `T…ID` con el código; las FK apuntan siempre al ancla.
+- **Registros que solo se insertan:** `TSEGUIMIENTOPEDIDO` (cada cambio de estado, automático), `TUBICACIONREPARTIDOR`, `TAUDITORIA`, `TCODIGOSVERIFICACION`, `TSESIONES`.
+- **Catálogos** (`ROLES`, `ESTADOPEDIDO`, `CATEGORIAS`, `TTIPOSTELEFONO`…) son los únicos con tabla gemela `HIST*`.
+- Toda tabla y toda columna lleva `COMMENT ON` (descripción).
+- **Ids legibles** generados por la BD: `PRO-000001`, `PED-20261006-000001`, `ARC-000001`; el usuario inicia sesión con su código (`jcayapa`) o su correo.
+- **Catálogos** con códigos (`'001'`, `ACT`…) · `DATOSEXTRA` (VARCHAR, nula) en cada tabla.
+- **Bitácoras:** `TLOGERRORES`, `TLOGMENSAJES` y `TAUDITORIA`, con datos sensibles ocultos.
 
 ## Flujo de un pedido
 

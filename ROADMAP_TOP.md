@@ -291,3 +291,24 @@ Y los errores se lanzan, no se responden a mano: `throw new AppError('El email y
 ### Avance (2026-10-06, 6.ª parte): commit del backend
 - [x] README actualizado; documentos y scripts obsoletos eliminados
 - [x] Commit del backend a main (Flutter queda fuera, para el siguiente)
+
+### Avance (2026-10-06, 7.ª parte): App Flutter, primera pasada
+- [x] Entornos por --dart-define (local, emulador, lan, prod)
+- [x] Tema nuevo "Medianoche eléctrica" centralizado en theme.dart
+- [x] Login por correo o usuario; token push registrado en el backend
+- [x] Quitados datos falsos (mock) y código muerto
+- [ ] Probar en emulador de punta a punta y rediseñar pantallas
+
+### Avance (2026-10-07, 8.ª parte): identidad V3
+- [x] Tablas con prefijo T y columnas de código con prefijo C: personas, usuarios, teléfonos, direcciones, imágenes, catálogos y logs
+- [x] Historial en la MISMA tabla (FDESDE/FHASTA) con trigger; ACTUALIZADOPOR siempre se llena
+- [x] Vista VUSUARIOS (consultable e insertable); API y app sin cambios
+- [x] 70 pruebas nuevas; total 411 en 5 suites
+- [x] Vendedores → `TNEGOCIOS` + `THORARIOSNEGOCIO` (el vendedor es un usuario con rol; local = dirección `LOC`) · 413 pruebas
+- [x] Repartidores → `TREPARTIDORES` (el repartidor es un usuario con rol) · BD de desarrollo recreada
+- [x] Productos, cupones, pedidos, pagos, calificaciones, notificaciones, dispositivos, documentos y transversales al mismo estilo (anclas `T…ID`); `HIST*` solo en catálogos; `COMMENT ON` en todo
+- [x] Endpoints de teléfonos y direcciones con tipos · 435 pruebas
+- [ ] Reglas de negocio (IVA, propina, cupones, comisión, pagos con pasarela, reasignación) y pendientes de producción
+- [ ] App Flutter (después del backend)
+- [ ] Endpoints y pantallas de teléfonos y direcciones con tipos
+- [ ] Limpiar y reutilizar código (servicios, helpers)
