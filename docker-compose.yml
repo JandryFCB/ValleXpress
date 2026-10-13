@@ -1,32 +1,25 @@
 services:
-  # Base de datos PostgreSQL
+  # Base de datos PostgreSQL (misma versión que producción). Se maneja desde pgAdmin: localhost:5433
+  # Levantar:  docker compose --env-file backend/.env up -d
+  # Empezar de cero (borra los datos y vuelve a correr las migraciones):
+  #            docker compose --env-file backend/.env down -v && docker compose --env-file backend/.env up -d
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: vallexpress_db
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+      TZ: America/Guayaquil
     ports:
       - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # Los .sql de esta carpeta se ejecutan en orden alfabético SOLO al crear la base por primera vez
+      - ./database/migraciones:/docker-entrypoint-initdb.d:ro
     networks:
       - vallexpress_network
-
-  # Adminer para gestionar la BD (solo accesible desde tu máquina)
-  adminer:
-    image: adminer
-    container_name: vallexpress_adminer
-    restart: always
-    ports:
-      - "127.0.0.1:8080:8080"
-    networks:
-      - vallexpress_network
-    depends_on:
-      - postgres
 
 volumes:
   postgres_data:

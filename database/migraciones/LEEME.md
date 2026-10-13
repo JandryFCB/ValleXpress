@@ -1,16 +1,34 @@
 # Migraciones
 
-`database/schema.sql` es la **línea base** (versión 2) y sirve para crear la base desde cero.
+La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en orden alfabético
+**solo al crear la base por primera vez**.
 
-Cuando la base ya tenga datos reales que no se quieran perder, cada cambio de esquema se agrega aquí como
-`001_descripcion.sql`, `002_...` (en orden), y **también** se aplica a `schema.sql` para que una instalación
-nueva quede igual. Reglas de cada migración:
+| Archivo | Contenido |
+|---|---|
+| `000_base.sql` | Zona horaria, `USUARIOACTUAL()`, trigger de historial `FNVERSION` y `ACTIVARVERSION()` |
+| `001_identidad.sql` | Roles, estatus, tipos de documento, personas, usuarios, acceso y teléfonos. Admin = persona 1 |
 
-1. Una sola transacción (`BEGIN; ... COMMIT;`) y una guarda que la rechace si ya se aplicó.
-2. Antes de aplicarla a la base real: respaldo con `pg_dump` fuera del repo y prueba en una copia
-   (`pg_dump | psql` hacia una base temporal).
-3. Si toca columnas de una tabla versionada, usar `AGREGARCOLUMNA`, `RENOMBRARCOLUMNA` o `CAMBIARTIPOCOLUMNA`
-   (cambian la tabla y su `HIST...` a la vez). Para actualizar filas sin generar versiones en `HIST`:
-   `SET LOCAL session_replication_role = replica;`.
+## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 
-Hasta ahora no hay migraciones: la 001 (usuario de login y `FHASTA`) quedó incluida en la línea base.
+- Tabla **ID**: solo el código (destino de las FK). Sin historial.
+- Tabla **histórica**: PK = código + `FHASTA`; lleva `FDESDE`, `FHASTA`, `VERSIONCONTROL` y `CUSUARIO_MODIFICACION`.
+  La fila vigente tiene `FHASTA = 2999-12-31`. `UPDATE` y `DELETE` dejan una copia cerrada (trigger `FNVERSION`).
+- Tabla **simple** (sesiones, códigos, ubicaciones, logs): sin historial.
+- Entidades: números desde el **2** (el 1 es el administrador). Catálogos: `'001'`, `'002'`...
+- Únicos solo entre filas vigentes: `CREATE UNIQUE INDEX ... WHERE FHASTA = '2999-12-31 00:00:00-05'`.
+- El backend ejecuta `SET LOCAL app.usuario = 'jcayapa';` al inicio de cada transacción para registrar quién cambió.
+
+## Uso
+
+```bash
+docker compose --env-file backend/.env up -d                       # levantar (pgAdmin: localhost:5433)
+docker compose --env-file backend/.env down -v && \
+docker compose --env-file backend/.env up -d                       # empezar de cero
+```
+
+## Reglas para agregar un bloque
+
+1. Archivo nuevo con el siguiente número (`002_sesiones.sql`...), en una sola transacción lógica y sin tocar los anteriores
+   mientras no haya datos reales. Con datos reales, los archivos ya aplicados no se editan: se agrega uno nuevo.
+2. Cada tabla y columna lleva su `COMMENT ON`.
+3. Probar con `down -v` y `up -d`, y revisar `docker logs vallexpress_db`.
