@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/theme.dart';
 
 class MapPreview extends StatelessWidget {
   final VoidCallback onTap;
@@ -48,7 +49,7 @@ class MapPreview extends StatelessWidget {
               child: Icon(
                 Icons.delivery_dining,
                 size: 44,
-                color: Color(0xFFFDB827),
+                color: AppTheme.primaryLight,
               ),
             ),
 
@@ -71,7 +72,7 @@ class MapPreview extends StatelessWidget {
                   const Icon(
                     Icons.arrow_forward_ios,
                     size: 16,
-                    color: Color(0xFFFDB827),
+                    color: AppTheme.primaryLight,
                   ),
                 ],
               ),

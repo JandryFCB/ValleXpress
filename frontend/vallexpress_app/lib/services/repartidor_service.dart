@@ -3,7 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../config/constants.dart';
-import '../models/mock_data.dart';
 
 class RepartidorService {
   // ===== SUBIR FOTO DE PERFIL DEL REPARTIDOR =====
@@ -68,15 +67,10 @@ class RepartidorService {
         return Map<String, dynamic>.from(data);
       }
 
-      // Fallback a mock data
-      return MockData.repartidoresMock.isNotEmpty
-          ? MockData.repartidoresMock[0]
-          : {};
+      return {};
     } catch (e) {
       print('Error obteniendo perfil repartidor: $e');
-      return MockData.repartidoresMock.isNotEmpty
-          ? MockData.repartidoresMock[0]
-          : {};
+      return {};
     }
   }
 
@@ -132,10 +126,10 @@ class RepartidorService {
         }
       }
 
-      return MockData.pedidosMock;
+      return [];
     } catch (e) {
       print('Error obteniendo pedidos disponibles: $e');
-      return MockData.pedidosMock;
+      return [];
     }
   }
 

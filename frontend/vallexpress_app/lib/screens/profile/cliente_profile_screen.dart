@@ -51,7 +51,7 @@ class _ClienteProfileScreenState extends State<ClienteProfileScreen> {
       ]);
 
       final datos = results[0] as Map<String, dynamic>;
-      final direccion = results[1] as Map<String, dynamic>?;
+      final direccion = results[1];
 
       if (!mounted) return;
       setState(() {

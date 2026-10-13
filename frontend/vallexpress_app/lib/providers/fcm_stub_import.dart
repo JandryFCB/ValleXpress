@@ -40,4 +40,7 @@ class FcmService {
   static Future<void> initialize() async {
     // No-op on web
   }
+
+  static Future<void> registrarDispositivo() async {}
+  static Future<void> quitarDispositivo(String jwt) async {}
 }

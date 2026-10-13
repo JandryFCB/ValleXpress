@@ -302,7 +302,7 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
         actions: [
           IconButton(
             tooltip: 'Actualizar',
-            icon: const Icon(Icons.refresh, color: Color(0xFFFDB827)),
+            icon: Icon(Icons.refresh, color: AppTheme.primaryLight),
             onPressed: _refrescar,
           ),
         ],
@@ -399,7 +399,7 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
               icon: const Icon(Icons.refresh),
               label: const Text('Recargar'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFDB827),
+                backgroundColor: AppTheme.primaryLight,
                 foregroundColor: Colors.black,
               ),
             ),
@@ -441,12 +441,12 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFDB827).withOpacity(0.2),
+                      color: AppTheme.primaryLight.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
                       Icons.delivery_dining,
-                      color: Color(0xFFFDB827),
+                      color: AppTheme.primaryLight,
                       size: 28,
                     ),
                   ),
@@ -519,7 +519,7 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.local_shipping, color: Color(0xFFFDB827), size: 26),
+          Icon(Icons.local_shipping, color: AppTheme.primaryLight, size: 26),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -774,7 +774,7 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: Color(0xFFFDB827)),
+          Icon(Icons.info_outline, color: AppTheme.primaryLight),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -904,7 +904,7 @@ class _RastrearPedidoScreenState extends State<RastrearPedidoScreen> {
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFDB827),
+                backgroundColor: AppTheme.primaryLight,
                 foregroundColor: Colors.black,
               ),
             ),

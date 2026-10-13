@@ -147,7 +147,7 @@ class VendedorService {
 
   // ===== ACTUALIZAR PRODUCTO =====
   static Future<void> actualizarProducto({
-    required int id,
+    required String id,
     required String nombre,
     required String descripcion,
     required double precio,
@@ -181,7 +181,7 @@ class VendedorService {
 
   // ===== CAMBIAR DISPONIBILIDAD DE PRODUCTO =====
   static Future<void> cambiarDisponibilidad({
-    required int id,
+    required String id,
     required bool disponible,
   }) async {
     final token = await _getToken();
@@ -202,7 +202,7 @@ class VendedorService {
   }
 
   // ===== ELIMINAR PRODUCTO =====
-  static Future<void> eliminarProducto(int id) async {
+  static Future<void> eliminarProducto(String id) async {
     final token = await _getToken();
 
     final response = await http.delete(

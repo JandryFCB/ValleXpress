@@ -109,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: AppTheme.cardColor,
         title: const Row(
           children: [
-            Icon(Icons.info_outline, color: Color(0xFFFDB827)),
+            Icon(Icons.info_outline, color: AppTheme.primaryLight),
             SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -272,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.notifications, color: Color(0xFFFDB827)),
+              Icon(Icons.notifications, color: AppTheme.primaryLight),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -303,7 +303,7 @@ class _HomeScreenState extends State<HomeScreen> {
           duration: const Duration(seconds: 5),
           action: SnackBarAction(
             label: 'VER',
-            textColor: const Color(0xFFFDB827),
+            textColor: AppTheme.primaryLight,
             onPressed: () {
               // Navegar a pantalla de notificaciones
               Navigator.push(

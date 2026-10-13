@@ -39,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Por favor completa todos los campos'),
+          content: Text('Escribe tu correo o usuario y tu contraseña'),
           backgroundColor: Colors.red,
         ),
       );
@@ -145,14 +145,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  textInputAction: TextInputAction.next,
                   style: const TextStyle(color: AppTheme.textPrimaryColor),
                   decoration: InputDecoration(
-                    hintText: 'tu@email.com',
+                    hintText: 'Correo o usuario',
                     hintStyle: TextStyle(
                       color: AppTheme.textSecondaryColor.withOpacity(0.5),
                     ),
                     prefixIcon: const Icon(
-                      Icons.email_outlined,
+                      Icons.person_outline,
                       color: AppTheme.accentColor,
                     ),
                     border: InputBorder.none,
@@ -248,7 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     isLoading: authProvider.isLoading,
                     gradientColors: const [
                       AppTheme.primaryColor,
-                      Color(0xFFFFA500),
+                      AppTheme.primaryDark,
                     ],
                   );
                 },

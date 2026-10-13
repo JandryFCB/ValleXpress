@@ -1083,7 +1083,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       isLoading: authProvider.isLoading,
                       gradientColors: const [
                         AppTheme.primaryColor,
-                        Color(0xFFFFA500),
+                        AppTheme.primaryDark,
                       ],
                     );
                   },

@@ -66,7 +66,7 @@ class _RepartidorPedidosScreenState extends State<RepartidorPedidosScreen> {
       case 'confirmado':
         return AppTheme.repartidorColor;
       case 'preparando':
-        return const Color(0xFFFFA500);
+        return AppTheme.warningColor;
       case 'listo':
         return const Color(0xFF2E7D32);
       case 'en_camino':
@@ -342,7 +342,7 @@ class _RepartidorPedidosScreenState extends State<RepartidorPedidosScreen> {
                           gradient: LinearGradient(
                             colors: [
                               AppTheme.repartidorColor,
-                              const Color(0xFFFFA500),
+                              AppTheme.warningColor,
                             ],
                           ),
                           borderRadius: BorderRadius.circular(16),
@@ -387,7 +387,7 @@ class _RepartidorPedidosScreenState extends State<RepartidorPedidosScreen> {
                           gradient: LinearGradient(
                             colors: [
                               AppTheme.repartidorColor,
-                              const Color(0xFFFFA500),
+                              AppTheme.warningColor,
                             ],
                           ),
                           borderRadius: BorderRadius.circular(16),
@@ -659,7 +659,7 @@ class _RepartidorPedidosScreenState extends State<RepartidorPedidosScreen> {
                           gradient: LinearGradient(
                             colors: [
                               AppTheme.repartidorColor,
-                              const Color(0xFFFFA500),
+                              AppTheme.warningColor,
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),

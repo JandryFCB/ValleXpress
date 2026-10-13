@@ -27,7 +27,8 @@ class VendedorPedidosService {
 
     if (response.statusCode == 200) {
       final decoded = jsonDecode(response.body);
-      return decoded as List<dynamic>;
+      // Devuelve la lista interna 'pedidos' del objeto JSON
+      return decoded['pedidos'] as List<dynamic>;
     }
 
     throw Exception('Error al obtener pedidos (${response.statusCode})');

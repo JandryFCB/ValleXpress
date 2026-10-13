@@ -113,7 +113,7 @@ class _ClienteMisPedidosScreenState extends State<ClienteMisPedidosScreen> {
       case 'confirmado':
         return AppTheme.clienteColor;
       case 'preparando':
-        return const Color(0xFFFFA500);
+        return AppTheme.warningColor;
       case 'listo':
         return const Color(0xFF2E7D32);
       case 'en_camino':

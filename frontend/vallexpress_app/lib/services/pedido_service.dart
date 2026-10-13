@@ -181,7 +181,7 @@ class PedidoService {
 
     if (response.statusCode == 200) {
       final decoded = jsonDecode(response.body);
-      return decoded as List<dynamic>;
+      return decoded['pedidos'] as List<dynamic>;
     }
 
     throw Exception('Error al obtener pedidos (${response.statusCode})');

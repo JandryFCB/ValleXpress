@@ -58,7 +58,7 @@ class _VendedorMisPedidosScreenState extends State<VendedorMisPedidosScreen> {
       case 'confirmado':
         return AppTheme.vendedorColor;
       case 'preparando':
-        return const Color(0xFFFFA500);
+        return AppTheme.warningColor;
       case 'listo':
         return const Color(0xFF2E7D32);
       case 'en_camino':
@@ -316,7 +316,7 @@ class _VendedorMisPedidosScreenState extends State<VendedorMisPedidosScreen> {
                         gradient: LinearGradient(
                           colors: [
                             AppTheme.vendedorColor,
-                            const Color(0xFFFFA500),
+                            AppTheme.warningColor,
                           ],
                         ),
                         borderRadius: BorderRadius.circular(16),
@@ -358,7 +358,7 @@ class _VendedorMisPedidosScreenState extends State<VendedorMisPedidosScreen> {
                         gradient: LinearGradient(
                           colors: [
                             AppTheme.vendedorColor,
-                            const Color(0xFFFFA500),
+                            AppTheme.warningColor,
                           ],
                         ),
                         borderRadius: BorderRadius.circular(16),

@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/socket_tracking_service.dart';
+import '../services/fcm_mobile.dart'
+    if (dart.library.html) 'fcm_stub_import.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -35,6 +37,7 @@ class AuthProvider with ChangeNotifier {
     }
 
     notifyListeners();
+    if (_token != null) FcmService.registrarDispositivo();
   }
 
   Future<bool> login(String email, String password) async {
@@ -51,6 +54,7 @@ class AuthProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', _token!);
       await prefs.setString('usuario', jsonEncode(_usuario));
+      FcmService.registrarDispositivo();
 
       _isLoading = false;
       notifyListeners();
@@ -114,6 +118,7 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     // Limpiar socket antes de cerrar sesión
     TrackingSocketService().reset();
+    if (_token != null) await FcmService.quitarDispositivo(_token!);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
