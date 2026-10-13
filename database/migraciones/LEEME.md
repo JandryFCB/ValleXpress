@@ -7,6 +7,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 |---|---|
 | `000_base.sql` | Zona horaria, `USUARIOACTUAL()`, trigger de historial `FNVERSION` y `ACTIVARVERSION()` |
 | `001_identidad.sql` | Roles, estatus, tipos de documento, personas, usuarios, acceso y teléfonos. Admin = persona 1 |
+| `002_sesiones.sql` | Sesión persistente (refresh tokens con rotación), códigos de verificación y dispositivos push |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 
