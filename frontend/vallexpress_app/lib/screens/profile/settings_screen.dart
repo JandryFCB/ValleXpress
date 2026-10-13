@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:vallexpress_app/config/theme.dart';
 import 'package:vallexpress_app/providers/auth_provider.dart';
+import 'package:vallexpress_app/providers/tema_provider.dart';
 import 'package:vallexpress_app/services/profile_service.dart';
 import 'package:vallexpress_app/widgets/terms_and_conditions_modal.dart';
 import 'package:vallexpress_app/screens/profile/profile_router.dart'; // ✅ NUEVO
@@ -362,6 +363,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 24),
 
+            _buildSectionTitle('Apariencia'),
+            const SizedBox(height: 12),
+            _buildSelectorTema(),
+            const SizedBox(height: 24),
+
             _buildSectionTitle('Notificaciones'),
             const SizedBox(height: 12),
             _buildToggleTile(
@@ -439,6 +445,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
           ],
         ),
+      ),
+    );
+  }
+
+  // Tema de la app: seguir al sistema, claro u oscuro. Se guarda en el teléfono.
+  Widget _buildSelectorTema() {
+    final tema = context.watch<TemaProvider>();
+    return SizedBox(
+      width: double.infinity,
+      child: SegmentedButton<ThemeMode>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto), label: Text('Sistema')),
+          ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined), label: Text('Claro')),
+          ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined), label: Text('Oscuro')),
+        ],
+        selected: {tema.modo},
+        onSelectionChanged: (seleccion) => tema.cambiar(seleccion.first),
       ),
     );
   }

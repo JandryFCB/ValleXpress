@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:vallexpress_app/providers/auth_provider.dart';
-import '../../config/theme.dart';
 import '../../config/constants.dart';
-import '../../widgets/gradient_button.dart';
+import '../../config/theme.dart';
+import '../../providers/auth_provider.dart';
 import 'forgot_password_screen.dart';
 
+/// Pantalla de inicio de sesión. Se adapta al modo claro/oscuro (colores desde context.colores).
+/// La sesión queda guardada en el equipo: después de entrar una vez, la app abre directo sin pedir la clave.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -14,370 +15,180 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  late TextEditingController _emailController;
-  late TextEditingController _passwordController;
-  bool _obscurePassword = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _emailController = TextEditingController();
-    _passwordController = TextEditingController();
-  }
+  final _formKey = GlobalKey<FormState>();
+  final _usuarioController = TextEditingController();
+  final _claveController = TextEditingController();
+  final _claveFocus = FocusNode();
+  bool _ocultarClave = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _usuarioController.dispose();
+    _claveController.dispose();
+    _claveFocus.dispose();
     super.dispose();
   }
 
-  void _handleLogin(BuildContext context) {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
+  Future<void> _entrar() async {
+    FocusScope.of(context).unfocus();
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    if (email.isEmpty || password.isEmpty) {
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.login(_usuarioController.text.trim(), _claveController.text);
+    if (!mounted) return;
+
+    if (ok) {
+      Navigator.of(context).pushReplacementNamed(AppConstants.homeRoute);
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Escribe tu correo o usuario y tu contraseña'),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: Text(auth.error ?? 'No se pudo iniciar sesión'),
+          backgroundColor: AppTheme.errorColor,
         ),
       );
-      return;
     }
-
-    context.read<AuthProvider>().login(email, password).then((success) {
-      if (success) {
-        Navigator.of(context).pushReplacementNamed(AppConstants.homeRoute);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              context.read<AuthProvider>().error ?? 'Error al iniciar sesión',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colores;
+    final texto = Theme.of(context).textTheme;
+    final cargando = context.select<AuthProvider, bool>((a) => a.isLoading);
+
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 40),
-
-              // Logo con glow dorado
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.cardColor, AppTheme.cardColorLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: AppTheme.primaryColor.withOpacity(0.5),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withOpacity(0.3),
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
-                  ],
-                ),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 100,
-                  height: 100,
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // Bienvenido con gradiente
-              ShaderMask(
-                shaderCallback: (bounds) => LinearGradient(
-                  colors: [AppTheme.primaryColor, AppTheme.accentColor],
-                ).createShader(bounds),
-                child: Text(
-                  'Bienvenido',
-                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                'Inicia sesión para continuar',
-                style: TextStyle(
-                  color: AppTheme.textSecondaryColor,
-                  fontSize: 14,
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Email input estilizado
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppTheme.borderColor.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  textInputAction: TextInputAction.next,
-                  style: const TextStyle(color: AppTheme.textPrimaryColor),
-                  decoration: InputDecoration(
-                    hintText: 'Correo o usuario',
-                    hintStyle: TextStyle(
-                      color: AppTheme.textSecondaryColor.withOpacity(0.5),
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.person_outline,
-                      color: AppTheme.accentColor,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 18,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Password input estilizado
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: AppTheme.borderColor.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  style: const TextStyle(color: AppTheme.textPrimaryColor),
-                  decoration: InputDecoration(
-                    hintText: '••••••••',
-                    hintStyle: TextStyle(
-                      color: AppTheme.textSecondaryColor.withOpacity(0.5),
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.lock_outline,
-                      color: AppTheme.accentColor,
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        color: AppTheme.textSecondaryColor,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 18,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Forgot password con estilo neón
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ForgotPasswordScreen(),
-                      ),
-                    );
-                  },
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.accentColor,
-                  ),
-                  child: const Text(
-                    '¿Olvidaste tu contraseña?',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Login button con gradiente
-              Consumer<AuthProvider>(
-                builder: (context, authProvider, _) {
-                  return GradientButton(
-                    text: 'Iniciar Sesión',
-                    onPressed: authProvider.isLoading
-                        ? null
-                        : () => _handleLogin(context),
-                    isLoading: authProvider.isLoading,
-                    gradientColors: const [
-                      AppTheme.primaryColor,
-                      AppTheme.primaryDark,
-                    ],
-                  );
-                },
-              ),
-
-              const SizedBox(height: 20),
-
-              // Divider
-              /*Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: AppTheme.borderColor.withOpacity(0.3),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'o continúa con',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.textPrimaryColor,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: AppTheme.borderColor.withOpacity(0.3),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Social buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Google button
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // TODO: Implementar login con Google
-                      },
-                      icon: const Icon(Icons.g_mobiledata),
-                      label: const Text('Google'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.textPrimaryColor,
-                        side: BorderSide(
-                          color: AppTheme.borderColor.withOpacity(0.5),
+      body: Container(
+        decoration: BoxDecoration(gradient: c.degradadoFondo),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: AutofillGroup(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Logo
+                        Center(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(28),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: c.primario.withValues(alpha: 0.28),
+                                  blurRadius: 32,
+                                  offset: const Offset(0, 12),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: Image.asset('assets/images/logo.png', width: 112, height: 112),
+                            ),
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Facebook button
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        // TODO: Implementar login con Facebook
-                      },
-                      icon: const Icon(Icons.facebook),
-                      label: const Text('Facebook'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.textPrimaryColor,
-                        side: BorderSide(
-                          color: AppTheme.borderColor.withOpacity(0.5),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),*/
-              const SizedBox(height: 20),
+                        const SizedBox(height: 32),
 
-              // Register link con estilo vibrante
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    '¿No tienes cuenta? ',
-                    style: TextStyle(
-                      color: AppTheme.textSecondaryColor,
-                      fontSize: 14,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(
-                        context,
-                      ).pushNamed(AppConstants.registerRoute);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.accentColor.withOpacity(0.2),
-                            AppTheme.accentColor.withOpacity(0.1),
+                        Text('Bienvenido de vuelta', style: texto.headlineMedium, textAlign: TextAlign.center),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Inicia sesión para pedir lo mejor del valle',
+                          style: texto.bodyMedium,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 32),
+
+                        // Usuario o correo
+                        TextFormField(
+                          controller: _usuarioController,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.username, AutofillHints.email],
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          decoration: const InputDecoration(
+                            labelText: 'Correo o usuario',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Escribe tu correo o tu usuario' : null,
+                          onFieldSubmitted: (_) => _claveFocus.requestFocus(),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Contraseña
+                        TextFormField(
+                          controller: _claveController,
+                          focusNode: _claveFocus,
+                          obscureText: _ocultarClave,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.password],
+                          decoration: InputDecoration(
+                            labelText: 'Contraseña',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              tooltip: _ocultarClave ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                              icon: Icon(_ocultarClave ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                              onPressed: () => setState(() => _ocultarClave = !_ocultarClave),
+                            ),
+                          ),
+                          validator: (v) => (v == null || v.isEmpty) ? 'Escribe tu contraseña' : null,
+                          onFieldSubmitted: (_) => cargando ? null : _entrar(),
+                        ),
+
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                            ),
+                            child: const Text('¿Olvidaste tu contraseña?'),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        FilledButton(
+                          onPressed: cargando ? null : _entrar,
+                          child: cargando
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                                )
+                              : const Text('Iniciar sesión'),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Tu sesión se mantiene iniciada en este equipo. Puedes cerrarla cuando quieras desde tu perfil.',
+                          style: texto.bodySmall?.copyWith(color: c.textoSuave),
+                          textAlign: TextAlign.center,
+                        ),
+
+                        const SizedBox(height: 28),
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: c.borde)),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('¿Eres nuevo?', style: texto.bodySmall?.copyWith(color: c.textoSuave)),
+                            ),
+                            Expanded(child: Divider(color: c.borde)),
                           ],
                         ),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.accentColor.withOpacity(0.3),
-                          width: 1,
+                        const SizedBox(height: 20),
+
+                        OutlinedButton(
+                          onPressed: () => Navigator.of(context).pushNamed(AppConstants.registerRoute),
+                          child: const Text('Crear una cuenta'),
                         ),
-                      ),
-                      child: Text(
-                        'Regístrate aquí',
-                        style: TextStyle(
-                          color: AppTheme.accentColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),

@@ -1,45 +1,121 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class AppTheme {
-  // 🎨 PALETA "MEDIANOCHE ELÉCTRICA": violeta vibrante sobre azul casi negro.
-  // Cambiando SOLO estos valores se recolorea toda la app (las pantallas leen de aquí).
-  static const Color primaryColor = Color(0xFF8B5CF6); // Violeta eléctrico
-  static const Color primaryLight = Color(0xFFB794FF); // Violeta claro
-  static const Color primaryDark = Color(0xFF6D3FE0); // Violeta profundo
+/// Colores que cambian según el modo (claro/oscuro). Las pantallas NUEVAS los leen así:
+///     final c = context.colores;   ->   c.fondo, c.tarjeta, c.texto, c.textoSuave, c.borde ...
+/// Las pantallas que todavía usan las constantes de [AppTheme] (siempre oscuras) se van migrando de a una.
+@immutable
+class ColoresValle extends ThemeExtension<ColoresValle> {
+  const ColoresValle({
+    required this.fondo,
+    required this.fondoFin,
+    required this.tarjeta,
+    required this.tarjetaElevada,
+    required this.borde,
+    required this.texto,
+    required this.textoSuave,
+    required this.primario,
+    required this.acento,
+  });
 
-  // 🌌 FONDOS
-  static const Color backgroundColor = Color(0xFF0A0E1F); // Azul medianoche
-  static const Color backgroundGradientStart = Color(0xFF0A0E1F);
-  static const Color backgroundGradientEnd = Color(0xFF171233); // Tinte violeta
-  static const Color cardColor = Color(0xFF151B33); // Tarjetas
-  static const Color cardColorLight = Color(0xFF212A4D); // Tarjetas elevadas
+  final Color fondo;
+  final Color fondoFin; // segundo color del degradado de fondo
+  final Color tarjeta;
+  final Color tarjetaElevada;
+  final Color borde;
+  final Color texto;
+  final Color textoSuave;
+  final Color primario;
+  final Color acento;
+
+  LinearGradient get degradadoFondo =>
+      LinearGradient(colors: [fondo, fondoFin], begin: Alignment.topCenter, end: Alignment.bottomCenter);
+
+  @override
+  ColoresValle copyWith({
+    Color? fondo,
+    Color? fondoFin,
+    Color? tarjeta,
+    Color? tarjetaElevada,
+    Color? borde,
+    Color? texto,
+    Color? textoSuave,
+    Color? primario,
+    Color? acento,
+  }) =>
+      ColoresValle(
+        fondo: fondo ?? this.fondo,
+        fondoFin: fondoFin ?? this.fondoFin,
+        tarjeta: tarjeta ?? this.tarjeta,
+        tarjetaElevada: tarjetaElevada ?? this.tarjetaElevada,
+        borde: borde ?? this.borde,
+        texto: texto ?? this.texto,
+        textoSuave: textoSuave ?? this.textoSuave,
+        primario: primario ?? this.primario,
+        acento: acento ?? this.acento,
+      );
+
+  @override
+  ColoresValle lerp(ThemeExtension<ColoresValle>? other, double t) {
+    if (other is! ColoresValle) return this;
+    return ColoresValle(
+      fondo: Color.lerp(fondo, other.fondo, t)!,
+      fondoFin: Color.lerp(fondoFin, other.fondoFin, t)!,
+      tarjeta: Color.lerp(tarjeta, other.tarjeta, t)!,
+      tarjetaElevada: Color.lerp(tarjetaElevada, other.tarjetaElevada, t)!,
+      borde: Color.lerp(borde, other.borde, t)!,
+      texto: Color.lerp(texto, other.texto, t)!,
+      textoSuave: Color.lerp(textoSuave, other.textoSuave, t)!,
+      primario: Color.lerp(primario, other.primario, t)!,
+      acento: Color.lerp(acento, other.acento, t)!,
+    );
+  }
+}
+
+extension ColoresContexto on BuildContext {
+  ColoresValle get colores => Theme.of(this).extension<ColoresValle>()!;
+}
+
+class AppTheme {
+  // 🎨 PALETA DEL LOGO "ValleXpress": verde de montaña, amarillo de sol, azul de río y fondo azul marino.
+  // Las constantes de abajo son las del modo OSCURO (las pantallas que aún no migraron las leen directo).
+  // Para colores que deben cambiar con el modo claro/oscuro usa context.colores.
+  static const Color primaryColor = Color(0xFF35B35A); // Verde montaña
+  static const Color primaryLight = Color(0xFF7BDC95); // Verde claro
+  static const Color primaryDark = Color(0xFF1F7A3A); // Verde profundo
+
+  // 🌌 FONDOS (azul marino del logo)
+  static const Color backgroundColor = Color(0xFF0B1A2B);
+  static const Color backgroundGradientStart = Color(0xFF0B1A2B);
+  static const Color backgroundGradientEnd = Color(0xFF10293F);
+  static const Color cardColor = Color(0xFF12263A);
+  static const Color cardColorLight = Color(0xFF1A3550);
 
   // ✨ ACENTOS Y BORDES
-  static const Color borderColor = Color(0xFF8B5CF6);
-  static const Color accentColor = Color(0xFF22E5C9); // Turquesa neón
-  static const Color accentSecondary = Color(0xFFFF5C8A); // Rosa coral
+  static const Color borderColor = Color(0xFF35B35A);
+  static const Color accentColor = Color(0xFFF6B92B); // Amarillo sol
+  static const Color accentSecondary = Color(0xFF2F9BE0); // Azul río
 
   // 📝 TEXTOS
-  static const Color textPrimaryColor = Color(0xFFF5F7FF);
-  static const Color textSecondaryColor = Color(0xFF9AA4C7);
-  static const Color textAccent = Color(0xFFB794FF);
+  static const Color textPrimaryColor = Color(0xFFF2F6FA);
+  static const Color textSecondaryColor = Color(0xFF9DB2C6);
+  static const Color textAccent = Color(0xFF7BDC95);
 
-  // 🎭 COLORES POR ROL (distintos entre sí y del violeta principal)
-  static const Color vendedorColor = Color(0xFFFFA62B); // Ámbar
-  static const Color vendedorLight = Color(0xFFFFC46B);
-  static const Color repartidorColor = Color(0xFF3B9BFF); // Azul cielo
-  static const Color repartidorLight = Color(0xFF7CBBFF);
-  static const Color clienteColor = Color(0xFF22E5A0); // Verde menta
-  static const Color clienteLight = Color(0xFF6DF0C2);
+  // 🎭 COLORES POR ROL
+  static const Color vendedorColor = Color(0xFFF6B92B); // Amarillo sol
+  static const Color vendedorLight = Color(0xFFFFD066);
+  static const Color repartidorColor = Color(0xFF2F9BE0); // Azul río
+  static const Color repartidorLight = Color(0xFF6BBBF0);
+  static const Color clienteColor = Color(0xFF35B35A); // Verde montaña
+  static const Color clienteLight = Color(0xFF7BDC95);
 
   // 🚦 ESTADOS
-  static const Color successColor = Color(0xFF22E5A0);
-  static const Color errorColor = Color(0xFFFF4D6D);
-  static const Color warningColor = Color(0xFFFFB02E);
-  static const Color infoColor = Color(0xFF3BC9FF);
+  static const Color successColor = Color(0xFF35B35A);
+  static const Color errorColor = Color(0xFFFF5A5F);
+  static const Color warningColor = Color(0xFFF6B92B);
+  static const Color infoColor = Color(0xFF2F9BE0);
 
-  // 🌈 GRADIENTES PRE-DEFINIDOS
+  // 🌈 GRADIENTES
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [primaryColor, primaryLight],
     begin: Alignment.topLeft,
@@ -53,142 +129,215 @@ class AppTheme {
   );
 
   static const LinearGradient accentGradient = LinearGradient(
-    colors: [accentColor, Color(0xFF3B9BFF)],
+    colors: [accentColor, Color(0xFFFFD066)],
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
   );
 
-  static ThemeData get theme {
+  // ---------------------------------------------------------------------------------------------
+  // Colores por modo
+  // ---------------------------------------------------------------------------------------------
+  static const ColoresValle _oscuro = ColoresValle(
+    fondo: backgroundColor,
+    fondoFin: backgroundGradientEnd,
+    tarjeta: cardColor,
+    tarjetaElevada: cardColorLight,
+    borde: Color(0xFF2A4560),
+    texto: textPrimaryColor,
+    textoSuave: textSecondaryColor,
+    primario: primaryColor,
+    acento: accentColor,
+  );
+
+  static const ColoresValle _claro = ColoresValle(
+    fondo: Color(0xFFF4F8F5),
+    fondoFin: Color(0xFFE6F1EA),
+    tarjeta: Color(0xFFFFFFFF),
+    tarjetaElevada: Color(0xFFEEF4F0),
+    borde: Color(0xFFD3E0D8),
+    texto: Color(0xFF0B1A2B),
+    textoSuave: Color(0xFF5A6B7C),
+    primario: Color(0xFF1F8F43), // verde más profundo: contrasta bien sobre blanco
+    acento: Color(0xFFC98A00),
+  );
+
+  static ThemeData get dark => _construir(Brightness.dark, _oscuro);
+  static ThemeData get light => _construir(Brightness.light, _claro);
+
+  /// Compatibilidad: las pantallas viejas pedían AppTheme.theme (siempre oscuro)
+  static ThemeData get theme => dark;
+
+  static ThemeData _construir(Brightness brillo, ColoresValle c) {
+    final oscuro = brillo == Brightness.dark;
+
+    final esquema = ColorScheme.fromSeed(
+      seedColor: primaryColor,
+      brightness: brillo,
+    ).copyWith(
+      primary: c.primario,
+      onPrimary: Colors.white,
+      secondary: c.acento,
+      onSecondary: oscuro ? backgroundColor : Colors.white,
+      surface: c.tarjeta,
+      onSurface: c.texto,
+      error: errorColor,
+      outline: c.borde,
+    );
+
+    // Tipografía moderna (Plus Jakarta Sans), con los colores del modo
+    final base = GoogleFonts.plusJakartaSansTextTheme(
+      oscuro ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
+    ).apply(bodyColor: c.texto, displayColor: c.texto);
+    final texto = base.copyWith(
+      headlineLarge: base.headlineLarge?.copyWith(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+      headlineMedium: base.headlineMedium?.copyWith(fontSize: 24, fontWeight: FontWeight.w700),
+      titleLarge: base.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+      titleMedium: base.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      bodyLarge: base.bodyLarge?.copyWith(fontSize: 16),
+      bodyMedium: base.bodyMedium?.copyWith(fontSize: 14, color: c.textoSuave),
+      labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+    );
+
+    OutlineInputBorder borde(Color color, [double ancho = 1.2]) =>
+        OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: color, width: ancho));
+
     return ThemeData(
       useMaterial3: true,
-      primaryColor: primaryColor,
-      scaffoldBackgroundColor: backgroundColor,
+      brightness: brillo,
+      colorScheme: esquema,
+      scaffoldBackgroundColor: c.fondo,
+      canvasColor: c.fondo,
+      primaryColor: c.primario,
+      textTheme: texto,
+      extensions: [c],
+      splashFactory: InkSparkle.splashFactory,
 
-      // Colores
-      colorScheme: const ColorScheme.dark(
-        primary: primaryColor,
-        secondary: accentColor,
-        surface: cardColor,
-        error: errorColor,
-        onPrimary: Colors.white,
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        foregroundColor: c.texto,
+        titleTextStyle: texto.titleLarge?.copyWith(color: c.texto),
       ),
 
-      // Tipografía
-      textTheme: GoogleFonts.poppinsTextTheme().copyWith(
-        headlineLarge: GoogleFonts.poppins(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: textPrimaryColor,
-        ),
-        headlineMedium: GoogleFonts.poppins(
-          fontSize: 24,
-          fontWeight: FontWeight.w600,
-          color: textPrimaryColor,
-        ),
-        bodyLarge: GoogleFonts.poppins(fontSize: 16, color: textPrimaryColor),
-        bodyMedium: GoogleFonts.poppins(
-          fontSize: 14,
-          color: textSecondaryColor,
+      cardTheme: CardThemeData(
+        color: c.tarjeta,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: c.borde),
         ),
       ),
 
-      // Input decoration
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: cardColor,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: borderColor, width: 2),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: borderColor.withOpacity(0.5),
-            width: 1.5,
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: borderColor, width: 2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 16,
-        ),
-        hintStyle: GoogleFonts.poppins(color: textSecondaryColor, fontSize: 14),
-        labelStyle: GoogleFonts.poppins(
-          color: textSecondaryColor,
-          fontSize: 14,
-        ),
+        fillColor: c.tarjeta,
+        border: borde(c.borde),
+        enabledBorder: borde(c.borde),
+        focusedBorder: borde(c.primario, 2),
+        errorBorder: borde(errorColor),
+        focusedErrorBorder: borde(errorColor, 2),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        hintStyle: texto.bodyMedium?.copyWith(color: c.textoSuave.withValues(alpha: 0.7)),
+        labelStyle: texto.bodyMedium,
+        prefixIconColor: c.textoSuave,
+        suffixIconColor: c.textoSuave,
       ),
 
-      // Botones con gradiente y sombras
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
-          foregroundColor: backgroundColor,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 8,
-          shadowColor: primaryColor.withOpacity(0.4),
-          textStyle: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
-          ),
+          backgroundColor: c.primario,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(54),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 0,
+          textStyle: texto.labelLarge?.copyWith(fontSize: 16, letterSpacing: 0.3),
         ),
       ),
 
-      // Botones de texto
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: c.primario,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(54),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: texto.labelLarge?.copyWith(fontSize: 16),
+        ),
+      ),
+
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: primaryColor,
-          textStyle: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          foregroundColor: c.primario,
+          textStyle: texto.labelLarge?.copyWith(fontSize: 14),
         ),
       ),
 
-      // Botones outline
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: primaryColor,
-          side: const BorderSide(color: primaryColor, width: 2),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          textStyle: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          foregroundColor: c.primario,
+          minimumSize: const Size.fromHeight(54),
+          side: BorderSide(color: c.primario, width: 1.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: texto.labelLarge?.copyWith(fontSize: 16),
         ),
       ),
 
-      // Floating action buttons
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: accentColor,
-        foregroundColor: backgroundColor,
-        elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: c.acento,
+        foregroundColor: oscuro ? backgroundColor : Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
 
-      // Chips
       chipTheme: ChipThemeData(
-        backgroundColor: cardColor,
-        selectedColor: primaryColor,
-        labelStyle: GoogleFonts.poppins(fontSize: 12, color: textPrimaryColor),
-        secondaryLabelStyle: GoogleFonts.poppins(
-          fontSize: 12,
-          color: backgroundColor,
-          fontWeight: FontWeight.w600,
-        ),
+        backgroundColor: c.tarjeta,
+        selectedColor: c.primario,
+        side: BorderSide(color: c.borde),
+        labelStyle: texto.labelMedium?.copyWith(color: c.texto),
+        secondaryLabelStyle: texto.labelMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
+
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: oscuro ? c.tarjetaElevada : const Color(0xFF16283A),
+        contentTextStyle: texto.bodyMedium?.copyWith(color: Colors.white),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+
+      dialogTheme: DialogThemeData(
+        backgroundColor: c.tarjeta,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        titleTextStyle: texto.titleLarge,
+      ),
+
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: c.tarjeta,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      ),
+
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: c.tarjeta,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: c.primario.withValues(alpha: 0.18),
+        labelTextStyle: WidgetStatePropertyAll(texto.labelMedium),
+      ),
+
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : c.textoSuave),
+        trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.primario : c.borde),
+      ),
+
+      dividerTheme: DividerThemeData(color: c.borde, thickness: 1),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.primario),
     );
   }
 }
