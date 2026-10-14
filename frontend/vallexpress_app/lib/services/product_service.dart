@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'api_http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import 'session_store.dart';
 

@@ -7,10 +7,34 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 
 ## Estado actual
 
-**Backend: COMPLETO** (todos los módulos migrados y probados: 341 pruebas) · Siguiente: app Flutter · Última actualización: 2026-10-06
+**Reconstrucción desde cero por flujos** · Flujo 1 (Cuenta) **hecho** · Siguiente: Flujo 2 (Catálogo) · Última actualización: 2026-10-14
+
+> El 2026-10-12 se borró el esquema anterior (v2/V3) y la BD se rehízo con el patrón T de `PATRON_TABLAS_FITBANK.md`,
+> por bloques (`database/migraciones`). Los bloques 1 a 13 de abajo describen el esquema ANTERIOR: quedan como historial.
+> Cada flujo = migrar el backend a las tablas nuevas + rediseñar sus pantallas (tema claro/oscuro) + pruebas.
 
 | Área | Estado |
 |---|---|
+| Ramas: `main` (estable), `desarrollo`, `feat/bd-desde-cero`, `feat/app-sesion`, `feat/flujo-cuenta` | Hecho, todo subido a GitHub |
+| BD nueva: migraciones 000 a 005 (27 tablas + vista `VUSUARIOS`), PostgreSQL 17 en Docker | **Hecha y probada** |
+| Sesión persistente (token 15 min + refresh token 90 días con rotación) | **Hecha y probada** (backend y app, también en el móvil) |
+| Backend **auth** | **Hecho: 104 pruebas** |
+| Backend **direcciones y teléfonos** | **Hecho: 71 pruebas** |
+| App: sistema de diseño + tema claro/oscuro/sistema con la paleta del logo | **Hecho** |
+| App rediseñada: login, registro (4 pasos), recuperar clave, perfil, direcciones con mapa, teléfonos, configuración | **Hecho: 24 pruebas**, verificado en el móvil |
+| Flujo 2 · Catálogo: negocios, categorías, productos, imágenes | Pendiente |
+| Flujo 3 · Pedidos del cliente: carrito, pedido, seguimiento en vivo, calificaciones, notificaciones | Pendiente |
+| Flujo 4 · Vendedor y repartidor: gestión de pedidos, repartidores, rutas | Pendiente |
+| Antes de producción (claves, HTTPS, almacenamiento de imágenes) y reglas de negocio (IVA, comisión, envío) | Pendiente |
+
+### Bloque 14 (2026-10-12/13): reconstrucción, sesión persistente y flujo Cuenta
+- BD desde cero con tablas `T…ID` + históricas (`FDESDE/FHASTA/VERSIONCONTROL`); códigos numéricos desde el 2 (el 1 es el administrador).
+- Login y registro entregan token de acceso (15 min) y refresh token (90 días sin usar, rota en cada uso, detecta robo). La app lo guarda cifrado y renueva sola; probado cerrando y reabriendo la app en el móvil.
+- Direcciones (con historial, una predeterminada, el local del negocio separado) y teléfonos (hasta 5, uno principal).
+- App: sistema de diseño reutilizable y 10 pantallas rediseñadas con tema claro/oscuro. Se corrigió que los servicios ocultaban el mensaje real del servidor.
+- Entorno: se quitó el emulador (la ventana salía negra y saturaba la RAM); se prueba en Chrome y en el móvil por USB.
+
+---|---|
 | Revisión inicial del proyecto | Hecha |
 | Higiene del repositorio | Hecha (commit pendiente, ver abajo) |
 | Secretos y configuración | Pendiente de claves (se hace antes de producción) |

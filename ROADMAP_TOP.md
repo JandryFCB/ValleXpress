@@ -4,6 +4,20 @@ Documento de seguimiento. Marca con `[x]` lo que vayas completando.
 
 ---
 
+## Plan actual: reconstrucción por flujos (desde 2026-10-12)
+
+- [x] BD desde cero con el patrón T, por migraciones (`database/migraciones`)
+- [x] Sesión persistente con refresh token (backend + app)
+- [x] Sistema de diseño y tema claro/oscuro/sistema
+- [x] **Flujo 1 · Cuenta:** registro, login, recuperar clave, perfil, direcciones, teléfonos, configuración
+- [ ] **Flujo 2 · Catálogo:** negocios (perfil, local, horarios), categorías, productos, imágenes
+- [ ] **Flujo 3 · Pedidos del cliente:** carrito, crear pedido, seguimiento en vivo, calificaciones, notificaciones; Home nuevo
+- [ ] **Flujo 4 · Vendedor y repartidor:** pedidos del negocio, perfil del repartidor, aceptar y entregar, rutas
+- [ ] Detalles: ícono de la app (sale recortado), clave del administrador, foto de perfil
+- [ ] Antes de producción: rotar claves, HTTPS y `trust proxy`, imágenes en S3/R2, programar limpiezas
+- [ ] Reglas de negocio: IVA, comisión, costo de envío, propina, cupones, pagos en línea
+- [ ] Fusionar a `desarrollo` y luego a `main`
+
 ## 0. Principio guía: no duplicar código
 
 Regla: **un controller solo recibe la petición, llama a un servicio y responde.** La lógica vive en servicios, helpers y clases base. Si copias y pegas algo por segunda vez, va a un helper.

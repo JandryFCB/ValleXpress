@@ -3,7 +3,6 @@ import 'dart:io' show Platform;
 import 'package:firebase_core/firebase_core.dart';
 import 'api_http.dart' as http;
 import 'session_store.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
