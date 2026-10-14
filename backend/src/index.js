@@ -7,6 +7,7 @@ const Persona = require('./modules/auth/persona.model');                    // T
 const UsuarioCuenta = require('./modules/auth/usuarioCuenta.model');        // TUSUARIOS
 const UsuarioAcceso = require('./modules/auth/usuarioAcceso.model');        // TUSUARIOSACCESO
 const Telefono = require('./modules/telefonos/telefono.model');             // TPERSONATELEFONOS
+const Direccion = require('./modules/direcciones/direccion.model');         // TPERSONADIRECCIONES
 const CodigoVerificacion = require('./modules/auth/codigoVerificacion.model');
 const Sesion = require('./modules/auth/sesion.model');
 
@@ -17,6 +18,7 @@ module.exports = {
   UsuarioCuenta,
   UsuarioAcceso,
   Telefono,
+  Direccion,
   CodigoVerificacion,
   Sesion,
 };

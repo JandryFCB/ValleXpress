@@ -2,7 +2,7 @@ const { body, param } = require('express-validator');
 const { TIPOSDIRECCION } = require('../../shared/constants/codigos');
 
 // Reglas de validación de las rutas de direcciones.
-const ID = [param('id').matches(/^DIR-\d{6}$/).withMessage('ID de dirección inválido')];
+const ID = [param('id').isInt({ min: 1 }).withMessage('ID de dirección inválido')];
 
 const opcionales = [
   body('tipo').optional().customSanitizer((v) => String(v).trim().toUpperCase())
@@ -14,7 +14,7 @@ const opcionales = [
 ];
 
 const crear = [
-  body('direccion').isString().trim().notEmpty().withMessage('La dirección es requerida')
+  body('direccion').isString().withMessage('La dirección es requerida').trim().notEmpty().withMessage('La dirección es requerida')
     .isLength({ max: 500 }).withMessage('La dirección es muy larga'),
   body('latitud').notEmpty().withMessage('La latitud es requerida').bail().isFloat({ min: -90, max: 90 }).withMessage('Latitud inválida'),
   body('longitud').notEmpty().withMessage('La longitud es requerida').bail().isFloat({ min: -180, max: 180 }).withMessage('Longitud inválida'),

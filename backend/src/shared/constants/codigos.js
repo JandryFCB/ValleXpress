@@ -10,9 +10,15 @@ const ROLES = Object.freeze({
 
 // Tipos de los catálogos T (códigos de 3 letras). LOC (local del negocio) lo maneja el módulo de vendedores,
 // por eso el cliente no puede elegirlo como tipo de dirección.
-const TIPOSTELEFONO = Object.freeze(['MOV', 'CAS', 'TRA', 'WAP']);
-const TIPOSDIRECCION = Object.freeze(['DOM', 'TRA', 'FAM', 'OTR']);
-const TIPODIRECCIONLOCAL = 'LOC';
+// La app habla en texto de 3 letras ('MOV', 'DOM'...); la BD guarda el código del catálogo ('001'...).
+const TIPOTELEFONO = Object.freeze({ MOV: '001', CAS: '002', TRA: '003', WAP: '004' });
+const TIPODIRECCION = Object.freeze({ DOM: '001', TRA: '002', FAM: '003', OTR: '004', LOC: '005' });
+const invertir = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k])));
+const TIPOTELEFONOAAPI = invertir(TIPOTELEFONO);        // '001' -> 'MOV'
+const TIPODIRECCIONAAPI = invertir(TIPODIRECCION);      // '001' -> 'DOM'
+const TIPOSTELEFONO = Object.freeze(Object.keys(TIPOTELEFONO));
+const TIPOSDIRECCION = Object.freeze(['DOM', 'TRA', 'FAM', 'OTR']);   // el cliente no elige LOC (local del negocio)
+const TIPODIRECCIONLOCAL = TIPODIRECCION.LOC;           // código de BD del local del negocio
 
 const ESTADOPEDIDO = Object.freeze({
   PENDIENTE: '001',
@@ -152,7 +158,7 @@ function interpretarCategoria(valor) {
 }
 
 module.exports = {
-  ROLES, TIPOSTELEFONO, TIPOSDIRECCION, TIPODIRECCIONLOCAL, ESTADOPEDIDO, ESTADOPRODUCTO, ESTADOPAGO, APROBACION, METODOPAGO, TIPOVEHICULO,
+  ROLES, TIPOSTELEFONO, TIPOSDIRECCION, TIPODIRECCIONLOCAL, TIPOTELEFONO, TIPODIRECCION, TIPOTELEFONOAAPI, TIPODIRECCIONAAPI, ESTADOPEDIDO, ESTADOPRODUCTO, ESTADOPAGO, APROBACION, METODOPAGO, TIPOVEHICULO,
   CATEGORIA, PROPOSITOCODIGO, ROLAAPI, APIAROL, ROLESREGISTRABLES,
   ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, METODOPAGOAAPI, APIAMETODOPAGO,
   vehiculoACodigo, categoriaACodigo, interpretarCategoria,

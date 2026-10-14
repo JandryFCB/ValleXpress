@@ -51,7 +51,9 @@ const { Server } = require('socket.io');
 // usan las tablas nuevas; el resto vuelve a activarse al migrarlo.
 const authRoutes = require('./modules/auth/auth.routes');
 const usuarioRoutes = require('./modules/auth/usuario.routes');
-// Pendientes de migrar: direcciones, telefonos, vendedores, productos, pedidos, repartidores, notificaciones
+const direccionesRoutes = require('./modules/direcciones/direcciones.routes');
+const telefonosRoutes = require('./modules/telefonos/telefonos.routes');
+// Pendientes de migrar: vendedores, productos, pedidos, repartidores, notificaciones
 
 
 
@@ -154,6 +156,8 @@ app.use('/api', limite.general);
 // Rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/direcciones', direccionesRoutes);
+app.use('/api/telefonos', telefonosRoutes);
 
 
 

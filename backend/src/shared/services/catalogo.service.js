@@ -38,15 +38,16 @@ async function categoriaTexto(registro) {
   return capitalizar((await mapa('categorias'))[registro.categoria] || null);
 }
 
-// Catálogos T (clave de 3 letras): [{ codigo, descripcion }] en su orden. Tabla y columna vienen de una lista fija.
-const TABLAST = { ttipostelefono: 'ctipotelefono', ttiposdireccion: 'ctipodireccion', ttiposimagen: 'ctipoimagen' };
-async function tipos(tabla, columna, { excluir = [] } = {}) {
+// Catálogos T con idioma (TTIPOSTELEFONO, TTIPOSDIRECCION): [{ codigo, descripcion }] ordenados por código.
+// "aApi" traduce el código de BD ('001') al texto que usa la app ('MOV'). Tabla y columna vienen de una lista fija.
+const TABLAST = { ttipostelefono: 'ctipotelefono', ttiposdireccion: 'ctipodireccion' };
+async function tipos(tabla, columna, aApi, { excluir = [] } = {}) {
   if (TABLAST[tabla] !== columna) throw new Error(`Catálogo desconocido: ${tabla}`);
   const filas = await sequelize.query(
-    `SELECT ${columna} AS codigo, descripcion FROM ${tabla} WHERE activo AND eliminadoen IS NULL ORDER BY orden`,
+    `SELECT ${columna} AS codigo, descripcion FROM ${tabla} WHERE cidioma = 'es' AND fhasta = '2999-12-31 00:00:00-05' ORDER BY ${columna}`,
     { type: QueryTypes.SELECT },
   );
-  return filas.filter((f) => !excluir.includes(f.codigo));
+  return filas.filter((f) => !excluir.includes(f.codigo)).map((f) => ({ codigo: aApi[f.codigo] || f.codigo, descripcion: f.descripcion }));
 }
 
 module.exports = { mapa, tipos, categoriaParaGuardar, categoriaTexto };

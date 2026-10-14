@@ -18,13 +18,13 @@ const crear = asyncHandler(async (req, res) =>
   res.status(201).json({ direccion: await service.crear(req.usuario.id, req.body) }));
 
 const actualizar = asyncHandler(async (req, res) =>
-  res.json({ direccion: await service.actualizar(req.usuario.id, req.params.id, req.body) }));
+  res.json({ direccion: await service.actualizar(req.usuario.id, Number(req.params.id), req.body) }));
 
 const marcarPredeterminada = asyncHandler(async (req, res) =>
-  res.json({ direccion: await service.marcarPredeterminada(req.usuario.id, req.params.id) }));
+  res.json({ direccion: await service.marcarPredeterminada(req.usuario.id, Number(req.params.id)) }));
 
 const eliminar = asyncHandler(async (req, res) => {
-  await service.eliminar(req.usuario.id, req.params.id);
+  await service.eliminar(req.usuario.id, Number(req.params.id));
   res.json({ message: 'Dirección eliminada' });
 });
 

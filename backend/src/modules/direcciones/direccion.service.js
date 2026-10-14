@@ -1,30 +1,36 @@
-const { Op } = require('sequelize');
+const { Op, Sequelize } = require('sequelize');
 const Direccion = require('./direccion.model');
 const Usuario = require('../auth/usuario.model');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const CatalogoService = require('../../shared/services/catalogo.service');
-const { TIPODIRECCIONLOCAL } = require('../../shared/constants/codigos');
+const { TIPODIRECCION, TIPODIRECCIONAAPI, TIPODIRECCIONLOCAL } = require('../../shared/constants/codigos');
 
 // Lógica de negocio de las direcciones de entrega del cliente. Solo el dueño ve y modifica las suyas.
 // Las direcciones son de la PERSONA (TPERSONADIRECCIONES.CPERSONA); el usuario que inicia sesión se traduce a su persona.
+// Cada cambio queda en el historial de la misma tabla (FDESDE/FHASTA) y registra quién lo hizo.
 const MAXDIRECCIONES = 20;
-// El local del negocio (LOC) lo maneja el módulo de vendedores: no es una dirección de entrega del cliente.
+// El local del negocio (tipo 005) lo maneja el módulo de negocios: no es una dirección de entrega del cliente.
 const DELCLIENTE = { tipo: { [Op.ne]: TIPODIRECCIONLOCAL } };
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 
+// La fecha de creación es el FDESDE de la PRIMERA versión (el FDESDE de la fila vigente es el del último cambio)
+const CREADOEN = [Sequelize.literal('(SELECT MIN(h.fdesde) FROM tpersonadirecciones h WHERE h.cdireccion = "Direccion"."cdireccion")'), 'creadoEn'];
+const CONCREACION = { include: [CREADOEN] };
+
 const aApi = (d, usuarioId) => ({
-  id: d.id,
+  id: Number(d.id),
   usuarioId,
   nombre: d.nombre,
-  tipo: d.tipo,
+  tipo: TIPODIRECCIONAAPI[d.tipo],
   direccion: d.direccion,
   referencia: d.referencia,
   instrucciones: d.instrucciones,
   latitud: num(d.latitud),
   longitud: num(d.longitud),
   esPredeterminada: d.esPredeterminada,
-  createdAt: d.creadoEn,
+  createdAt: d.get('creadoEn') ?? d.fDesde,
+  updatedAt: d.fDesde,
 });
 
 async function personaDe(usuarioId) {
@@ -33,25 +39,33 @@ async function personaDe(usuarioId) {
   return u.personaId;
 }
 
-async function propia(personaId, id) {
-  const dir = await Direccion.findOne({ where: { id, personaId, ...DELCLIENTE } });
+async function propia(personaId, id, opciones = {}) {
+  const dir = await Direccion.findOne({ where: { id, personaId, ...DELCLIENTE }, attributes: CONCREACION, ...opciones });
   if (!dir) throw AppError.notFound('Dirección no encontrada', 'DIRECCIONNOENCONTRADA');   // ajena o inexistente: mismo error
   return dir;
 }
 
-// Solo puede haber UNA predeterminada por usuario (la BD lo garantiza con un índice único)
-const quitarPredeterminada = (personaId, usuarioId, excepto, t) => Direccion.update(
-  { esPredeterminada: false, actualizadoPor: usuarioId },
+// Solo puede haber UNA predeterminada por persona (la BD lo garantiza con un índice único entre las vigentes)
+const quitarPredeterminada = (personaId, excepto, t) => Direccion.update(
+  { esPredeterminada: false },
   { where: { personaId, ...DELCLIENTE, esPredeterminada: true, ...(excepto && { id: { [Op.ne]: excepto } }) }, transaction: t },
 );
 
 const listar = async (usuarioId) => {
   const personaId = await personaDe(usuarioId);
-  return (await Direccion.findAll({ where: { personaId, ...DELCLIENTE }, order: [['esPredeterminada', 'DESC'], ['creadoEn', 'DESC']] })).map((d) => aApi(d, usuarioId));
+  const filas = await Direccion.findAll({
+    where: { personaId, ...DELCLIENTE },
+    attributes: CONCREACION,
+    order: [['esPredeterminada', 'DESC'], ['id', 'DESC']],
+  });
+  return filas.map((d) => aApi(d, usuarioId));
 };
 
 const predeterminada = async (usuarioId) => {
-  const dir = await Direccion.findOne({ where: { personaId: await personaDe(usuarioId), ...DELCLIENTE, esPredeterminada: true } });
+  const dir = await Direccion.findOne({
+    where: { personaId: await personaDe(usuarioId), ...DELCLIENTE, esPredeterminada: true },
+    attributes: CONCREACION,
+  });
   return dir ? aApi(dir, usuarioId) : null;
 };
 
@@ -61,10 +75,10 @@ async function crear(usuarioId, datos) {
     throw AppError.conflict(`Puedes guardar hasta ${MAXDIRECCIONES} direcciones`, 'LIMITEDIRECCIONES');
   }
   const nueva = await withTransaction(async (t) => {
-    if (datos.esPredeterminada === true) await quitarPredeterminada(personaId, usuarioId, null, t);
+    if (datos.esPredeterminada === true) await quitarPredeterminada(personaId, null, t);
     return Direccion.create({
       personaId,
-      tipo: datos.tipo || 'DOM',
+      tipo: TIPODIRECCION[datos.tipo] || TIPODIRECCION.DOM,
       nombre: datos.nombre || null,
       direccion: datos.direccion.trim(),
       referencia: datos.referencia,
@@ -72,7 +86,6 @@ async function crear(usuarioId, datos) {
       latitud: datos.latitud,
       longitud: datos.longitud,
       esPredeterminada: datos.esPredeterminada === true,
-      creadoPor: usuarioId,
     }, { transaction: t });
   }, { usuarioId });
   return aApi(nueva, usuarioId);
@@ -82,11 +95,12 @@ async function actualizar(usuarioId, id, datos) {
   const personaId = await personaDe(usuarioId);
   const dir = await propia(personaId, id);
   await withTransaction(async (t) => {
-    if (datos.esPredeterminada === true) await quitarPredeterminada(personaId, usuarioId, dir.id, t);
-    const cambios = { actualizadoPor: usuarioId };
-    for (const campo of ['tipo', 'nombre', 'direccion', 'referencia', 'instrucciones', 'latitud', 'longitud']) {
+    if (datos.esPredeterminada === true) await quitarPredeterminada(personaId, dir.id, t);
+    const cambios = {};
+    for (const campo of ['nombre', 'direccion', 'referencia', 'instrucciones', 'latitud', 'longitud']) {
       if (datos[campo] !== undefined) cambios[campo] = datos[campo];
     }
+    if (datos.tipo !== undefined) cambios.tipo = TIPODIRECCION[datos.tipo];
     if (datos.esPredeterminada !== undefined) cambios.esPredeterminada = datos.esPredeterminada === true;
     await dir.update(cambios, { transaction: t });
   }, { usuarioId });
@@ -97,17 +111,18 @@ async function marcarPredeterminada(usuarioId, id) {
   const personaId = await personaDe(usuarioId);
   const dir = await propia(personaId, id);
   await withTransaction(async (t) => {
-    await quitarPredeterminada(personaId, usuarioId, dir.id, t);
-    await dir.update({ esPredeterminada: true, actualizadoPor: usuarioId }, { transaction: t });
+    await quitarPredeterminada(personaId, dir.id, t);
+    await dir.update({ esPredeterminada: true }, { transaction: t });
   }, { usuarioId });
   return aApi(dir, usuarioId);
 }
 
+// Se borra la fila vigente; el trigger deja una copia cerrada en el historial (nada se pierde)
 async function eliminar(usuarioId, id) {
   const dir = await propia(await personaDe(usuarioId), id);
-  await withTransaction((t) => dir.destroy({ transaction: t }), { usuarioId });       // borrado lógico (ELIMINADOEN)
+  await withTransaction((t) => dir.destroy({ transaction: t }), { usuarioId });
 }
 
-const tipos = () => CatalogoService.tipos('ttiposdireccion', 'ctipodireccion', { excluir: [TIPODIRECCIONLOCAL] });
+const tipos = () => CatalogoService.tipos('ttiposdireccion', 'ctipodireccion', TIPODIRECCIONAAPI, { excluir: [TIPODIRECCIONLOCAL] });
 
 module.exports = { tipos, listar, predeterminada, crear, actualizar, marcarPredeterminada, eliminar };

@@ -7,9 +7,10 @@
     "start": "cross-env NODE_ENV=production node src/server.js",
     "dev": "cross-env NODE_ENV=development nodemon src/server.js",
     "test:auth": "node test/auth.e2e.js",
+    "test:cuenta": "node test/cuenta.e2e.js",
     "test:tienda": "node test/tienda.e2e.js",
     "test:pedidos": "node test/pedidos.e2e.js",
-    "test": "npm run test:auth",
+    "test": "npm run test:auth && npm run test:cuenta",
     "test:repartidores": "node test/repartidores.e2e.js",
     "test:identidad": "node test/identidad.e2e.js"
   },
