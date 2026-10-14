@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:vallexpress_app/config/theme.dart';
-import 'package:vallexpress_app/services/password_reset_service.dart';
+import '../../config/theme.dart';
+import '../../services/password_reset_service.dart';
+import '../../widgets/ui/ui.dart';
 
+/// Recuperar contraseña, paso 3 de 3: elegir la contraseña nueva. Al terminar, el servidor cierra las sesiones
+/// anteriores de la cuenta y se vuelve al inicio de sesión.
 class NewPasswordScreen extends StatefulWidget {
   final String resetToken;
   const NewPasswordScreen({super.key, required this.resetToken});
@@ -11,128 +14,91 @@ class NewPasswordScreen extends StatefulWidget {
 }
 
 class _NewPasswordScreenState extends State<NewPasswordScreen> {
-  final _passCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
-
-  bool _loading = false;
-  bool _ver1 = false;
-  bool _ver2 = false;
+  final _clave = TextEditingController();
+  final _confirmar = TextEditingController();
+  bool _cargando = false;
 
   @override
   void dispose() {
-    _passCtrl.dispose();
-    _confirmCtrl.dispose();
+    _clave.dispose();
+    _confirmar.dispose();
     super.dispose();
   }
 
-  void _snack(String msg, {bool ok = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? Colors.green : Colors.red,
-      ),
-    );
-  }
+  bool get _coinciden => _confirmar.text.isNotEmpty && _clave.text == _confirmar.text;
 
-  Future<void> _reset() async {
-    final p1 = _passCtrl.text.trim();
-    final p2 = _confirmCtrl.text.trim();
-
-    if (p1.length < 6) {
-      _snack('Mínimo 6 caracteres');
+  Future<void> _guardar() async {
+    FocusScope.of(context).unfocus();
+    if (_clave.text.length < 6) {
+      mostrarError(context, 'La contraseña debe tener al menos 6 caracteres');
       return;
     }
-    if (p1 != p2) {
-      _snack('Las contraseñas no coinciden');
+    if (_clave.text != _confirmar.text) {
+      mostrarError(context, 'Las contraseñas no coinciden');
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() => _cargando = true);
     try {
-      await PasswordResetService.resetPassword(widget.resetToken, p1);
+      await PasswordResetService.resetPassword(widget.resetToken, _clave.text);
       if (!mounted) return;
-
-      _snack('Contraseña actualizada', ok: true);
-
-      // vuelve al login (o donde quieras)
-      Navigator.popUntil(context, (route) => route.isFirst);
+      mostrarExito(context, 'Contraseña actualizada. Ya puedes iniciar sesión.');
+      Navigator.popUntil(context, (ruta) => ruta.isFirst); // vuelve al inicio de sesión
     } catch (e) {
-      _snack(e.toString().replaceAll('Exception: ', ''));
+      if (mounted) mostrarError(context, e.toString().replaceAll('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('Nueva contraseña'),
-        backgroundColor: AppTheme.primaryColor,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+    return PantallaFormulario(
+      icono: Icons.verified_user_outlined,
+      titulo: 'Crea tu nueva contraseña',
+      subtitulo: 'Elige una contraseña segura. Cerraremos tus sesiones anteriores por seguridad.',
+      textoBoton: 'Guardar contraseña',
+      cargando: _cargando,
+      onBoton: _guardar,
+      hijos: [
+        CampoValle(
+          controller: _clave,
+          etiqueta: 'Contraseña nueva',
+          icono: Icons.lock_outline,
+          esClave: true,
+          maxLongitud: 72,
+          autofill: const [AutofillHints.newPassword],
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 10),
+        MedidorClave(clave: _clave.text),
+        const SizedBox(height: 18),
+        CampoValle(
+          controller: _confirmar,
+          etiqueta: 'Confirmar contraseña',
+          icono: Icons.lock_reset_outlined,
+          esClave: true,
+          maxLongitud: 72,
+          accion: TextInputAction.done,
+          estado: _confirmar.text.isEmpty ? EstadoCampo.neutro : (_coinciden ? EstadoCampo.correcto : EstadoCampo.error),
+          ayuda: _confirmar.text.isEmpty ? null : (_coinciden ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'),
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) => _cargando ? null : _guardar(),
+        ),
+        const SizedBox(height: 20),
+        Row(
           children: [
-            const SizedBox(height: 12),
-            const Text(
-              'Crea una nueva contraseña para tu cuenta.',
-              style: TextStyle(color: AppTheme.textSecondaryColor),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passCtrl,
-              obscureText: !_ver1,
-              enableSuggestions: false,
-              autocorrect: false,
-              decoration: InputDecoration(
-                hintText: 'Nueva contraseña',
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _ver1 = !_ver1),
-                  icon: Icon(_ver1 ? Icons.visibility_off : Icons.visibility),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _confirmCtrl,
-              obscureText: !_ver2,
-              enableSuggestions: false,
-              autocorrect: false,
-              decoration: InputDecoration(
-                hintText: 'Confirmar contraseña',
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _ver2 = !_ver2),
-                  icon: Icon(_ver2 ? Icons.visibility_off : Icons.visibility),
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _reset,
-                child: _loading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Actualizar contraseña'),
+            const Icon(Icons.shield_outlined, size: 16, color: AppTheme.infoColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Este enlace se puede usar una sola vez y vence en 10 minutos.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colores.textoSuave),
               ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }

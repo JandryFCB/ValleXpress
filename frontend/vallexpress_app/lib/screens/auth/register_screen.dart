@@ -1,1295 +1,633 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-
-import '../../providers/auth_provider.dart';
-import '../../config/theme.dart';
 import '../../config/constants.dart';
-import '../../widgets/gradient_button.dart';
-import '../../widgets/terms_and_conditions_modal.dart';
+import '../../config/theme.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
+import '../../utils/validadores.dart';
+import '../../widgets/terms_and_conditions_modal.dart';
+import '../../widgets/ui/ui.dart';
+import 'registro/registro_controller.dart';
 
+/// Registro en 4 pasos (rol, datos, verificación del correo, contraseña). La lógica está en [RegistroController];
+/// esta pantalla solo dibuja. Al terminar, el servidor ya deja la sesión abierta: se entra directo a la app.
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, this.servicio});
+
+  /// Solo para pruebas: permite usar un servicio falso en lugar de llamar al servidor
+  final AuthService? servicio;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  String? _selectedRole;
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
-  bool _acceptTerms = false;
-
-  // Email verification state
-  bool _isEmailVerified = false;
-  bool _isSendingCode = false;
-  bool _isVerifyingCode = false;
-  bool _codeSent = false;
-  int _retryAfterSeconds = 0;
-  Timer? _retryTimer;
-  final TextEditingController _codeController = TextEditingController();
-
-  // Validación en tiempo real de campos únicos
-  bool? _cedulaExists;
-  bool? _emailExists;
-  bool? _placaExists;
-  bool? _telefonoValido;
-  bool _isCheckingCedula = false;
-  bool _isCheckingEmail = false;
-  bool _isCheckingPlaca = false;
-
-  // Variables para recordar últimos valores validados
-  String _lastCheckedCedula = '';
-  String _lastCheckedEmail = '';
-  String _lastCheckedPlaca = '';
-  String _lastCheckedTelefono = '';
-
-  // FocusNodes para detectar cuando pierden foco
-  final FocusNode _nombreFocus = FocusNode();
-  final FocusNode _apellidoFocus = FocusNode();
-  final FocusNode _cedulaFocus = FocusNode();
-  final FocusNode _telefonoFocus = FocusNode();
-  final FocusNode _emailFocus = FocusNode();
-  final FocusNode _placaFocus = FocusNode();
-
-  // Controllers
-  late TextEditingController _nombreController;
-  late TextEditingController _apellidoController;
-  late TextEditingController _emailController;
-  late TextEditingController _telefonoController;
-  late TextEditingController _cedulaController;
-  late TextEditingController _passwordController;
-  late TextEditingController _confirmPasswordController;
-
-  // Campos específicos por rol
-  late TextEditingController _nombreNegocioController;
-  late TextEditingController _vehiculoController;
-  late TextEditingController _placaController;
-
-  Timer? _emailDebounceTimer;
-  Timer? _cedulaDebounceTimer;
-  Timer? _placaDebounceTimer;
-  Timer? _telefonoDebounceTimer;
+  late final RegistroController _c;
+  String? _error; // motivo por el que no se puede avanzar (se muestra sobre el botón)
 
   @override
   void initState() {
     super.initState();
-    _nombreController = TextEditingController();
-    _apellidoController = TextEditingController();
-    _emailController = TextEditingController();
-    _telefonoController = TextEditingController();
-    _cedulaController = TextEditingController();
-    _passwordController = TextEditingController();
-    _confirmPasswordController = TextEditingController();
-    _nombreNegocioController = TextEditingController();
-    _vehiculoController = TextEditingController();
-    _placaController = TextEditingController();
-
-    // Agregar listeners para validación onBlur
-    _cedulaFocus.addListener(_onCedulaFocusChange);
-    _emailFocus.addListener(_onEmailFocusChange);
-    _placaFocus.addListener(_onPlacaFocusChange);
-
-    // Validación en tiempo real
-    _emailController.addListener(_onEmailChanged);
-    _cedulaController.addListener(_onCedulaChanged);
-    _placaController.addListener(_onPlacaChanged);
-    _telefonoController.addListener(_onTelefonoChanged);
+    _c = RegistroController(servicio: widget.servicio)..addListener(_alCambiar);
   }
 
-  // Validar teléfono en tiempo real
-  void _onTelefonoChanged() {
-    final telefono = _telefonoController.text.trim();
-
-    _telefonoDebounceTimer?.cancel();
-
-    if (telefono.isEmpty || telefono.length < 10) {
-      setState(() {
-        _telefonoValido = null;
-      });
-      return;
-    }
-
-    if (telefono == _lastCheckedTelefono && _telefonoValido != null) {
-      return;
-    }
-
-    _telefonoDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-      if (mounted && _telefonoController.text.trim().length == 10) {
-        _validarTelefonoEnTiempoReal();
-      }
-    });
-  }
-
-  void _validarTelefonoEnTiempoReal() {
-    final telefono = _telefonoController.text.trim();
-    final limpio = telefono.replaceAll(RegExp(r'[\s\-]'), '');
-    final esValido =
-        RegExp(r'^\d{10}$').hasMatch(limpio) && limpio.startsWith('09');
-
+  void _alCambiar() {
+    if (!mounted) return;
     setState(() {
-      _telefonoValido = esValido;
-      _lastCheckedTelefono = telefono;
+      // El aviso desaparece apenas el usuario corrige lo que faltaba
+      if (_error != null && _c.validarPaso() == null) _error = null;
     });
-  }
-
-  // Validar cédula en tiempo real
-  void _onCedulaChanged() {
-    final cedula = _cedulaController.text.trim();
-    _cedulaDebounceTimer?.cancel();
-
-    if (cedula.isEmpty || cedula.length != 10) {
-      setState(() {
-        _cedulaExists = null;
-        _isCheckingCedula = false;
-      });
-      return;
-    }
-
-    if (cedula == _lastCheckedCedula && _cedulaExists != null) {
-      return;
-    }
-
-    _cedulaDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-      if (mounted && _cedulaController.text.trim().length == 10) {
-        _checkCedula();
-      }
-    });
-  }
-
-  void _onCedulaFocusChange() {
-    if (!_cedulaFocus.hasFocus && _cedulaController.text.length == 10) {
-      final cedula = _cedulaController.text.trim();
-      if (cedula != _lastCheckedCedula || _cedulaExists == null) {
-        _checkCedula();
-      }
-    }
-  }
-
-  // Validar email en tiempo real
-  void _onEmailChanged() {
-    final email = _emailController.text.trim();
-    _emailDebounceTimer?.cancel();
-
-    if (email.isEmpty || !_validarEmail(email)) {
-      setState(() {
-        _emailExists = null;
-        _isCheckingEmail = false;
-      });
-      return;
-    }
-
-    if (email == _lastCheckedEmail && _emailExists != null) {
-      return;
-    }
-
-    _emailDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-      if (mounted && _validarEmail(_emailController.text.trim())) {
-        _checkEmail();
-      }
-    });
-  }
-
-  void _onEmailFocusChange() {
-    if (!_emailFocus.hasFocus && _validarEmail(_emailController.text)) {
-      final email = _emailController.text.trim();
-      if (email != _lastCheckedEmail || _emailExists == null) {
-        _checkEmail();
-      }
-    }
-  }
-
-  // Validar placa en tiempo real
-  void _onPlacaChanged() {
-    final placa = _placaController.text.trim().toUpperCase();
-    _placaDebounceTimer?.cancel();
-
-    if (placa.isEmpty) {
-      setState(() {
-        _placaExists = null;
-        _isCheckingPlaca = false;
-      });
-      return;
-    }
-
-    if (placa == _lastCheckedPlaca && _placaExists != null) {
-      return;
-    }
-
-    _placaDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-      if (mounted && _placaController.text.trim().isNotEmpty) {
-        _checkPlaca();
-      }
-    });
-  }
-
-  // ✅ Validar placa cuando pierde foco
-
-  void _onPlacaFocusChange() {
-    if (!_placaFocus.hasFocus && _placaController.text.isNotEmpty) {
-      // Solo validar si no lo hemos validado antes con este valor
-      final placa = _placaController.text.trim().toUpperCase();
-      if (placa != _lastCheckedPlaca || _placaExists == null) {
-        _checkPlaca();
-      }
-    }
-  }
-
-  // ✅ Verificar cédula en backend
-  Future<void> _checkCedula() async {
-    final cedula = _cedulaController.text.trim();
-    if (cedula.length != 10) return;
-
-    setState(() => _isCheckingCedula = true);
-
-    try {
-      final authService = AuthService();
-      final result = await authService.checkCedula(cedula);
-
-      if (mounted) {
-        setState(() {
-          _cedulaExists = result['exists'] as bool;
-          _isCheckingCedula = false;
-          _lastCheckedCedula = cedula; // ✅ Guardar valor validado
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isCheckingCedula = false);
-    }
-  }
-
-  // ✅ Verificar email en backend
-  Future<void> _checkEmail() async {
-    final email = _emailController.text.trim();
-    if (!_validarEmail(email)) return;
-
-    setState(() => _isCheckingEmail = true);
-
-    try {
-      final authService = AuthService();
-      final result = await authService.checkEmail(email);
-
-      if (mounted) {
-        setState(() {
-          _emailExists = result['exists'] as bool;
-          _isCheckingEmail = false;
-          _lastCheckedEmail = email; // ✅ Guardar valor validado
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isCheckingEmail = false);
-    }
-  }
-
-  // ✅ Verificar placa en backend
-  Future<void> _checkPlaca() async {
-    final placa = _placaController.text.trim().toUpperCase();
-    if (placa.isEmpty) return;
-
-    setState(() => _isCheckingPlaca = true);
-
-    try {
-      final authService = AuthService();
-      final result = await authService.checkPlaca(placa);
-
-      if (mounted) {
-        setState(() {
-          _placaExists = result['exists'] as bool;
-          _isCheckingPlaca = false;
-          _lastCheckedPlaca = placa; // ✅ Guardar valor validado
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isCheckingPlaca = false);
-    }
   }
 
   @override
   void dispose() {
-    _retryTimer?.cancel();
-    _emailDebounceTimer?.cancel();
-    _cedulaDebounceTimer?.cancel();
-    _placaDebounceTimer?.cancel();
-    _telefonoDebounceTimer?.cancel();
-    _nombreController.dispose();
-
-    _apellidoController.dispose();
-    _emailController.dispose();
-    _telefonoController.dispose();
-    _cedulaController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    _nombreNegocioController.dispose();
-    _vehiculoController.dispose();
-    _placaController.dispose();
-    _codeController.dispose();
-    _nombreFocus.dispose();
-    _apellidoFocus.dispose();
-    _cedulaFocus.dispose();
-    _telefonoFocus.dispose();
-    _emailFocus.dispose();
-    _placaFocus.dispose();
+    _c
+      ..removeListener(_alCambiar)
+      ..dispose();
     super.dispose();
   }
 
-  // ⏱️ Iniciar countdown para reenvío
-  void _startRetryCountdown(int seconds) {
-    _retryTimer?.cancel();
-    setState(() => _retryAfterSeconds = seconds);
-
-    _retryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          if (_retryAfterSeconds > 0) {
-            _retryAfterSeconds--;
-          } else {
-            timer.cancel();
-          }
-        });
+  Future<void> _continuar() async {
+    FocusScope.of(context).unfocus();
+    if (_c.paso == RegistroController.totalPasos - 1) {
+      final auth = context.read<AuthProvider>();
+      final error = await _c.registrar(auth);
+      if (!mounted) return;
+      if (error != null) {
+        setState(() => _error = error);
+        mostrarError(context, error);
       } else {
-        timer.cancel();
+        mostrarExito(context, '¡Bienvenido a ValleXpress!');
+        Navigator.of(context).pushNamedAndRemoveUntil(AppConstants.homeRoute, (_) => false);
       }
-    });
+      return;
+    }
+    final error = _c.siguiente();
+    setState(() => _error = error);
   }
 
-  // ✅ Validar teléfono ecuatoriano (09XXXXXXXX)
-  bool _validarTelefono(String telefono) {
-    final limpio = telefono.replaceAll(RegExp(r'[\s\-]'), '');
-    return RegExp(r'^\d{10}$').hasMatch(limpio) && limpio.startsWith('09');
-  }
-
-  // ✅ Validar email
-  bool _validarEmail(String email) {
-    return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email);
-  }
-
-  // 📧 Enviar código de verificación
-  Future<void> _enviarCodigoVerificacion() async {
-    final email = _emailController.text.trim();
-    final nombre = _nombreController.text.trim();
-
-    if (email.isEmpty || !_validarEmail(email)) {
-      _showError('Ingresa un email válido');
-      return;
-    }
-
-    setState(() => _isSendingCode = true);
-
-    try {
-      final authService = AuthService();
-
-      // Obtener FCM token si está disponible
-      String? fcmToken;
-      try {
-        final fcm = FirebaseMessaging.instance;
-        fcmToken = await fcm.getToken();
-      } catch (e) {
-        debugPrint('No se pudo obtener FCM token: $e');
-      }
-
-      await authService.sendEmailVerification(
-        email,
-        nombre,
-        fcmToken: fcmToken,
-      );
-
-      if (mounted) {
-        setState(() {
-          _codeSent = true; // ✅ Mostrar campo de código
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '📧 Código enviado. Revisa tu email y notificaciones.',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-        // ⏱️ Iniciar countdown de 60 segundos después de enviar exitosamente
-        _startRetryCountdown(60);
-      }
-    } catch (e) {
-      // Verificar si es error de rate limiting (429)
-      final errorStr = e.toString();
-      final retryMatch = RegExp(r'Espera (\d+) segundos').firstMatch(errorStr);
-      if (retryMatch != null) {
-        final seconds = int.parse(retryMatch.group(1)!);
-        _startRetryCountdown(seconds);
-        _showError('Espera $seconds segundos antes de solicitar otro código');
-      } else {
-        _showError('Error al enviar código: $e');
-      }
-    } finally {
-      if (mounted) setState(() => _isSendingCode = false);
-    }
-  }
-
-  // ✅ Verificar código ingresado
-  Future<void> _verificarCodigo() async {
-    final email = _emailController.text.trim();
-    final code = _codeController.text.trim();
-
-    if (code.length != 6) {
-      _showError('El código debe tener 6 dígitos');
-      return;
-    }
-
-    setState(() => _isVerifyingCode = true);
-
-    try {
-      final authService = AuthService();
-      final result = await authService.verifyEmailCode(email, code);
-
-      if (result['verified'] == true) {
-        setState(() => _isEmailVerified = true);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Email verificado correctamente'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      _showError('Código incorrecto o expirado');
-    } finally {
-      if (mounted) setState(() => _isVerifyingCode = false);
-    }
-  }
-
-  void _handleRegister(BuildContext context) {
-    // Validaciones básicas
-    if (_selectedRole == null) {
-      _showError('Por favor selecciona un rol');
-      return;
-    }
-
-    if (_nombreController.text.isEmpty ||
-        _apellidoController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _telefonoController.text.isEmpty ||
-        _cedulaController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
-      _showError('Por favor completa todos los campos');
-      return;
-    }
-
-    if (_cedulaController.text.length != 10) {
-      _showError('La cédula debe tener 10 dígitos');
-      return;
-    }
-
-    if (!_validarTelefono(_telefonoController.text)) {
-      _showError(
-        'El teléfono debe tener 10 dígitos y empezar con 09 (ej: 0991234567)',
-      );
-      return;
-    }
-
-    if (!_isEmailVerified) {
-      _showError('Debes verificar tu email antes de registrarte');
-      return;
-    }
-
-    if (_passwordController.text != _confirmPasswordController.text) {
-      _showError('Las contraseñas no coinciden');
-      return;
-    }
-
-    if (_passwordController.text.length < 6) {
-      _showError('La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
-    if (!_acceptTerms) {
-      _showError('Debes aceptar los términos y condiciones');
-      return;
-    }
-
-    // Campos específicos según rol
-    if (_selectedRole == 'vendedor' && _nombreNegocioController.text.isEmpty) {
-      _showError('Por favor ingresa el nombre del negocio');
-      return;
-    }
-
-    if (_selectedRole == 'repartidor' &&
-        (_vehiculoController.text.isEmpty || _placaController.text.isEmpty)) {
-      _showError('Por favor completa los datos del vehículo');
-      return;
-    }
-
-    // Llamar al provider para registrarse
-    context
-        .read<AuthProvider>()
-        .register(
-          nombre: _nombreController.text,
-          apellido: _apellidoController.text,
-          email: _emailController.text,
-          telefono: _telefonoController.text,
-          cedula: _cedulaController.text,
-          password: _passwordController.text,
-          tipoUsuario: _selectedRole!,
-          nombreNegocio: _selectedRole == 'vendedor'
-              ? _nombreNegocioController.text
-              : null,
-          vehiculo: _selectedRole == 'repartidor'
-              ? _vehiculoController.text
-              : null,
-          placa: _selectedRole == 'repartidor' ? _placaController.text : null,
-        )
-        .then((success) {
-          if (success) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('¡Registrado exitosamente!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            // Ir al login
-            Navigator.of(context).pushReplacementNamed(AppConstants.loginRoute);
-          } else {
-            _showError(
-              context.read<AuthProvider>().error ?? 'Error al registrar',
-            );
-          }
-        });
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+  void _atras() {
+    FocusScope.of(context).unfocus();
+    if (!_c.atras()) Navigator.of(context).pop();
+    setState(() => _error = null);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
+    final ultimo = _c.paso == RegistroController.totalPasos - 1;
+    final tema = Theme.of(context).textTheme;
 
-              // Logo con glow dorado
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppTheme.cardColor, AppTheme.cardColorLight],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: AppTheme.primaryColor.withOpacity(0.5),
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withOpacity(0.3),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    width: 80,
-                    height: 80,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Título con gradiente
-              Center(
-                child: ShaderMask(
-                  shaderCallback: (bounds) => LinearGradient(
-                    colors: [AppTheme.primaryColor, AppTheme.accentColor],
-                  ).createShader(bounds),
-                  child: Text(
-                    'Crear Cuenta',
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Center(
-                child: Text(
-                  'Únete a ValleXpress',
-                  style: TextStyle(
-                    color: AppTheme.textSecondaryColor,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Selector de Rol
-              Text(
-                'Selecciona tu rol',
-                style: TextStyle(
-                  color: AppTheme.textPrimaryColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Radio buttons para roles
-              Column(
-                children: [
-                  _buildRoleOption('cliente', '👤 Cliente'),
-                  const SizedBox(height: 12),
-                  _buildRoleOption('vendedor', '🏪 Vendedor'),
-                  const SizedBox(height: 12),
-                  _buildRoleOption('repartidor', '🚚 Repartidor'),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              // Formulario de registro
-              if (_selectedRole != null) ...[
-                // Nombre
-                _buildStyledInput(
-                  controller: _nombreController,
-                  focusNode: _nombreFocus,
-                  hintText: 'Nombre',
-                  icon: Icons.person_outline,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) {
-                    if (_nombreController.text.isNotEmpty) {
-                      FocusScope.of(context).requestFocus(_apellidoFocus);
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Apellido
-                _buildStyledInput(
-                  controller: _apellidoController,
-                  focusNode: _apellidoFocus,
-                  hintText: 'Apellido',
-                  icon: Icons.person_outline,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) {
-                    if (_apellidoController.text.isNotEmpty) {
-                      FocusScope.of(context).requestFocus(_cedulaFocus);
-                    }
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Cédula con validación en tiempo real
-                _buildStyledInput(
-                  controller: _cedulaController,
-                  focusNode: _cedulaFocus,
-                  hintText: 'Cédula ejm: 0123456789 - 10 dígitos',
-                  icon: Icons.credit_card_outlined,
-                  keyboardType: TextInputType.number,
-                  maxLength: 10,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) {
-                    // Solo permitir pasar si la cédula es válida (no existe y tiene 10 dígitos)
-                    final cedula = _cedulaController.text.trim();
-                    if (cedula.length == 10 && _cedulaExists == false) {
-                      FocusScope.of(context).requestFocus(_telefonoFocus);
-                    } else if (_cedulaExists == true) {
-                      _showError('Esta cédula ya está registrada. Usa otra.');
-                    } else {
-                      _showError('Ingresa una cédula válida de 10 dígitos.');
-                    }
-                  },
-                  errorText: _cedulaExists == true
-                      ? 'Esta cédula ya está registrada'
-                      : null,
-                  isValid: _cedulaExists == false,
-                  isChecking: false, // Ocultar circulito de carga
-                ),
-
-                const SizedBox(height: 16),
-
-                // Teléfono con validación
-                _buildStyledInput(
-                  controller: _telefonoController,
-                  focusNode: _telefonoFocus,
-                  hintText: '09XXXXXXXX - 10 dígitos',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 10,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) {
-                    // Solo permitir pasar si el teléfono es válido (empieza con 09)
-                    final telefono = _telefonoController.text.trim();
-                    final limpio = telefono.replaceAll(RegExp(r'[\s\-]'), '');
-                    final esValido =
-                        RegExp(r'^\d{10}$').hasMatch(limpio) &&
-                        limpio.startsWith('09');
-
-                    if (esValido) {
-                      FocusScope.of(context).requestFocus(_emailFocus);
-                    } else {
-                      _showError(
-                        'El teléfono debe tener 10 dígitos y empezar con 09 (ej: 0991234567)',
-                      );
-                    }
-                  },
-                  errorText: _telefonoValido == false
-                      ? 'Debe empezar con 09 y tener 10 dígitos'
-                      : null,
-                  isValid: _telefonoValido == true,
-                  isChecking: false, // Ocultar circulito de carga
-                ),
-
-                const SizedBox(height: 16),
-
-                // Email con verificación y validación de duplicado
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStyledInput(
-                      controller: _emailController,
-                      focusNode: _emailFocus,
-                      hintText: 'tu@email.com',
-                      icon: Icons.email_outlined,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      onSubmitted: (_) {
-                        // No permitir pasar si el email no está verificado
-                        if (!_isEmailVerified) {
-                          _showError(
-                            'Debes verificar tu email antes de continuar. Presiona "Verificar".',
-                          );
-                          return; // 🔴 BLOQUEAR: no permitir pasar al siguiente campo
-                        }
-                        if (_emailExists == true) {
-                          _showError(
-                            'Este email ya está registrado. Usa otro.',
-                          );
-                          return; // 🔴 BLOQUEAR: email duplicado
-                        }
-                        if (_emailExists == null) {
-                          _showError('Verifica tu email antes de continuar.');
-                          return; // 🔴 BLOQUEAR: aún no se ha verificado
-                        }
-                        // ✅ Email verificado y no existe, permitir pasar
-                        FocusScope.of(context).nextFocus();
-                      },
-
-                      errorText: _emailExists == true
-                          ? 'Este email ya está registrado'
-                          : null,
-                      isValid: _emailExists == false && _isEmailVerified,
-                      isChecking: false, // Ocultar circulito de carga
-
-                      suffixIcon: _isEmailVerified
-                          ? const Icon(Icons.verified, color: Colors.green)
-                          : _emailExists == true
-                          ? const Icon(Icons.error, color: Colors.red)
-                          : _isSendingCode
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : TextButton(
-                              onPressed:
-                                  (_emailExists == true ||
-                                      _retryAfterSeconds > 0)
-                                  ? null
-                                  : _enviarCodigoVerificacion,
-                              child: Text(
-                                _retryAfterSeconds > 0
-                                    ? 'Espera ${_retryAfterSeconds}s'
-                                    : 'Verificar',
-                                style: TextStyle(
-                                  color:
-                                      (_emailExists == true ||
-                                          _retryAfterSeconds > 0)
-                                      ? Colors.grey
-                                      : AppTheme.accentColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                    ),
-                    // Campo de código (solo cuando se envió y no está verificado)
-                    if (_codeSent && !_isEmailVerified) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _codeController,
-                              keyboardType: TextInputType.number,
-                              maxLength: 6,
-                              decoration: InputDecoration(
-                                hintText: 'Código de 6 dígitos',
-                                hintStyle: TextStyle(
-                                  color: AppTheme.textSecondaryColor
-                                      .withOpacity(0.5),
-                                ),
-                                filled: true,
-                                fillColor: AppTheme.cardColor,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14,
-                                ),
-                                counterText: '',
-                              ),
-                              style: const TextStyle(
-                                color: AppTheme.textPrimaryColor,
-                                fontSize: 18,
-                                letterSpacing: 8,
-                              ),
+    return PopScope(
+      canPop: _c.paso == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _atras();
+      },
+      child: FondoValle(
+        zonaSegura: true,
+        barraInferior: _barraAccion(context, ultimo: ultimo),
+        child: Column(
+          children: [
+            _Cabecera(paso: _c.paso, total: RegistroController.totalPasos, onAtras: _atras),
+            Expanded(
+              child: SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_c.tituloPaso, style: tema.headlineMedium),
+                        const SizedBox(height: 8),
+                        Text(_c.subtituloPaso, style: tema.bodyMedium),
+                        const SizedBox(height: 24),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 260),
+                          transitionBuilder: (hijo, animacion) => FadeTransition(
+                            opacity: animacion,
+                            child: SlideTransition(
+                              position: Tween(begin: const Offset(0.04, 0), end: Offset.zero).animate(animacion),
+                              child: hijo,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          ElevatedButton(
-                            onPressed: _isVerifyingCode
-                                ? null
-                                : _verificarCodigo,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.accentColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: _isVerifyingCode
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text('Verificar'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Ingresa el código que te enviamos por email',
-                        style: TextStyle(
-                          color: AppTheme.textSecondaryColor.withOpacity(0.7),
-                          fontSize: 12,
+                          child: KeyedSubtree(key: ValueKey(_c.paso), child: _contenidoPaso()),
                         ),
-                      ),
-                    ],
-
-                    // Mensaje de verificado (solo cuando está verificado)
-                    if (_isEmailVerified) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: const [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 16,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Email verificado correctamente',
-                            style: TextStyle(
-                              color: Colors.green,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // Campos específicos por rol
-                if (_selectedRole == 'vendedor')
-                  Column(
-                    children: [
-                      _buildStyledInput(
-                        controller: _nombreNegocioController,
-                        hintText: 'Nombre del negocio',
-                        icon: Icons.store_outlined,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-
-                if (_selectedRole == 'repartidor')
-                  Column(
-                    children: [
-                      _buildStyledInput(
-                        controller: _vehiculoController,
-                        hintText: 'Tipo de vehículo',
-                        icon: Icons.two_wheeler_outlined,
-                      ),
-                      const SizedBox(height: 16),
-                      // Placa con validación en tiempo real
-                      _buildStyledInput(
-                        controller: _placaController,
-                        focusNode: _placaFocus,
-                        hintText: 'Placa del vehículo (ABC123 o ABC-123)',
-                        icon: Icons.confirmation_number_outlined,
-                        textInputAction: TextInputAction.next,
-                        onSubmitted: (_) {
-                          // Solo permitir pasar si la placa es válida (no existe)
-                          if (_placaExists == false) {
-                            FocusScope.of(context).nextFocus();
-                          } else if (_placaExists == true) {
-                            _showError(
-                              'Esta placa ya está registrada. Usa otra.',
-                            );
-                          }
-                        },
-                        errorText: _placaExists == true
-                            ? 'Esta placa ya está registrada'
-                            : null,
-                        isValid: _placaExists == false,
-                        isChecking: false, // Ocultar circulito de carga
-                      ),
-
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-
-                // Contraseña
-                _buildStyledInput(
-                  controller: _passwordController,
-                  hintText: '••••••••',
-                  icon: Icons.lock_outline,
-                  obscureText: _obscurePassword,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: AppTheme.textSecondaryColor,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Confirmar Contraseña
-                _buildStyledInput(
-                  controller: _confirmPasswordController,
-                  hintText: '••••••••',
-                  icon: Icons.lock_outline,
-                  obscureText: _obscureConfirmPassword,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureConfirmPassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: AppTheme.textSecondaryColor,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscureConfirmPassword = !_obscureConfirmPassword;
-                      });
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Términos y condiciones
-                Row(
-                  children: [
-                    Checkbox(
-                      value: _acceptTerms,
-                      onChanged: (value) {
-                        setState(() {
-                          _acceptTerms = value ?? false;
-                        });
-                      },
-                      activeColor: AppTheme.primaryColor,
-                    ),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => TermsAndConditionsModal(
-                                    userRole: _selectedRole ?? 'cliente',
-                                  ),
-                                );
-                              },
-                              child: Text(
-                                'Acepto los términos y condiciones',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: AppTheme.primaryColor,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Botón Registrarse con gradiente
-                Consumer<AuthProvider>(
-                  builder: (context, authProvider, _) {
-                    return GradientButton(
-                      text: 'Crear Cuenta',
-                      onPressed: authProvider.isLoading
-                          ? null
-                          : () => _handleRegister(context),
-                      isLoading: authProvider.isLoading,
-                      gradientColors: const [
-                        AppTheme.primaryColor,
-                        AppTheme.primaryDark,
                       ],
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                // Ya tienes cuenta con estilo vibrante
-                Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '¿Ya tienes cuenta? ',
-                        style: TextStyle(
-                          color: AppTheme.textSecondaryColor,
-                          fontSize: 14,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.of(
-                            context,
-                          ).pushReplacementNamed(AppConstants.loginRoute);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppTheme.accentColor.withOpacity(0.2),
-                                AppTheme.accentColor.withOpacity(0.1),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: AppTheme.accentColor.withOpacity(0.3),
-                              width: 1,
-                            ),
-                          ),
-                          child: Text(
-                            'Inicia sesión',
-                            style: TextStyle(
-                              color: AppTheme.accentColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildRoleOption(String value, String label) {
-    final isSelected = _selectedRole == value;
-    final roleColor = value == 'vendedor'
-        ? AppTheme.vendedorColor
-        : value == 'repartidor'
-        ? AppTheme.repartidorColor
-        : AppTheme.clienteColor;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: isSelected
-            ? LinearGradient(
-                colors: [
-                  roleColor.withOpacity(0.2),
-                  roleColor.withOpacity(0.05),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : null,
-        color: isSelected ? null : AppTheme.cardColor.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSelected
-              ? roleColor.withOpacity(0.6)
-              : AppTheme.borderColor.withOpacity(0.2),
-          width: isSelected ? 2 : 1,
-        ),
-        boxShadow: isSelected
-            ? [
-                BoxShadow(
-                  color: roleColor.withOpacity(0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+  /// Barra inferior con la acción principal. Va en el lugar propio del Scaffold (barraInferior) para que los avisos
+  /// flotantes aparezcan POR ENCIMA y nunca tapen el botón.
+  Widget _barraAccion(BuildContext context, {required bool ultimo}) {
+    final tema = Theme.of(context).textTheme;
+    final c = context.colores;
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+        decoration: BoxDecoration(color: c.tarjeta, border: Border(top: BorderSide(color: c.borde))),
+        // heightFactor: 1 = la barra mide solo lo que mide su contenido (un Center solo ocuparía toda la pantalla)
+        child: Align(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 18, color: AppTheme.errorColor),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_error!, style: tema.bodySmall?.copyWith(color: AppTheme.errorColor))),
+                      ],
+                    ),
+                  ),
+                BotonValle(
+                  texto: ultimo ? 'Crear mi cuenta' : 'Continuar',
+                  icono: ultimo ? Icons.check_circle_outline : Icons.arrow_forward,
+                  cargando: _c.registrando,
+                  onPressed: _continuar,
                 ),
-              ]
-            : null,
-      ),
-      child: RadioListTile<String>(
-        value: value,
-        groupValue: _selectedRole,
-        onChanged: (newValue) {
-          setState(() {
-            _selectedRole = newValue;
-          });
-        },
-        activeColor: roleColor,
-        title: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? roleColor : AppTheme.textSecondaryColor,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-            fontSize: 15,
+                if (_c.paso == 0)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Ya tengo una cuenta'),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildStyledInput({
-    required TextEditingController controller,
-    required String hintText,
-    required IconData icon,
-    TextInputType? keyboardType,
-    bool obscureText = false,
-    int? maxLength,
-    Widget? suffixIcon,
-    FocusNode? focusNode,
-    String? errorText,
-    bool? isValid,
-    bool isChecking = false,
-    TextInputAction? textInputAction,
-    Function(String)? onSubmitted,
-  }) {
-    // Determinar color del borde según estado
-    Color borderColor = AppTheme.borderColor.withOpacity(0.3);
-    if (errorText != null) {
-      borderColor = Colors.red.withOpacity(0.6);
-    } else if (isValid == true) {
-      borderColor = Colors.green.withOpacity(0.6);
+  Widget _contenidoPaso() {
+    switch (_c.paso) {
+      case 0:
+        return _PasoRol(c: _c);
+      case 1:
+        return _PasoDatos(c: _c);
+      case 2:
+        return _PasoCorreo(c: _c);
+      default:
+        return _PasoClave(c: _c);
     }
+  }
+}
+
+// ===============================================================================================
+// Cabecera: flecha atrás + barra de progreso
+// ===============================================================================================
+class _Cabecera extends StatelessWidget {
+  const _Cabecera({required this.paso, required this.total, required this.onAtras});
+
+  final int paso;
+  final int total;
+  final VoidCallback onAtras;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 24, 0),
+      child: Row(
+        children: [
+          IconButton(onPressed: onAtras, icon: const Icon(Icons.arrow_back_ios_new_rounded), tooltip: 'Atrás'),
+          Expanded(
+            child: Row(
+              children: List.generate(total, (i) {
+                return Expanded(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    height: 5,
+                    margin: EdgeInsets.only(right: i == total - 1 ? 0 : 6),
+                    decoration: BoxDecoration(
+                      color: i <= paso ? c.primario : c.borde,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text('${paso + 1}/$total', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: c.textoSuave)),
+        ],
+      ),
+    );
+  }
+}
+
+// ===============================================================================================
+// Paso 0: elegir el rol
+// ===============================================================================================
+class _PasoRol extends StatelessWidget {
+  const _PasoRol({required this.c});
+
+  final RegistroController c;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _TarjetaRol(
+          valor: 'cliente',
+          icono: Icons.shopping_bag_outlined,
+          titulo: 'Cliente',
+          descripcion: 'Pide comida y productos de los negocios de tu zona.',
+          color: AppTheme.clienteColor,
+          controlador: c,
+        ),
+        const SizedBox(height: 12),
+        _TarjetaRol(
+          valor: 'vendedor',
+          icono: Icons.storefront_outlined,
+          titulo: 'Vendedor',
+          descripcion: 'Publica tus productos y recibe pedidos en tu negocio.',
+          color: AppTheme.vendedorColor,
+          controlador: c,
+        ),
+        const SizedBox(height: 12),
+        _TarjetaRol(
+          valor: 'repartidor',
+          icono: Icons.two_wheeler_outlined,
+          titulo: 'Repartidor',
+          descripcion: 'Entrega pedidos y gana por cada envío que completes.',
+          color: AppTheme.repartidorColor,
+          controlador: c,
+        ),
+      ],
+    );
+  }
+}
+
+class _TarjetaRol extends StatelessWidget {
+  const _TarjetaRol({
+    required this.valor,
+    required this.icono,
+    required this.titulo,
+    required this.descripcion,
+    required this.color,
+    required this.controlador,
+  });
+
+  final String valor;
+  final IconData icono;
+  final String titulo;
+  final String descripcion;
+  final Color color;
+  final RegistroController controlador;
+
+  @override
+  Widget build(BuildContext context) {
+    final seleccionado = controlador.rol == valor;
+    final tema = Theme.of(context).textTheme;
+    return TarjetaValle(
+      onTap: () => controlador.elegirRol(valor),
+      colorBorde: seleccionado ? color : null,
+      color: seleccionado ? color.withValues(alpha: 0.10) : null,
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(16)),
+            child: Icon(icono, color: color, size: 30),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titulo, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(descripcion, style: tema.bodySmall?.copyWith(color: context.colores.textoSuave)),
+              ],
+            ),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: seleccionado
+                ? Icon(Icons.check_circle, key: const ValueKey('si'), color: color)
+                : Icon(Icons.radio_button_unchecked, key: const ValueKey('no'), color: context.colores.borde),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ===============================================================================================
+// Paso 1: datos personales (y del negocio o vehículo según el rol)
+// ===============================================================================================
+class _PasoDatos extends StatelessWidget {
+  const _PasoDatos({required this.c});
+
+  final RegistroController c;
+
+  @override
+  Widget build(BuildContext context) {
+    final soloDigitos = [FilteringTextInputFormatter.digitsOnly];
+    return Column(
+      children: [
+        CampoValle(
+          controller: c.nombre,
+          etiqueta: 'Nombres',
+          icono: Icons.person_outline,
+          mayusculas: TextCapitalization.words,
+          autofill: const [AutofillHints.givenName],
+          maxLongitud: 100,
+          onChanged: (_) => c.campoCambio(),
+        ),
+        const SizedBox(height: 16),
+        CampoValle(
+          controller: c.apellido,
+          etiqueta: 'Apellidos',
+          icono: Icons.person_outline,
+          mayusculas: TextCapitalization.words,
+          autofill: const [AutofillHints.familyName],
+          maxLongitud: 100,
+          onChanged: (_) => c.campoCambio(),
+        ),
+        const SizedBox(height: 16),
+        CampoValle(
+          controller: c.cedula,
+          etiqueta: 'Cédula',
+          icono: Icons.badge_outlined,
+          tipoTeclado: TextInputType.number,
+          formateadores: soloDigitos,
+          maxLongitud: 10,
+          estado: c.estadoCedula,
+          ayuda: c.mensajeCedula,
+          onChanged: c.alCambiarCedula,
+        ),
+        const SizedBox(height: 16),
+        CampoValle(
+          controller: c.telefono,
+          etiqueta: 'Teléfono móvil',
+          icono: Icons.phone_iphone_outlined,
+          tipoTeclado: TextInputType.phone,
+          formateadores: [FilteringTextInputFormatter.allow(RegExp(r'[0-9 \-]'))],
+          maxLongitud: 12,
+          autofill: const [AutofillHints.telephoneNumber],
+          estado: c.estadoTelefono,
+          ayuda: c.mensajeTelefono ?? 'Ej: 0991234567',
+          onChanged: c.alCambiarTelefono,
+          accion: c.rol == 'cliente' ? TextInputAction.done : TextInputAction.next,
+        ),
+        if (c.rol == 'vendedor') ...[
+          const SizedBox(height: 28),
+          const EncabezadoSeccion('Tu negocio', subtitulo: 'Podrás completar el resto de datos después'),
+          CampoValle(
+            controller: c.negocio,
+            etiqueta: 'Nombre del negocio',
+            icono: Icons.storefront_outlined,
+            mayusculas: TextCapitalization.words,
+            maxLongitud: 200,
+            accion: TextInputAction.done,
+            onChanged: (_) => c.campoCambio(),
+          ),
+        ],
+        if (c.rol == 'repartidor') ...[
+          const SizedBox(height: 28),
+          const EncabezadoSeccion('Tu vehículo', subtitulo: 'Lo usamos para asignarte pedidos adecuados'),
+          DropdownButtonFormField<String>(
+            initialValue: c.vehiculo,
+            decoration: const InputDecoration(labelText: 'Tipo de vehículo', prefixIcon: Icon(Icons.two_wheeler_outlined)),
+            items: [for (final v in RegistroController.vehiculos) DropdownMenuItem(value: v, child: Text(v))],
+            onChanged: c.elegirVehiculo,
+          ),
+          const SizedBox(height: 16),
+          CampoValle(
+            controller: c.placa,
+            etiqueta: 'Placa',
+            icono: Icons.pin_outlined,
+            mayusculas: TextCapitalization.characters,
+            formateadores: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\- ]'))],
+            maxLongitud: 8,
+            estado: c.estadoPlaca,
+            ayuda: c.mensajePlaca ?? 'Ej: ABC-123',
+            accion: TextInputAction.done,
+            onChanged: c.alCambiarPlaca,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ===============================================================================================
+// Paso 2: correo y código de verificación
+// ===============================================================================================
+class _PasoCorreo extends StatelessWidget {
+  const _PasoCorreo({required this.c});
+
+  final RegistroController c;
+
+  Future<void> _enviar(BuildContext context) async {
+    FocusScope.of(context).unfocus();
+    final error = await c.enviarCodigo();
+    if (!context.mounted) return;
+    if (error != null) {
+      mostrarError(context, error);
+    } else {
+      mostrarExito(context, 'Código enviado. Revisa tu correo (y la carpeta de spam).');
+    }
+  }
+
+  Future<void> _verificar(BuildContext context) async {
+    FocusScope.of(context).unfocus();
+    final error = await c.verificarCodigo();
+    if (!context.mounted) return;
+    if (error != null) {
+      mostrarError(context, error);
+    } else {
+      mostrarExito(context, 'Correo verificado');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final colores = context.colores;
+
+    if (c.emailVerificado) {
+      return TarjetaValle(
+        colorBorde: AppTheme.successColor,
+        color: AppTheme.successColor.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            const Icon(Icons.verified_rounded, color: AppTheme.successColor, size: 40),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Correo verificado', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(c.email.text.trim(), style: tema.bodyMedium),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final puedeEnviar = Validadores.email(c.email.text) && c.estadoEmail != EstadoCampo.error && c.segundosEspera == 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: borderColor,
-              width: errorText != null || isValid == true ? 2 : 1,
-            ),
-          ),
-          child: TextField(
-            controller: controller,
-            focusNode: focusNode,
-            keyboardType: keyboardType,
-            obscureText: obscureText,
-            maxLength: maxLength,
-            textInputAction: textInputAction,
-            onSubmitted: onSubmitted,
-            style: const TextStyle(color: AppTheme.textPrimaryColor),
+        CampoValle(
+          controller: c.email,
+          etiqueta: 'Correo electrónico',
+          icono: Icons.alternate_email,
+          tipoTeclado: TextInputType.emailAddress,
+          autofill: const [AutofillHints.email],
+          sugerencias: false,
+          estado: c.estadoEmail,
+          ayuda: c.mensajeEmail,
+          accion: TextInputAction.done,
+          onChanged: c.alCambiarEmail,
+        ),
+        const SizedBox(height: 16),
+        BotonValle(
+          texto: c.codigoEnviado
+              ? (c.segundosEspera > 0 ? 'Reenviar código en ${c.segundosEspera} s' : 'Reenviar código')
+              : 'Enviar código',
+          icono: Icons.mark_email_unread_outlined,
+          tipo: c.codigoEnviado ? TipoBoton.secundario : TipoBoton.principal,
+          cargando: c.enviandoCodigo,
+          onPressed: puedeEnviar ? () => _enviar(context) : null,
+        ),
+        if (c.codigoEnviado) ...[
+          const SizedBox(height: 28),
+          Text('Escribe el código', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: c.codigo,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            maxLength: 6,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: tema.headlineMedium?.copyWith(letterSpacing: 14, fontWeight: FontWeight.w800),
             decoration: InputDecoration(
-              hintText: hintText,
-              hintStyle: TextStyle(
-                color: AppTheme.textSecondaryColor.withOpacity(0.5),
-              ),
-              prefixIcon: Icon(
-                icon,
-                color: errorText != null ? Colors.red : AppTheme.accentColor,
-              ),
-              suffixIcon: isChecking
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : (isValid == true
-                        ? const Icon(Icons.check_circle, color: Colors.green)
-                        : suffixIcon),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 18,
-              ),
               counterText: '',
+              hintText: '••••••',
+              hintStyle: tema.headlineMedium?.copyWith(letterSpacing: 14, color: colores.borde),
             ),
+            onChanged: (v) {
+              c.campoCambio();
+              if (v.length == 6) _verificar(context); // se verifica solo al completar los 6 dígitos
+            },
+          ),
+          const SizedBox(height: 16),
+          BotonValle(
+            texto: 'Verificar código',
+            icono: Icons.verified_outlined,
+            cargando: c.verificandoCodigo,
+            onPressed: c.codigo.text.trim().length == 6 ? () => _verificar(context) : null,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ===============================================================================================
+// Paso 3: contraseña y términos
+// ===============================================================================================
+class _PasoClave extends StatelessWidget {
+  const _PasoClave({required this.c});
+
+  final RegistroController c;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final colores = context.colores;
+    final coinciden = c.confirmar.text.isNotEmpty && c.clave.text == c.confirmar.text;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CampoValle(
+          controller: c.clave,
+          etiqueta: 'Contraseña',
+          icono: Icons.lock_outline,
+          esClave: true,
+          maxLongitud: 72,
+          autofill: const [AutofillHints.newPassword],
+          onChanged: (_) => c.campoCambio(),
+        ),
+        const SizedBox(height: 10),
+        MedidorClave(clave: c.clave.text),
+        const SizedBox(height: 6),
+        Text('Usa al menos 6 caracteres. Mezcla mayúsculas, números y símbolos para hacerla más fuerte.',
+            style: tema.bodySmall?.copyWith(color: colores.textoSuave)),
+        const SizedBox(height: 18),
+        CampoValle(
+          controller: c.confirmar,
+          etiqueta: 'Confirmar contraseña',
+          icono: Icons.lock_reset_outlined,
+          esClave: true,
+          maxLongitud: 72,
+          accion: TextInputAction.done,
+          estado: c.confirmar.text.isEmpty ? EstadoCampo.neutro : (coinciden ? EstadoCampo.correcto : EstadoCampo.error),
+          ayuda: c.confirmar.text.isEmpty ? null : (coinciden ? 'Las contraseñas coinciden' : 'Las contraseñas no coinciden'),
+          onChanged: (_) => c.campoCambio(),
+        ),
+        const SizedBox(height: 24),
+        TarjetaValle(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              Checkbox(value: c.aceptaTerminos, onChanged: (v) => c.marcarTerminos(v ?? false)),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => c.marcarTerminos(!c.aceptaTerminos),
+                  child: Text.rich(
+                    TextSpan(
+                      style: tema.bodySmall,
+                      children: [
+                        const TextSpan(text: 'Acepto los '),
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.baseline,
+                          baseline: TextBaseline.alphabetic,
+                          child: GestureDetector(
+                            onTap: () => showDialog(
+                              context: context,
+                              builder: (_) => TermsAndConditionsModal(userRole: c.rol ?? 'cliente'),
+                            ),
+                            child: Text(
+                              'términos y condiciones',
+                              style: tema.bodySmall?.copyWith(color: colores.primario, fontWeight: FontWeight.w700, decoration: TextDecoration.underline),
+                            ),
+                          ),
+                        ),
+                        const TextSpan(text: ' de ValleXpress.'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        if (errorText != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 16, top: 6),
-            child: Text(
-              errorText,
-              style: const TextStyle(
-                color: Colors.red,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
       ],
     );
   }

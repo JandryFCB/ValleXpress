@@ -136,6 +136,7 @@ class AuthProvider with ChangeNotifier {
         vehiculo: vehiculo,
         placa: placa,
       ));
+      FcmService.registrarDispositivo(); // igual que en el login: las notificaciones push empiezan desde el registro
       _isLoading = false;
       notifyListeners();
       return true;
@@ -174,6 +175,12 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Cierra la sesión en todos los dispositivos del usuario (por ejemplo si perdió el celular) y también en este.
+  Future<void> cerrarSesionEnTodos() async {
+    await _authService.cerrarTodas();
+    await logout();
+  }
+
   Future<void> _limpiarLocal() async {
     await SessionStore.limpiar();
     final prefs = await SharedPreferences.getInstance();
@@ -189,10 +196,19 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     final contexto = navigatorKey.currentContext;
-    if (contexto != null) {
+    if (contexto != null && contexto.mounted) {
       ScaffoldMessenger.maybeOf(contexto)?.showSnackBar(SnackBar(content: Text(SessionManager.mensajeDe(codigo))));
     }
     navigatorKey.currentState?.pushNamedAndRemoveUntil(AppConstants.loginRoute, (_) => false);
+  }
+
+  /// Actualiza los datos del usuario que la app tiene guardados (por ejemplo tras editar su nombre en el perfil),
+  /// para que el saludo del inicio y demás pantallas los muestren al instante.
+  Future<void> actualizarUsuario(Map<String, dynamic> cambios) async {
+    _usuario = {...?_usuario, ...cambios};
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('usuario', jsonEncode(_usuario));
   }
 
   String _limpiar(Object e) => e.toString().replaceFirst('Exception: ', '');

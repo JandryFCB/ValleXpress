@@ -49,7 +49,7 @@ class ProfileService {
   static Future<void> actualizarPerfil({
     required String nombre,
     required String apellido,
-    required String telefono,
+    String? telefono,
   }) async {
     final token = await _getToken();
 
@@ -62,7 +62,7 @@ class ProfileService {
       body: jsonEncode({
         'nombre': nombre,
         'apellido': apellido,
-        'telefono': telefono,
+        if (telefono != null) 'telefono': telefono,
       }),
     );
 

@@ -13,9 +13,7 @@ import 'package:vallexpress_app/screens/cliente/cliente_mis_pedidos_screen.dart'
 import '../../config/theme.dart';
 import '../../config/constants.dart';
 
-import '../profile/cliente_profile_screen.dart';
-import '../profile/vendedor_profile_screen.dart';
-import '../profile/repartidor_profile_screen.dart';
+import '../profile/perfil_screen.dart';
 import '../profile/settings_screen.dart';
 import 'package:vallexpress_app/screens/cliente/cliente_productos_screen.dart';
 import 'package:vallexpress_app/screens/repartidor/repartidor_pedidos_screen.dart';
@@ -1180,22 +1178,12 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: const Icon(Icons.menu, color: AppTheme.primaryColor, size: 28),
 
           onSelected: (value) {
-            final tipoUsuario =
-                context.read<AuthProvider>().usuario?['tipoUsuario'] ??
-                'cliente';
             switch (value) {
               case 'perfil':
-                Widget profileScreen;
-                if (tipoUsuario == 'vendedor') {
-                  profileScreen = const VendedorProfileScreen();
-                } else if (tipoUsuario == 'repartidor') {
-                  profileScreen = RepartidorProfileScreen();
-                } else {
-                  profileScreen = const ClienteProfileScreen();
-                }
+                // El perfil es el mismo para todos los roles (datos, teléfonos, direcciones, configuración)
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => profileScreen),
+                  MaterialPageRoute(builder: (context) => const PerfilScreen()),
                 );
                 break;
               case 'configuracion':

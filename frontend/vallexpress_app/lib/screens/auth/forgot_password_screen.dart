@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:vallexpress_app/config/theme.dart';
-import 'package:vallexpress_app/services/password_reset_service.dart';
+import '../../services/password_reset_service.dart';
+import '../../utils/validadores.dart';
+import '../../widgets/ui/ui.dart';
 import 'verify_code_screen.dart';
 
+/// Recuperar contraseña, paso 1 de 3: pedir el código al correo.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -11,95 +13,58 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final _emailCtrl = TextEditingController();
-  bool _loading = false;
+  final _correo = TextEditingController();
+  bool _cargando = false;
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _correo.dispose();
     super.dispose();
   }
 
-  void _snack(String msg, {bool ok = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: ok ? Colors.green : Colors.red,
-      ),
-    );
-  }
-
-  Future<void> _sendCode() async {
-    final email = _emailCtrl.text.trim().toLowerCase();
-    if (email.isEmpty) {
-      _snack('Ingresa tu correo');
+  Future<void> _enviarCodigo() async {
+    FocusScope.of(context).unfocus();
+    final email = _correo.text.trim().toLowerCase();
+    if (!Validadores.email(email)) {
+      mostrarError(context, 'Escribe un correo válido');
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() => _cargando = true);
     try {
       await PasswordResetService.forgotPassword(email);
       if (!mounted) return;
-
-      _snack('Si el correo existe, enviamos un código.', ok: true);
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => VerifyCodeScreen(email: email)),
-      );
+      // El servidor responde igual exista o no la cuenta (por seguridad): no se confirma si el correo está registrado
+      mostrarMensaje(context, 'Si el correo existe, te enviamos un código.', tipo: TipoMensaje.exito);
+      Navigator.push(context, MaterialPageRoute(builder: (_) => VerifyCodeScreen(email: email)));
     } catch (e) {
-      _snack(e.toString().replaceAll('Exception: ', ''));
+      if (mounted) mostrarError(context, e.toString().replaceAll('Exception: ', ''));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('Recuperar contraseña'),
-        backgroundColor: AppTheme.primaryColor,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            const Text(
-              'Ingresa tu correo y te enviaremos un código de verificación.',
-              style: TextStyle(color: AppTheme.textSecondaryColor),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                hintText: 'Correo',
-                prefixIcon: const Icon(Icons.mail_outline),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _sendCode,
-                child: _loading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Enviar código'),
-              ),
-            ),
-          ],
+    return PantallaFormulario(
+      icono: Icons.lock_reset_rounded,
+      titulo: 'Recupera tu contraseña',
+      subtitulo: 'Escribe el correo de tu cuenta y te enviaremos un código de 6 dígitos para crear una contraseña nueva.',
+      textoBoton: 'Enviar código',
+      cargando: _cargando,
+      onBoton: _enviarCodigo,
+      hijos: [
+        CampoValle(
+          controller: _correo,
+          etiqueta: 'Correo electrónico',
+          icono: Icons.alternate_email,
+          tipoTeclado: TextInputType.emailAddress,
+          autofill: const [AutofillHints.email],
+          sugerencias: false,
+          accion: TextInputAction.done,
+          onSubmitted: (_) => _cargando ? null : _enviarCodigo(),
         ),
-      ),
+      ],
     );
   }
 }

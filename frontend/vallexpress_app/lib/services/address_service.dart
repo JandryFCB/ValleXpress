@@ -1,118 +1,70 @@
 import 'dart:convert';
+import '../config/constants.dart';
+import 'api_error.dart';
 import 'api_http.dart' as http;
 import 'session_store.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../config/constants.dart';
 
+/// Direcciones de entrega del usuario (GET/POST/PUT/PATCH/DELETE /api/direcciones). Los métodos devuelven mapas
+/// (como antes) para no romper las pantallas que ya los usan; las pantallas nuevas los convierten con
+/// `Direccion.desdeJson`. Los errores del servidor llegan con su mensaje real (por ejemplo "Puedes guardar hasta 20
+/// direcciones").
 class AddressService {
-  static Future<String> _getToken() async {
+  static Future<Map<String, String>> _cabeceras() async {
     final token = await SessionStore.accessToken();
-    if (token == null || token.isEmpty) {
-      throw Exception('Token no encontrado');
-    }
-    return token;
+    if (token == null || token.isEmpty) throw Exception('Tu sesión no está activa. Inicia sesión de nuevo.');
+    return {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
   }
 
-  // Listar todas las direcciones del usuario autenticado
+  static Uri _url([String ruta = '']) => Uri.parse('${AppConstants.baseUrl}/direcciones$ruta');
+
+  static Map<String, dynamic> _direccion(http.Response res) {
+    final d = (jsonDecode(res.body) as Map<String, dynamic>)['direccion'] as Map<String, dynamic>;
+    return d;
+  }
+
+  /// Todas las direcciones del usuario (la predeterminada primero)
   static Future<List<dynamic>> listar() async {
-    final token = await _getToken();
-    final res = await http.get(
-      Uri.parse('${AppConstants.baseUrl}/direcciones'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-    if (res.statusCode != 200) {
-      try {
-        final d = jsonDecode(res.body);
-        throw Exception(d['error'] ?? 'Error al listar direcciones');
-      } catch (_) {
-        throw Exception('Error al listar direcciones (${res.statusCode})');
-      }
-    }
-    final decoded = jsonDecode(res.body);
-    return (decoded['direcciones'] as List?) ?? [];
+    final res = await http.get(_url(), headers: await _cabeceras());
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudieron cargar tus direcciones'));
+    return (jsonDecode(res.body) as Map<String, dynamic>)['direcciones'] as List<dynamic>;
   }
 
-  // Obtener la dirección predeterminada
+  /// La dirección predeterminada, o null si el usuario aún no tiene una (el servidor responde 404 sin error)
   static Future<Map<String, dynamic>?> predeterminada() async {
-    final token = await _getToken();
-    final res = await http.get(
-      Uri.parse('${AppConstants.baseUrl}/direcciones/predeterminada'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-    // Si no hay dirección predeterminada, retornar null sin error
-    if (res.statusCode == 404) {
-      return null;
-    }
-    if (res.statusCode != 200) {
-      try {
-        final d = jsonDecode(res.body);
-        throw Exception(d['error'] ?? 'Error al obtener predeterminada');
-      } catch (_) {
-        throw Exception('Error al obtener predeterminada (${res.statusCode})');
-      }
-    }
-    final decoded = jsonDecode(res.body);
-    final direccion = decoded['direccion'] as Map<String, dynamic>?;
-
-    // Asegurar que latitud y longitud sean doubles (pueden venir como String del backend)
-    if (direccion != null) {
-      if (direccion['latitud'] != null) {
-        direccion['latitud'] = (direccion['latitud'] is num)
-            ? (direccion['latitud'] as num).toDouble()
-            : double.tryParse(direccion['latitud'].toString()) ?? 0.0;
-      }
-      if (direccion['longitud'] != null) {
-        direccion['longitud'] = (direccion['longitud'] is num)
-            ? (direccion['longitud'] as num).toDouble()
-            : double.tryParse(direccion['longitud'].toString()) ?? 0.0;
-      }
-    }
-
-    return direccion;
+    final res = await http.get(_url('/predeterminada'), headers: await _cabeceras());
+    if (res.statusCode == 404) return null;
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudo cargar la dirección predeterminada'));
+    return _direccion(res);
   }
 
-  // Crear dirección
   static Future<Map<String, dynamic>> crear({
     String? nombre,
     required String direccion,
     required double latitud,
     required double longitud,
     bool esPredeterminada = false,
+    String? tipo,
+    String? referencia,
+    String? instrucciones,
   }) async {
-    final token = await _getToken();
     final res = await http.post(
-      Uri.parse('${AppConstants.baseUrl}/direcciones'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+      _url(),
+      headers: await _cabeceras(),
       body: jsonEncode({
         'nombre': nombre,
         'direccion': direccion,
         'latitud': latitud,
         'longitud': longitud,
         'esPredeterminada': esPredeterminada,
+        if (tipo != null) 'tipo': tipo,
+        if (referencia != null) 'referencia': referencia,
+        if (instrucciones != null) 'instrucciones': instrucciones,
       }),
     );
-    if (res.statusCode != 201) {
-      try {
-        final d = jsonDecode(res.body);
-        throw Exception(d['error'] ?? 'Error al crear dirección');
-      } catch (_) {
-        throw Exception('Error al crear dirección (${res.statusCode})');
-      }
-    }
-    final decoded = jsonDecode(res.body);
-    return decoded['direccion'] as Map<String, dynamic>;
+    if (res.statusCode != 201) throw Exception(mensajeDeError(res, 'No se pudo guardar la dirección'));
+    return _direccion(res);
   }
 
-  // Actualizar dirección
   static Future<Map<String, dynamic>> actualizar(
     String id, {
     String? nombre,
@@ -120,73 +72,36 @@ class AddressService {
     double? latitud,
     double? longitud,
     bool? esPredeterminada,
+    String? tipo,
+    String? referencia,
+    String? instrucciones,
   }) async {
-    final token = await _getToken();
     final res = await http.put(
-      Uri.parse('${AppConstants.baseUrl}/direcciones/$id'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+      _url('/$id'),
+      headers: await _cabeceras(),
       body: jsonEncode({
         if (nombre != null) 'nombre': nombre,
         if (direccion != null) 'direccion': direccion,
         if (latitud != null) 'latitud': latitud,
         if (longitud != null) 'longitud': longitud,
         if (esPredeterminada != null) 'esPredeterminada': esPredeterminada,
+        if (tipo != null) 'tipo': tipo,
+        if (referencia != null) 'referencia': referencia,
+        if (instrucciones != null) 'instrucciones': instrucciones,
       }),
     );
-    if (res.statusCode != 200) {
-      try {
-        final d = jsonDecode(res.body);
-        throw Exception(d['error'] ?? 'Error al actualizar dirección');
-      } catch (_) {
-        throw Exception('Error al actualizar dirección (${res.statusCode})');
-      }
-    }
-    final decoded = jsonDecode(res.body);
-    return decoded['direccion'] as Map<String, dynamic>;
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudo actualizar la dirección'));
+    return _direccion(res);
   }
 
-  // Marcar como predeterminada
   static Future<Map<String, dynamic>> marcarPredeterminada(String id) async {
-    final token = await _getToken();
-    final res = await http.patch(
-      Uri.parse('${AppConstants.baseUrl}/direcciones/$id/predeterminada'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-    if (res.statusCode != 200) {
-      try {
-        final d = jsonDecode(res.body);
-        throw Exception(d['error'] ?? 'Error al marcar predeterminada');
-      } catch (_) {
-        throw Exception('Error al marcar predeterminada (${res.statusCode})');
-      }
-    }
-    final decoded = jsonDecode(res.body);
-    return decoded['direccion'] as Map<String, dynamic>;
+    final res = await http.patch(_url('/$id/predeterminada'), headers: await _cabeceras());
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudo marcar como predeterminada'));
+    return _direccion(res);
   }
 
-  // Eliminar
   static Future<void> eliminar(String id) async {
-    final token = await _getToken();
-    final res = await http.delete(
-      Uri.parse('${AppConstants.baseUrl}/direcciones/$id'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-    if (res.statusCode != 200) {
-      try {
-        final d = jsonDecode(res.body);
-        throw Exception(d['error'] ?? 'Error al eliminar dirección');
-      } catch (_) {
-        throw Exception('Error al eliminar dirección (${res.statusCode})');
-      }
-    }
+    final res = await http.delete(_url('/$id'), headers: await _cabeceras());
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudo eliminar la dirección'));
   }
 }

@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'api_http.dart' as http;
 import '../config/constants.dart';
+import 'api_error.dart';
 import 'dispositivo.dart';
+import 'session_store.dart';
 
 class AuthService {
   // Login
@@ -90,6 +92,17 @@ class AuthService {
     } catch (_) {
       // sin red: la sesión local se cierra igual
     }
+  }
+
+  // Cierra la sesión en TODOS los equipos del usuario (incluido este). Necesita el token de acceso.
+  Future<void> cerrarTodas() async {
+    final token = await SessionStore.accessToken();
+    if (token == null) throw Exception('Tu sesión no está activa');
+    final res = await http.post(
+      Uri.parse('${AppConstants.baseUrl}/auth/logout-all'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+    );
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudieron cerrar las sesiones'));
   }
 
   // Solicitar código de recuperación de contraseña
