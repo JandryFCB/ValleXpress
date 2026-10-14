@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
-import '../../services/product_service.dart';
+import '../../models/producto.dart';
+import '../../services/api_error.dart';
+import '../../services/catalogo_service.dart';
+import '../../widgets/ui/ui.dart';
+import '../catalogo/negocio_detalle_screen.dart';
+import 'producto_form_screen.dart';
 
+/// Mis productos (vendedor): el menú agrupado por secciones, con acciones rápidas (agotado, ocultar, editar, borrar).
 class MisProductosScreen extends StatefulWidget {
   const MisProductosScreen({super.key});
 
@@ -10,9 +16,10 @@ class MisProductosScreen extends StatefulWidget {
 }
 
 class _MisProductosScreenState extends State<MisProductosScreen> {
-  bool _loading = true;
+  bool _cargando = true;
   String? _error;
-  List<dynamic> _productos = [];
+  bool _sinNegocio = false;
+  Menu _menu = const Menu([], []);
 
   @override
   void initState() {
@@ -20,541 +27,174 @@ class _MisProductosScreenState extends State<MisProductosScreen> {
     _cargar();
   }
 
-  Future<void> _mostrarEditarProducto(dynamic p, int index) async {
-    final nombreCtrl = TextEditingController(
-      text: (p['nombre'] ?? '').toString(),
-    );
-    final descCtrl = TextEditingController(
-      text: (p['descripcion'] ?? '').toString(),
-    );
-    final precioCtrl = TextEditingController(
-      text: (p['precio'] ?? '').toString(),
-    );
-    final stockCtrl = TextEditingController(
-      text: (p['stock'] ?? '0').toString(),
-    );
-    final tiempoPrepCtrl = TextEditingController(
-      text: (p['tiempoPreparacion'] ?? '0').toString(),
-    );
-
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => Dialog(
-        backgroundColor: AppTheme.cardColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: AppTheme.borderColor.withOpacity(0.35)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ====== TÍTULO ======
-                const Text(
-                  'Editar producto',
-                  style: TextStyle(
-                    color: AppTheme.textPrimaryColor,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // ====== CAMPOS ======
-                _campoForm(
-                  label: 'Nombre',
-                  controller: nombreCtrl,
-                  icon: Icons.fastfood,
-                ),
-                const SizedBox(height: 12),
-
-                _campoForm(
-                  label: 'Descripción',
-                  controller: descCtrl,
-                  icon: Icons.notes,
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 12),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: _campoForm(
-                        label: 'Precio',
-                        controller: precioCtrl,
-                        icon: Icons.attach_money,
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _campoForm(
-                        label: 'Stock',
-                        controller: stockCtrl,
-                        icon: Icons.inventory_2_outlined,
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                _campoForm(
-                  label: 'Tiempo de preparación (min)',
-                  controller: tiempoPrepCtrl,
-                  icon: Icons.timer_outlined,
-                  keyboardType: TextInputType.number,
-                ),
-
-                const SizedBox(height: 18),
-                Divider(color: Colors.white.withOpacity(0.08)),
-                const SizedBox(height: 12),
-
-                // ====== BOTONES ======
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            side: BorderSide(
-                              color: Colors.white.withOpacity(0.12),
-                            ),
-                          ),
-                        ),
-                        child: const Text(
-                          'Cancelar',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          foregroundColor: AppTheme.backgroundColor,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Text(
-                          'Guardar',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    if (ok != true) return;
-
-    final precio = double.tryParse(precioCtrl.text.trim());
-    final stock = int.tryParse(stockCtrl.text.trim());
-    if (precio == null || stock == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Precio o stock inválidos')));
-      return;
-    }
-    final tiempoPreparacion = int.tryParse(tiempoPrepCtrl.text.trim());
-    if (tiempoPreparacion == null || tiempoPreparacion < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tiempo de preparación inválido')),
-      );
-      return;
-    }
-
-    try {
-      await ProductService.actualizarProducto(
-        id: p['id'],
-        nombre: nombreCtrl.text.trim(),
-        descripcion: descCtrl.text.trim(),
-        precio: precio,
-        stock: stock,
-        tiempoPreparacion: tiempoPreparacion,
-      );
-
-      // Actualiza UI sin recargar
-      setState(() {
-        _productos[index]['nombre'] = nombreCtrl.text.trim();
-        _productos[index]['descripcion'] = descCtrl.text.trim();
-        _productos[index]['precio'] = precio;
-        _productos[index]['stock'] = stock;
-        _productos[index]['tiempoPreparacion'] = tiempoPreparacion;
-      });
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Producto actualizado')));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
-    }
-  }
-
   Future<void> _cargar() async {
     setState(() {
-      _loading = true;
+      _cargando = _menu.productos.isEmpty;
       _error = null;
     });
-
     try {
-      final data = await ProductService.listarMisProductos();
+      final m = await CatalogoService.misProductos();
       if (!mounted) return;
-      setState(() => _productos = data);
+      setState(() {
+        _menu = m;
+        _cargando = false;
+        _sinNegocio = false;
+      });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      final texto = textoDeError(e);
+      setState(() {
+        _sinNegocio = texto.contains('no tienes un negocio');
+        _error = _sinNegocio ? null : texto;
+        _cargando = false;
+      });
     }
   }
 
-  Widget _campoForm({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-    TextInputType? keyboardType,
-    int maxLines = 1,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      style: const TextStyle(
-        color: AppTheme.textPrimaryColor,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: AppTheme.primaryColor),
-        filled: true,
-        fillColor: AppTheme.backgroundColor.withOpacity(0.25),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: AppTheme.borderColor.withOpacity(0.35),
-            width: 1.4,
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppTheme.borderColor, width: 2),
-        ),
-        labelStyle: const TextStyle(color: AppTheme.textSecondaryColor),
+  List<String> get _secciones => _menu.secciones.whereType<String>().toList();
+
+  Future<void> _abrirFormulario([Producto? p]) async {
+    final cambio = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => ProductoFormScreen(producto: p, secciones: _secciones)));
+    if (cambio == true && mounted) await _cargar();
+  }
+
+  Future<void> _estado(Producto p, EstadoProducto e) async {
+    try {
+      await CatalogoService.cambiarEstadoProducto(p.id, e);
+      if (!mounted) return;
+      mostrarMensaje(context, '"${p.nombre}": ${e.etiqueta.toLowerCase()}');
+      await _cargar();
+    } catch (err) {
+      if (mounted) mostrarError(context, textoDeError(err));
+    }
+  }
+
+  Future<void> _eliminar(Producto p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar este producto?'),
+        content: Text('"${p.nombre}" dejará de aparecer en tu menú. Los pedidos anteriores no se ven afectados.\n\nSi solo quieres quitarlo por un tiempo, mejor ocúltalo.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor), child: const Text('Eliminar')),
+        ],
       ),
     );
+    if (ok != true) return;
+    try {
+      await CatalogoService.eliminarProducto(p.id);
+      if (!mounted) return;
+      mostrarMensaje(context, 'Producto eliminado');
+      await _cargar();
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('Mis Productos'),
-        backgroundColor: AppTheme.primaryColor,
-        elevation: 0,
-        actions: [
-          IconButton(onPressed: _cargar, icon: const Icon(Icons.refresh)),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.red),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            )
-          : _productos.isEmpty
-          ? const Center(
-              child: Text(
-                'Aún no tienes productos',
-                style: TextStyle(color: AppTheme.textSecondaryColor),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _productos.length,
-              itemBuilder: (_, i) {
-                final p = _productos[i];
-                final nombre = (p['nombre'] ?? '').toString();
-                final desc = (p['descripcion'] ?? '').toString();
-                final precio = (p['precio'] ?? '0').toString();
-                final disponible = (p['disponible'] == true);
-                final tiempoPrep = (p['tiempoPreparacion'] ?? 0).toString();
+    return FondoValle(
+      titulo: 'Mis productos',
+      botonFlotante: (_cargando || _error != null || _sinNegocio || _menu.productos.isEmpty)
+          ? null
+          : FloatingActionButton.extended(onPressed: () => _abrirFormulario(), icon: const Icon(Icons.add_rounded), label: const Text('Agregar')),
+      child: _contenido(),
+    );
+  }
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.borderColor.withOpacity(0.3),
-                    ),
-                  ),
-                  child: Row(
+  Widget _contenido() {
+    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_sinNegocio) {
+      return EstadoVacio(icono: Icons.storefront_outlined, titulo: 'Primero crea tu negocio', mensaje: 'Ve a "Mi negocio" para registrarlo; luego podrás cargar tus productos.', textoAccion: 'Volver', onAccion: () => Navigator.pop(context));
+    }
+    if (_error != null) {
+      return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tus productos', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
+    }
+    if (_menu.productos.isEmpty) {
+      return EstadoVacio(
+        icono: Icons.restaurant_menu_rounded,
+        titulo: 'Tu menú está vacío',
+        mensaje: 'Agrega tu primer producto con su foto y su precio.',
+        textoAccion: 'Agregar producto',
+        onAccion: () => _abrirFormulario(),
+      );
+    }
+
+    final c = context.colores;
+    final total = _menu.productos.length;
+    final ocultos = _menu.productos.where((p) => p.estado == EstadoProducto.oculto).length;
+    final agotados = _menu.productos.where((p) => p.estado == EstadoProducto.agotado).length;
+
+    return RefreshIndicator(
+      onRefresh: _cargar,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+        children: [
+          Text(
+            '$total producto${total == 1 ? '' : 's'}${agotados > 0 ? ' · $agotados agotado${agotados == 1 ? '' : 's'}' : ''}${ocultos > 0 ? ' · $ocultos oculto${ocultos == 1 ? '' : 's'}' : ''}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: c.textoSuave),
+          ),
+          for (final entrada in _menu.porSeccion.entries) ...[
+            EncabezadoSeccion(entrada.key ?? 'Sin sección'),
+            for (final p in entrada.value)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TarjetaProducto(
+                  producto: p,
+                  onTap: () => _abrirFormulario(p),
+                  extra: Row(
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          disponible ? Icons.check_circle : Icons.cancel,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
                           children: [
-                            Text(
-                              nombre,
-                              style: const TextStyle(
-                                color: AppTheme.textPrimaryColor,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                              ),
+                            InsigniaValle(
+                              p.estado.etiqueta,
+                              icono: p.estado.icono,
+                              color: switch (p.estado) {
+                                EstadoProducto.disponible => AppTheme.successColor,
+                                EstadoProducto.agotado => AppTheme.warningColor,
+                                EstadoProducto.oculto => c.textoSuave,
+                              },
                             ),
-                            if (desc.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                desc,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: AppTheme.textSecondaryColor,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 6),
-                            Text(
-                              '\$$precio',
-                              style: const TextStyle(
-                                color: AppTheme.primaryColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '⏱ $tiempoPrep min preparación',
-                              style: const TextStyle(
-                                color: AppTheme.textSecondaryColor,
-                                fontSize: 12,
-                              ),
-                            ),
+                            if (p.controlaStock) InsigniaValle('Stock: ${p.stock ?? 0}', color: AppTheme.infoColor, icono: Icons.inventory_2_outlined),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-
-                      // ✅ Switch ON/OFF
-                      Switch(
-                        value: disponible,
-                        onChanged: (value) async {
-                          try {
-                            await ProductService.cambiarDisponible(
-                              id: p['id'],
-                              disponible: value,
-                            );
-                            setState(() {
-                              _productos[i]['disponible'] = value;
-                            });
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  e.toString().replaceFirst('Exception: ', ''),
-                                ),
-                              ),
-                            );
+                      PopupMenuButton<String>(
+                        tooltip: 'Opciones',
+                        icon: Icon(Icons.more_horiz_rounded, color: c.textoSuave),
+                        onSelected: (v) {
+                          switch (v) {
+                            case 'editar':
+                              _abrirFormulario(p);
+                            case 'disponible':
+                              _estado(p, EstadoProducto.disponible);
+                            case 'agotado':
+                              _estado(p, EstadoProducto.agotado);
+                            case 'oculto':
+                              _estado(p, EstadoProducto.oculto);
+                            case 'eliminar':
+                              _eliminar(p);
                           }
                         },
-                      ),
-
-                      IconButton(
-                        onPressed: () => _mostrarEditarProducto(p, i),
-                        icon: const Icon(
-                          Icons.edit,
-                          color: AppTheme.textSecondaryColor,
-                        ),
-                      ),
-
-                      IconButton(
-                        onPressed: () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            barrierDismissible: true,
-                            builder: (_) => Dialog(
-                              backgroundColor: AppTheme.cardColor,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(22),
-                                side: BorderSide(
-                                  color: AppTheme.borderColor.withOpacity(0.35),
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(18),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Título
-                                    const Text(
-                                      'Eliminar producto',
-                                      style: TextStyle(
-                                        color: AppTheme.textPrimaryColor,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-
-                                    // Mensaje
-                                    Text(
-                                      '¿Eliminar "${p['nombre']}"?',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: AppTheme.textSecondaryColor
-                                            .withOpacity(0.95),
-                                        fontSize: 14,
-                                        height: 1.35,
-                                      ),
-                                    ),
-
-                                    const SizedBox(height: 16),
-                                    Divider(
-                                      color: Colors.white.withOpacity(0.08),
-                                    ),
-                                    const SizedBox(height: 14),
-
-                                    // Botones
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
-                                            style: TextButton.styleFrom(
-                                              foregroundColor: Colors.white70,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 14,
-                                                  ),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                                side: BorderSide(
-                                                  color: Colors.white
-                                                      .withOpacity(0.12),
-                                                ),
-                                              ),
-                                            ),
-                                            child: const Text(
-                                              'Cancelar',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  AppTheme.primaryColor,
-                                              foregroundColor:
-                                                  AppTheme.backgroundColor,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 14,
-                                                  ),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                              ),
-                                            ),
-                                            child: const Text(
-                                              'Eliminar',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-
-                          if (ok != true) return;
-
-                          try {
-                            await ProductService.eliminarProducto(p['id']);
-                            setState(() {
-                              _productos.removeAt(i);
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Producto eliminado'),
-                              ),
-                            );
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  e.toString().replaceFirst('Exception: ', ''),
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.redAccent,
-                        ),
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(value: 'editar', child: Text('Editar')),
+                          if (p.estado != EstadoProducto.disponible) const PopupMenuItem(value: 'disponible', child: Text('Marcar disponible')),
+                          if (p.estado == EstadoProducto.disponible) const PopupMenuItem(value: 'agotado', child: Text('Marcar agotado')),
+                          if (p.estado != EstadoProducto.oculto) const PopupMenuItem(value: 'oculto', child: Text('Ocultar del menú')),
+                          PopupMenuItem(value: 'eliminar', child: Text('Eliminar', style: TextStyle(color: AppTheme.errorColor))),
+                        ],
                       ),
                     ],
                   ),
-                );
-              },
-            ),
+                ),
+              ),
+          ],
+        ],
+      ),
     );
   }
 }

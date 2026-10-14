@@ -33,7 +33,10 @@ class DireccionElegida {
 /// Elegir (o editar) una dirección: el pin queda fijo al centro y se mueve el mapa por debajo, como en Uber.
 /// Abajo van el tipo, la dirección escrita y los detalles para el repartidor.
 class AddressPickerScreen extends StatefulWidget {
-  const AddressPickerScreen({super.key, this.actual});
+  const AddressPickerScreen({super.key, this.actual, this.paraLocal = false});
+
+  /// true = se elige la ubicación del LOCAL de un negocio: sin tipos, sin "predeterminada" ni indicaciones
+  final bool paraLocal;
 
   /// Dirección que se edita (null = dirección nueva)
   final Direccion? actual;
@@ -253,25 +256,29 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_editando ? 'Editar dirección' : 'Nueva dirección', style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 14),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        spacing: 8,
-                        children: [
-                          for (final t in TipoDireccion.values)
-                            ChoiceChip(
-                              avatar: Icon(t.icono, size: 18, color: _tipo == t ? Colors.white : c.textoSuave),
-                              label: Text(t.etiqueta),
-                              selected: _tipo == t,
-                              showCheckmark: false,
-                              labelStyle: TextStyle(color: _tipo == t ? Colors.white : c.texto, fontWeight: FontWeight.w600),
-                              onSelected: (_) => setState(() => _tipo = t),
-                            ),
-                        ],
-                      ),
+                    Text(
+                      widget.paraLocal ? 'Ubicación de tu negocio' : (_editando ? 'Editar dirección' : 'Nueva dirección'),
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
+                    const SizedBox(height: 14),
+                    if (!widget.paraLocal)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          spacing: 8,
+                          children: [
+                            for (final t in TipoDireccion.values)
+                              ChoiceChip(
+                                avatar: Icon(t.icono, size: 18, color: _tipo == t ? Colors.white : c.textoSuave),
+                                label: Text(t.etiqueta),
+                                selected: _tipo == t,
+                                showCheckmark: false,
+                                labelStyle: TextStyle(color: _tipo == t ? Colors.white : c.texto, fontWeight: FontWeight.w600),
+                                onSelected: (_) => setState(() => _tipo = t),
+                              ),
+                          ],
+                        ),
+                      ),
                     const SizedBox(height: 16),
                     CampoValle(
                       controller: _direccion,
@@ -295,41 +302,43 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
                       maxLongitud: 500,
                       ayuda: 'Ej: frente al parque, portón verde',
                     ),
-                    Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        title: Text('Más detalles', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        children: [
-                          CampoValle(
-                            controller: _nombre,
-                            etiqueta: 'Nombre (opcional)',
-                            icono: Icons.label_outline,
-                            mayusculas: TextCapitalization.words,
-                            maxLongitud: 50,
-                            ayuda: 'Ej: Mi casa, Oficina',
-                          ),
-                          const SizedBox(height: 14),
-                          CampoValle(
-                            controller: _instrucciones,
-                            etiqueta: 'Indicaciones para el repartidor',
-                            icono: Icons.delivery_dining_outlined,
-                            mayusculas: TextCapitalization.sentences,
-                            maxLongitud: 500,
-                            maxLineas: 2,
-                            ayuda: 'Ej: tocar el timbre dos veces',
-                          ),
-                          const SizedBox(height: 8),
-                        ],
+                    if (!widget.paraLocal)
+                      Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: Text('Más detalles', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                          children: [
+                            CampoValle(
+                              controller: _nombre,
+                              etiqueta: 'Nombre (opcional)',
+                              icono: Icons.label_outline,
+                              mayusculas: TextCapitalization.words,
+                              maxLongitud: 50,
+                              ayuda: 'Ej: Mi casa, Oficina',
+                            ),
+                            const SizedBox(height: 14),
+                            CampoValle(
+                              controller: _instrucciones,
+                              etiqueta: 'Indicaciones para el repartidor',
+                              icono: Icons.delivery_dining_outlined,
+                              mayusculas: TextCapitalization.sentences,
+                              maxLongitud: 500,
+                              maxLineas: 2,
+                              ayuda: 'Ej: tocar el timbre dos veces',
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
                       ),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Usar como predeterminada'),
-                      subtitle: const Text('Se propone primero cuando hagas un pedido'),
-                      value: _predeterminada,
-                      onChanged: (v) => setState(() => _predeterminada = v),
-                    ),
+                    if (!widget.paraLocal)
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Usar como predeterminada'),
+                        subtitle: const Text('Se propone primero cuando hagas un pedido'),
+                        value: _predeterminada,
+                        onChanged: (v) => setState(() => _predeterminada = v),
+                      ),
                   ],
                 ),
               ),
@@ -346,7 +355,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                 child: BotonValle(
-                  texto: _editando ? 'Guardar cambios' : 'Guardar dirección',
+                  texto: widget.paraLocal ? 'Guardar ubicación' : (_editando ? 'Guardar cambios' : 'Guardar dirección'),
                   icono: Icons.check_rounded,
                   onPressed: _guardar,
                 ),

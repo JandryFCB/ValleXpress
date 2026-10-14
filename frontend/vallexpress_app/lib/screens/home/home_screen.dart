@@ -7,7 +7,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:vallexpress_app/providers/auth_provider.dart';
 
 import 'package:vallexpress_app/screens/vendedor/mis_productos_screen.dart';
-import 'package:vallexpress_app/screens/vendedor/agregar_producto_screen.dart';
+import 'package:vallexpress_app/screens/vendedor/mi_negocio_screen.dart';
 import 'package:vallexpress_app/screens/vendedor/vendedor_mis_pedidos_screen.dart';
 import 'package:vallexpress_app/screens/cliente/cliente_mis_pedidos_screen.dart';
 import '../../config/theme.dart';
@@ -15,7 +15,7 @@ import '../../config/constants.dart';
 
 import '../profile/perfil_screen.dart';
 import '../profile/settings_screen.dart';
-import 'package:vallexpress_app/screens/cliente/cliente_productos_screen.dart';
+import 'package:vallexpress_app/screens/catalogo/negocios_screen.dart';
 import 'package:vallexpress_app/screens/repartidor/repartidor_pedidos_screen.dart';
 import 'package:vallexpress_app/screens/repartidor/repartidor_rutas_screen.dart';
 
@@ -801,14 +801,12 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildActionCard(
                   context,
-                  icon: Icons.add_shopping_cart,
-                  title: 'Nuevo Pedido',
+                  icon: Icons.storefront_rounded,
+                  title: 'Explorar negocios',
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const ClienteProductosScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const NegociosScreen()),
                     );
                   },
                 ),
@@ -915,14 +913,12 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildActionCard(
                   context,
-                  icon: Icons.add_box,
-                  title: 'Agregar Producto',
+                  icon: Icons.storefront_rounded,
+                  title: 'Mi Negocio',
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const AgregarProductoScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const MiNegocioScreen()),
                     );
                   },
                 ),

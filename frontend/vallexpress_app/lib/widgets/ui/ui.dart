@@ -11,3 +11,4 @@ export 'mensaje.dart';
 export 'tarjeta_valle.dart';
 export 'medidor_clave.dart';
 export 'pantalla_formulario.dart';
+export 'imagen_red.dart';

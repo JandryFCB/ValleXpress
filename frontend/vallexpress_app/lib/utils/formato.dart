@@ -8,6 +8,9 @@ class Formato {
     return n.length == 10 ? '${n.substring(0, 3)} ${n.substring(3, 6)} ${n.substring(6)}' : numero;
   }
 
+  /// 8.5 -> "\$8.50"
+  static String dinero(num valor) => '\$${valor.toStringAsFixed(2)}';
+
   /// "luis mora" -> "Luis Mora"
   static String titulo(String texto) => texto
       .trim()

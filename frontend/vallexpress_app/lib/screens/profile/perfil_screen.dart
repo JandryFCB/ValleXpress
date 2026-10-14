@@ -14,6 +14,7 @@ import '../../widgets/ui/ui.dart';
 import 'addresses_screen.dart';
 import 'settings_screen.dart';
 import 'telefonos_screen.dart';
+import '../vendedor/mi_negocio_screen.dart';
 
 /// Mi perfil: el mismo para cliente, vendedor y repartidor. Datos de la cuenta, teléfonos, direcciones, configuración
 /// y cierre de sesión. (Lo propio de cada rol —negocio, vehículo— se agrega en sus módulos.)
@@ -203,6 +204,21 @@ class _PerfilScreenState extends State<PerfilScreen> {
               ],
             ),
           ),
+
+          if (rol == 'vendedor') ...[
+            const SizedBox(height: 12),
+            const EncabezadoSeccion('Mi negocio'),
+            TarjetaValle(
+              padding: EdgeInsets.zero,
+              child: _Fila(
+                icono: Icons.storefront_rounded,
+                titulo: 'Mi negocio',
+                valor: 'Datos, horario, ubicación y productos',
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => _abrir(const MiNegocioScreen()),
+              ),
+            ),
+          ],
 
           // ------------------------------ Cuenta ------------------------------
           const SizedBox(height: 12),
