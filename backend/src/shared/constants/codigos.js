@@ -33,12 +33,14 @@ const ESTADOPEDIDO = Object.freeze({
   CANCELADO: '010',
 });
 
+// Estatus de un producto (catálogo TESTATUSPRODUCTO). La app habla en texto: 'disponible', 'agotado', 'oculto'.
 const ESTADOPRODUCTO = Object.freeze({
   DISPONIBLE: '001',
   AGOTADO: '002',
-  NODISPONIBLE: '003',
-  DESCONTINUADO: '004',
+  OCULTO: '003',
 });
+const ESTADOPRODUCTOAAPI = Object.freeze({ '001': 'disponible', '002': 'agotado', '003': 'oculto' });
+const APIAESTADOPRODUCTO = Object.freeze({ disponible: '001', agotado: '002', oculto: '003' });
 
 const ESTADOPAGO = Object.freeze({
   PENDIENTE: '001',
@@ -49,13 +51,14 @@ const ESTADOPAGO = Object.freeze({
   CANCELADO: '006',
 });
 
+// Aprobación de un negocio (catálogo TESTATUSAPROBACION)
 const APROBACION = Object.freeze({
   PENDIENTE: '001',
   APROBADO: '002',
   RECHAZADO: '003',
   SUSPENDIDO: '004',
-  VENCIDO: '005',
 });
+const APROBACIONAAPI = Object.freeze({ '001': 'pendiente', '002': 'aprobado', '003': 'rechazado', '004': 'suspendido' });
 
 const METODOPAGO = Object.freeze({
   EFECTIVO: '001',
@@ -158,6 +161,7 @@ function interpretarCategoria(valor) {
 }
 
 module.exports = {
+  ESTADOPRODUCTOAAPI, APIAESTADOPRODUCTO, APROBACIONAAPI,
   ROLES, TIPOSTELEFONO, TIPOSDIRECCION, TIPODIRECCIONLOCAL, TIPOTELEFONO, TIPODIRECCION, TIPOTELEFONOAAPI, TIPODIRECCIONAAPI, ESTADOPEDIDO, ESTADOPRODUCTO, ESTADOPAGO, APROBACION, METODOPAGO, TIPOVEHICULO,
   CATEGORIA, PROPOSITOCODIGO, ROLAAPI, APIAROL, ROLESREGISTRABLES,
   ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, METODOPAGOAAPI, APIAMETODOPAGO,

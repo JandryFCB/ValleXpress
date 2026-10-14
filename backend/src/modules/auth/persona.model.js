@@ -13,6 +13,7 @@ const Persona = sequelize.define('Persona', {
   correo: { type: DataTypes.STRING(150), allowNull: false, field: 'correo' },
   correoVerificadoEn: { type: DataTypes.DATE, field: 'fcorreoverificado' },
   nacimiento: { type: DataTypes.DATEONLY, field: 'fnacimiento' },
+  fotoId: { type: DataTypes.BIGINT, field: 'carchivo_foto' },                     // TARCHIVOS
   ...columnasHistorial,
 }, opcionesHistorial('TPERSONAS'));
 

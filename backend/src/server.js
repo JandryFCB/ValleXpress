@@ -53,7 +53,9 @@ const authRoutes = require('./modules/auth/auth.routes');
 const usuarioRoutes = require('./modules/auth/usuario.routes');
 const direccionesRoutes = require('./modules/direcciones/direcciones.routes');
 const telefonosRoutes = require('./modules/telefonos/telefonos.routes');
-// Pendientes de migrar: vendedores, productos, pedidos, repartidores, notificaciones
+const negociosRoutes = require('./modules/negocios/negocios.routes');
+const miNegocioRoutes = require('./modules/negocios/mi-negocio.routes');
+// Pendientes de migrar: pedidos, repartidores, notificaciones
 
 
 
@@ -158,6 +160,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/direcciones', direccionesRoutes);
 app.use('/api/telefonos', telefonosRoutes);
+app.use('/api/negocios', negociosRoutes);
+app.use('/api/mi-negocio', miNegocioRoutes);
 
 
 

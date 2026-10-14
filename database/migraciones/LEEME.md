@@ -11,6 +11,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `003_logs_configuracion.sql` | `TCONFIGURACIONES` (parámetros) y logs: `TLOGERRORES`, `TLOGMENSAJES`, `TAUDITORIA` |
 | `004_vusuarios.sql` | Vista `VUSUARIOS` de lectura (usuario + persona + teléfono + acceso) |
 | `005_direcciones.sql` | Direcciones de la persona (`TPERSONADIRECCIONES`), tipos de dirección y de teléfono; agrega el tipo a `TPERSONATELEFONOS` |
+| `006_catalogo.sql` | Imágenes (`TARCHIVOS`), negocios con código propio, estado, horarios, productos e inventario; foto de perfil |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

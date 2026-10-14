@@ -33,7 +33,7 @@ const logoutAll = asyncHandler(async (req, res) => {
 });
 
 const getProfile = asyncHandler(async (req, res) => {
-  res.json({ usuario: await authService.obtenerPerfil(req.usuario.id) });
+  res.json({ usuario: await authService.obtenerPerfil(req.usuario.id, req) });
 });
 
 const updateProfile = asyncHandler(async (req, res) => {

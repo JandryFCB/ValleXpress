@@ -1,43 +1,31 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes, Sequelize } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesVersionada, clavePrimaria } = require('../../shared/models/columnasComunes');
-const { ESTADOPRODUCTO } = require('../../shared/constants/codigos');
-const Vendedor = require('../vendedores/vendedor.model');
+const { columnasHistorial, opcionesHistorial, opcionesSimple } = require('../../shared/models/columnasComunes');
 
-// Tabla TPRODUCTOS (historial en la misma tabla). La clave es CPRODUCTO (PRO-000001), la asigna la BD; en el modelo es "id".
-// El estado vive en el catálogo ESTADOPRODUCTO (001 disponible, 002 agotado, 003 no disponible, 004 descontinuado).
+// Tabla TPRODUCTOS (histórica): los productos de un negocio. Cada cambio (por ejemplo de precio) queda en el
+// historial de la misma tabla. El código (CPRODUCTO) lo asigna la BD.
 const Producto = sequelize.define('Producto', {
-  id: clavePrimaria('cproducto'),
-  vendedorId: { type: DataTypes.STRING(30), allowNull: false, field: 'vendedor' },    // TUSUARIOSID.CUSUARIO (dueño del negocio)
-  categoria: { type: DataTypes.CHAR(3), field: 'categoria' },                          // CATEGORIAS.CODIGO
-  estado: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: ESTADOPRODUCTO.DISPONIBLE, field: 'estado' },
-  nombre: { type: DataTypes.STRING(200), allowNull: false, field: 'nombre' },
-  descripcion: { type: DataTypes.TEXT, field: 'descripcion' },
-  sku: { type: DataTypes.STRING(50), field: 'sku' },
+  id: { type: DataTypes.BIGINT, primaryKey: true, field: 'cproducto', defaultValue: Sequelize.literal('DEFAULT') },
+  negocioId: { type: DataTypes.BIGINT, allowNull: false, field: 'cnegocio' },
+  nombre: { type: DataTypes.STRING(120), allowNull: false, field: 'nombre' },
+  descripcion: { type: DataTypes.STRING(500), field: 'descripcion' },
   precio: { type: DataTypes.DECIMAL(10, 2), allowNull: false, field: 'precio' },
-  precioAnterior: { type: DataTypes.DECIMAL(10, 2), field: 'precioanterior' },
-  costo: { type: DataTypes.DECIMAL(10, 2), field: 'costo' },
-  iva: { type: DataTypes.DECIMAL(5, 2), field: 'iva' },
-  imagenId: { type: DataTypes.STRING(30), field: 'imagen' },                           // ARCHIVOS.ARCHIVO
-  controlaStock: { type: DataTypes.BOOLEAN, field: 'controlastock' },
-  stock: { type: DataTypes.INTEGER, field: 'stock' },
-  stockMinimo: { type: DataTypes.INTEGER, field: 'stockminimo' },
-  tiempoPreparacion: { type: DataTypes.INTEGER, field: 'tiempoprepmin' },
-  destacado: { type: DataTypes.BOOLEAN, field: 'destacado' },
-  etiquetas: { type: DataTypes.ARRAY(DataTypes.TEXT), field: 'etiquetas' },
-  orden: { type: DataTypes.INTEGER, field: 'orden' },
-  totalVendidos: { type: DataTypes.INTEGER, field: 'totalvendidos' },
+  estado: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: '001', field: 'cestatusproducto' },  // TESTATUSPRODUCTOID
+  seccion: { type: DataTypes.STRING(60), field: 'seccion' },
+  imagenId: { type: DataTypes.BIGINT, field: 'carchivo_imagen' },
+  orden: { type: DataTypes.SMALLINT, allowNull: false, defaultValue: 0, field: 'orden' },
+  controlaStock: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'controlastock' },
+  ...columnasHistorial,
+}, opcionesHistorial('TPRODUCTOS'));
 
-  // Compatibilidad con la API: "disponible" (true/false) = el estado es 001. No es una columna.
-  disponible: {
-    type: DataTypes.VIRTUAL(DataTypes.BOOLEAN, ['estado']),
-    get() { return this.getDataValue('estado') === ESTADOPRODUCTO.DISPONIBLE; },
-    set(valor) { this.setDataValue('estado', valor ? ESTADOPRODUCTO.DISPONIBLE : ESTADOPRODUCTO.NODISPONIBLE); },
-  },
-  ...columnasComunes,
-}, opcionesVersionada('TPRODUCTOS'));
+// Tabla TPRODUCTOSINVENTARIO (simple): stock y unidades vendidas. La fila la crea sola el trigger de TPRODUCTOS.
+const Inventario = sequelize.define('Inventario', {
+  productoId: { type: DataTypes.BIGINT, primaryKey: true, field: 'cproducto' },
+  stock: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'stock' },
+  vendidos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'numerovendidos' },
+  ultimoMovimiento: { type: DataTypes.DATE, field: 'fultimomovimiento' },
+}, opcionesSimple('TPRODUCTOSINVENTARIO'));
 
-Producto.belongsTo(Vendedor, { foreignKey: 'vendedorId', as: 'vendedor' });
-Vendedor.hasMany(Producto, { foreignKey: 'vendedorId', as: 'productos' });
+Producto.hasOne(Inventario, { foreignKey: 'productoId', sourceKey: 'id', as: 'inventario' });
 
-module.exports = Producto;
+module.exports = { Producto, Inventario };

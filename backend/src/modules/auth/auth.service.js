@@ -9,6 +9,8 @@ const TokenService = require('../../shared/services/token.service');
 const SesionService = require('../../shared/services/sesion.service');
 const CodigoService = require('../../shared/services/codigo.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
+const ArchivoService = require('../../shared/services/archivo.service');
+const NegocioService = require('../negocios/negocio.service');
 const { logMensaje, auditar } = require('../../shared/services/log.service');
 const { hashClave, compararClave, HASHRELLENO } = require('../../shared/utils/clave');
 const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
@@ -38,10 +40,10 @@ const usuarioPublico = (u) => ({
   verificado: u.verificado,
 });
 
-// Perfil completo. fotoPerfil queda en null hasta que exista el módulo de archivos.
-const usuarioPerfil = (u) => ({
+// Perfil completo, con la URL de la foto (o null)
+const usuarioPerfil = async (u, req) => ({
   ...usuarioPublico(u),
-  fotoPerfil: null,
+  fotoPerfil: (await ArchivoService.urlDe(req, u.fotoId))?.url || null,
   createdAt: u.creadoEn,
   ultimaConexion: u.ultimaConexion,
 });
@@ -114,6 +116,11 @@ async function registrar(datos, req) {
     }, { transaction: t });
 
     await Telefono.create({ personaId: persona.id, numero: telefono, principal: true }, { transaction: t });
+
+    // El vendedor nace con su negocio (nombre y categoría; el resto lo completa en "Mi negocio")
+    if (tipo === 'vendedor' && datos.nombreNegocio?.trim()) {
+      await NegocioService.crearParaUsuario(nueva.id, { nombre: datos.nombreNegocio, categoria: datos.categoriaNegocio }, { transaction: t });
+    }
 
     // 4) El código de verificación queda consumido (no sirve para registrar otra cuenta)
     await CodigoService.consumir(verificacion, { transaction: t });
@@ -196,13 +203,20 @@ async function cargarUsuario(id) {
   return usuario;
 }
 
-async function obtenerPerfil(id) {
-  return usuarioPerfil(await cargarUsuario(id));
+async function obtenerPerfil(id, req) {
+  return usuarioPerfil(await cargarUsuario(id), req);
 }
 
-// Pendiente: la foto de perfil se guarda en el módulo de archivos (aún no migrado a las tablas nuevas)
-async function subirFoto() {
-  throw new AppError('La foto de perfil estará disponible pronto', 501, 'NOIMPLEMENTADO');
+// La foto llega en base64, se optimiza (WebP, sin datos GPS) y queda en TPERSONAS con historial. Devuelve su URL.
+async function subirFoto(id, base64, req) {
+  const usuario = await cargarUsuario(id);
+  const archivo = await withTransaction(async (t) => {
+    const a = await ArchivoService.guardarBase64({ base64, categoria: 'PERFIL', propietario: id }, { transaction: t });
+    await Persona.update({ fotoId: a.id }, { where: { id: usuario.personaId }, transaction: t });
+    return a;
+  }, { usuarioId: id });
+  auditar({ usuarioId: id, accion: 'FOTOACTUALIZADA', entidad: 'USUARIOS', entidadId: id, req });
+  return (await ArchivoService.urlDe(req, archivo.id))?.url || null;
 }
 
 async function actualizarPerfil(id, { nombre, apellido, telefono }, req) {
@@ -230,7 +244,7 @@ async function actualizarPerfil(id, { nombre, apellido, telefono }, req) {
   }, { usuarioId: id });
 
   auditar({ usuarioId: id, accion: 'PERFILACTUALIZADO', entidad: 'USUARIOS', entidadId: id, req });
-  return usuarioPerfil(await cargarUsuario(id));
+  return usuarioPerfil(await cargarUsuario(id), req);
 }
 
 // Cambia la clave, cierra las sesiones de TODOS los equipos y deja abierta una sesión nueva en este

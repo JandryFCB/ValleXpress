@@ -286,7 +286,7 @@ async function registrarCliente(email, nombre, apellido, extra = {}) {
     r = await api('GET', '/api/usuarios/perfil', null, mar.token);
     check('GET /api/usuarios/perfil: formato { success, data }', r.status === 200 && r.body.success === true && r.body.data.id === 'mtorre');
     r = await api('POST', '/api/usuarios/foto-perfil', { foto: 'abc' }, mar.token);
-    check('la foto de perfil aún no está disponible: 501 NOIMPLEMENTADO', r.status === 501 && r.body.code === 'NOIMPLEMENTADO');
+    check('una foto de perfil inválida se rechaza: 400 IMAGENINVALIDA (la subida real se prueba en test:catalogo)', r.status === 400 && r.body.code === 'IMAGENINVALIDA', JSON.stringify(r.body));
     r = await api('POST', '/api/usuarios/cambiar-contrasena', { passwordActual: 'secreto1', passwordNueva: 'otraNueva1', confirmarPassword: 'distinta' }, mar.token);
     check('confirmación distinta: 400', r.status === 400);
 

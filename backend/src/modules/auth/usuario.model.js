@@ -26,6 +26,7 @@ const Usuario = sequelize.define('Usuario', {
   bloqueadoHasta: { type: DataTypes.DATE, field: 'bloqueadohasta' },
   ultimaConexion: { type: DataTypes.DATE, field: 'ultimaconexion' },
   creadoEn: { type: DataTypes.DATE, field: 'creadoen' },
+  fotoId: { type: DataTypes.BIGINT, field: 'foto' },                              // TARCHIVOS
 
   // El mismo valor que "id", con el nombre que usa la API: "usuario" (jcayapa). No es una columna.
   usuario: {

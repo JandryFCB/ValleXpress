@@ -1,0 +1,313 @@
+-- =============================================================================
+-- 006 · CATÁLOGO: archivos (imágenes), negocios, horarios y productos
+-- =============================================================================
+--   TARCHIVOS                     imágenes optimizadas (logo, portada, producto, foto de perfil)     · simple
+--   TCATEGORIASNEGOCIO            catálogo: comida, bebidas, postres, panadería, supermercado...
+--   TESTATUSAPROBACION            catálogo: pendiente, aprobado, rechazado, suspendido
+--   TESTATUSPRODUCTO              catálogo: disponible, agotado, oculto
+--   TNEGOCIOSID / TNEGOCIOS       el negocio (código propio) y su usuario dueño                       · histórica
+--   TNEGOCIOSESTADO               abierto/cerrado, calificación y contadores (cambian a cada rato)     · simple
+--   TNEGOCIOHORARIOS              horario de cada día de la semana                                   · histórica
+--   TPRODUCTOSID / TPRODUCTOS     productos del negocio (cada cambio de precio queda en el historial) · histórica
+--   TPRODUCTOSINVENTARIO          stock y unidades vendidas (cambian con cada pedido)                 · simple
+-- Además: TPERSONAS recibe la foto de perfil y la vista VUSUARIOS la expone.
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- Archivos (imágenes). No llevan historial: una imagen no se edita, se reemplaza por otra.
+-- -----------------------------------------------------------------------------
+CREATE TABLE TARCHIVOS (
+    CARCHIVO        BIGINT        GENERATED ALWAYS AS IDENTITY,
+    CUSUARIO        VARCHAR(30),                                  -- quién la subió
+    CATEGORIA       VARCHAR(12)   NOT NULL,
+    NOMBREORIGINAL  VARCHAR(255),
+    MIME            VARCHAR(50)   NOT NULL DEFAULT 'image/webp',
+    BYTES           INTEGER       NOT NULL,
+    ANCHO           INTEGER,
+    ALTO            INTEGER,
+    HASH            CHAR(64)      NOT NULL,                       -- SHA-256: la misma imagen no se guarda dos veces
+    RUTA            VARCHAR(200)  NOT NULL,                       -- tamaño principal
+    RUTAMEDIANA     VARCHAR(200)  NOT NULL,                       -- 800 px (la que se muestra en listas)
+    RUTAMINIATURA   VARCHAR(200)  NOT NULL,                       -- 200 px
+    FCREACION       TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT IPKARCHIVOS PRIMARY KEY (CARCHIVO),
+    CONSTRAINT FKARCHIVOSUSUID FOREIGN KEY (CUSUARIO) REFERENCES TUSUARIOSID (CUSUARIO),
+    CONSTRAINT UQARCHIVOSHASH UNIQUE (HASH, CATEGORIA),
+    CONSTRAINT CKARCHIVOSCATEG CHECK (CATEGORIA IN ('PERFIL', 'LOGO', 'PORTADA', 'PRODUCTO', 'DOCUMENTO', 'OTRO'))
+);
+
+-- Foto de perfil de la persona (con historial: queda registro de las fotos anteriores)
+ALTER TABLE TPERSONAS
+    ADD COLUMN CARCHIVO_FOTO BIGINT,
+    ADD CONSTRAINT FKPERSONASFOTO FOREIGN KEY (CARCHIVO_FOTO) REFERENCES TARCHIVOS (CARCHIVO);
+COMMENT ON COLUMN TPERSONAS.CARCHIVO_FOTO IS 'Foto de perfil (TARCHIVOS)';
+
+-- La vista de usuarios expone la foto (columna nueva al final: así la vista se puede reemplazar)
+CREATE OR REPLACE VIEW VUSUARIOS AS
+SELECT u.CUSUARIO                              AS USUARIO,
+       u.CPERSONA,
+       u.CROL                                  AS ROL,
+       u.CESTATUSUSUARIO                       AS ESTATUS,
+       (u.CESTATUSUSUARIO = '001')             AS ACTIVO,
+       p.NOMBRES,
+       p.APELLIDOS,
+       p.CORREO                                AS EMAIL,
+       (p.FCORREOVERIFICADO IS NOT NULL)       AS EMAILVERIF,
+       p.FCORREOVERIFICADO                     AS EMAILVERIFEN,
+       p.CTIPODOCUMENTO                        AS TIPODOC,
+       p.NUMERODOCUMENTO                       AS NUMDOC,
+       t.NUMEROTELEFONO                        AS TELEFONO,
+       u.CLAVEHASH,
+       u.FCLAVECAMBIO                          AS CLAVECAMBIADAEN,
+       u.FTERMINOS                             AS TERMINOSEN,
+       u.VERSIONTERMINOS                       AS TERMINOSVER,
+       COALESCE(a.NUMEROINTENTOS, 0)           AS INTENTOSFALLIDOS,
+       a.FBLOQUEADOHASTA                       AS BLOQUEADOHASTA,
+       a.FULTIMACONEXION                       AS ULTIMACONEXION,
+       u.FDESDE                                AS CREADOEN,
+       p.CARCHIVO_FOTO                         AS FOTO
+  FROM TUSUARIOS u
+  JOIN TPERSONAS p ON p.CPERSONA = u.CPERSONA AND p.FHASTA = '2999-12-31 00:00:00-05'
+  LEFT JOIN LATERAL (
+        SELECT NUMEROTELEFONO FROM TPERSONATELEFONOS
+         WHERE CPERSONA = u.CPERSONA AND FHASTA = '2999-12-31 00:00:00-05'
+         ORDER BY ESPRINCIPAL DESC, STELEFONO LIMIT 1) t ON TRUE
+  LEFT JOIN TUSUARIOSACCESO a ON a.CUSUARIO = u.CUSUARIO
+ WHERE u.FHASTA = '2999-12-31 00:00:00-05';
+
+-- -----------------------------------------------------------------------------
+-- Catálogos (con idioma)
+-- -----------------------------------------------------------------------------
+CREATE TABLE TCATEGORIASNEGOCIOID (
+    CCATEGORIANEGOCIO CHAR(3) NOT NULL,
+    CONSTRAINT IPKCATEGORIASNEGOCIOID PRIMARY KEY (CCATEGORIANEGOCIO)
+);
+CREATE TABLE TCATEGORIASNEGOCIO (
+    CIDIOMA                 CHAR(2)       NOT NULL DEFAULT 'es',
+    CCATEGORIANEGOCIO       CHAR(3)       NOT NULL,
+    FHASTA                  TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    FDESDE                  TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    VERSIONCONTROL          INTEGER       NOT NULL DEFAULT 0,
+    CUSUARIO_MODIFICACION   VARCHAR(30)   DEFAULT USUARIOACTUAL(),
+    DESCRIPCION             VARCHAR(60)   NOT NULL,
+    CONSTRAINT IPKCATEGORIASNEGOCIO PRIMARY KEY (CIDIOMA, CCATEGORIANEGOCIO, FHASTA),
+    CONSTRAINT FKCATNEGCATNEGID FOREIGN KEY (CCATEGORIANEGOCIO) REFERENCES TCATEGORIASNEGOCIOID (CCATEGORIANEGOCIO)
+);
+SELECT ACTIVARVERSION('TCATEGORIASNEGOCIO');
+INSERT INTO TCATEGORIASNEGOCIOID (CCATEGORIANEGOCIO) VALUES ('001'), ('002'), ('003'), ('004'), ('005'), ('006'), ('007'), ('099');
+INSERT INTO TCATEGORIASNEGOCIO (CCATEGORIANEGOCIO, DESCRIPCION) VALUES
+    ('001', 'Comida'), ('002', 'Bebidas'), ('003', 'Postres'), ('004', 'Panadería'),
+    ('005', 'Supermercado'), ('006', 'Farmacia'), ('007', 'Mascotas'), ('099', 'Otros');
+
+CREATE TABLE TESTATUSAPROBACIONID (
+    CESTATUSAPROBACION CHAR(3) NOT NULL,
+    CONSTRAINT IPKESTATUSAPROBACIONID PRIMARY KEY (CESTATUSAPROBACION)
+);
+CREATE TABLE TESTATUSAPROBACION (
+    CIDIOMA                 CHAR(2)       NOT NULL DEFAULT 'es',
+    CESTATUSAPROBACION      CHAR(3)       NOT NULL,
+    FHASTA                  TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    FDESDE                  TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    VERSIONCONTROL          INTEGER       NOT NULL DEFAULT 0,
+    CUSUARIO_MODIFICACION   VARCHAR(30)   DEFAULT USUARIOACTUAL(),
+    DESCRIPCION             VARCHAR(60)   NOT NULL,
+    CONSTRAINT IPKESTATUSAPROBACION PRIMARY KEY (CIDIOMA, CESTATUSAPROBACION, FHASTA),
+    CONSTRAINT FKESTAPRESTAPRID FOREIGN KEY (CESTATUSAPROBACION) REFERENCES TESTATUSAPROBACIONID (CESTATUSAPROBACION)
+);
+SELECT ACTIVARVERSION('TESTATUSAPROBACION');
+INSERT INTO TESTATUSAPROBACIONID (CESTATUSAPROBACION) VALUES ('001'), ('002'), ('003'), ('004');
+INSERT INTO TESTATUSAPROBACION (CESTATUSAPROBACION, DESCRIPCION) VALUES
+    ('001', 'Pendiente'), ('002', 'Aprobado'), ('003', 'Rechazado'), ('004', 'Suspendido');
+
+CREATE TABLE TESTATUSPRODUCTOID (
+    CESTATUSPRODUCTO CHAR(3) NOT NULL,
+    CONSTRAINT IPKESTATUSPRODUCTOID PRIMARY KEY (CESTATUSPRODUCTO)
+);
+CREATE TABLE TESTATUSPRODUCTO (
+    CIDIOMA                 CHAR(2)       NOT NULL DEFAULT 'es',
+    CESTATUSPRODUCTO        CHAR(3)       NOT NULL,
+    FHASTA                  TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    FDESDE                  TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    VERSIONCONTROL          INTEGER       NOT NULL DEFAULT 0,
+    CUSUARIO_MODIFICACION   VARCHAR(30)   DEFAULT USUARIOACTUAL(),
+    DESCRIPCION             VARCHAR(60)   NOT NULL,
+    CONSTRAINT IPKESTATUSPRODUCTO PRIMARY KEY (CIDIOMA, CESTATUSPRODUCTO, FHASTA),
+    CONSTRAINT FKESTPRODESTPRODID FOREIGN KEY (CESTATUSPRODUCTO) REFERENCES TESTATUSPRODUCTOID (CESTATUSPRODUCTO)
+);
+SELECT ACTIVARVERSION('TESTATUSPRODUCTO');
+INSERT INTO TESTATUSPRODUCTOID (CESTATUSPRODUCTO) VALUES ('001'), ('002'), ('003');
+INSERT INTO TESTATUSPRODUCTO (CESTATUSPRODUCTO, DESCRIPCION) VALUES ('001', 'Disponible'), ('002', 'Agotado'), ('003', 'Oculto');
+
+-- -----------------------------------------------------------------------------
+-- Negocios
+-- -----------------------------------------------------------------------------
+CREATE SEQUENCE SECNEGOCIOS;
+
+CREATE TABLE TNEGOCIOSID (
+    CNEGOCIO BIGINT NOT NULL DEFAULT nextval('secnegocios'),
+    CONSTRAINT IPKNEGOCIOSID PRIMARY KEY (CNEGOCIO)
+);
+CREATE TABLE TNEGOCIOS (
+    CNEGOCIO                BIGINT        NOT NULL,
+    FHASTA                  TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    FDESDE                  TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    VERSIONCONTROL          INTEGER       NOT NULL DEFAULT 0,
+    CUSUARIO_MODIFICACION   VARCHAR(30)   DEFAULT USUARIOACTUAL(),
+    CUSUARIO                VARCHAR(30)   NOT NULL,               -- dueño (usuario con rol vendedor)
+    NOMBRE                  VARCHAR(120)  NOT NULL,
+    DESCRIPCION             VARCHAR(500),
+    CCATEGORIANEGOCIO       CHAR(3)       NOT NULL DEFAULT '099',
+    RUC                     VARCHAR(13),
+    CDIRECCION              BIGINT,                               -- el local (dirección tipo 005 de la persona dueña)
+    CARCHIVO_LOGO           BIGINT,
+    CARCHIVO_PORTADA        BIGINT,
+    COSTOENVIO              NUMERIC(8,2)  NOT NULL DEFAULT 0,
+    PEDIDOMINIMO            NUMERIC(8,2)  NOT NULL DEFAULT 0,
+    TIEMPOPREPARACION       SMALLINT      NOT NULL DEFAULT 30,    -- minutos
+    RADIOKM                 NUMERIC(5,2)  NOT NULL DEFAULT 5,     -- hasta dónde entrega
+    CESTATUSAPROBACION      CHAR(3)       NOT NULL DEFAULT '001',
+    FAPROBACION             TIMESTAMPTZ,
+    CONSTRAINT IPKNEGOCIOS PRIMARY KEY (CNEGOCIO, FHASTA),
+    CONSTRAINT FKNEGOCIOSNEGID   FOREIGN KEY (CNEGOCIO)           REFERENCES TNEGOCIOSID (CNEGOCIO),
+    CONSTRAINT FKNEGOCIOSUSUID   FOREIGN KEY (CUSUARIO)           REFERENCES TUSUARIOSID (CUSUARIO),
+    CONSTRAINT FKNEGOCIOSCATEG   FOREIGN KEY (CCATEGORIANEGOCIO)  REFERENCES TCATEGORIASNEGOCIOID (CCATEGORIANEGOCIO),
+    CONSTRAINT FKNEGOCIOSDIRID   FOREIGN KEY (CDIRECCION)         REFERENCES TPERSONADIRECCIONESID (CDIRECCION),
+    CONSTRAINT FKNEGOCIOSLOGO    FOREIGN KEY (CARCHIVO_LOGO)      REFERENCES TARCHIVOS (CARCHIVO),
+    CONSTRAINT FKNEGOCIOSPORTADA FOREIGN KEY (CARCHIVO_PORTADA)   REFERENCES TARCHIVOS (CARCHIVO),
+    CONSTRAINT FKNEGOCIOSESTAPR  FOREIGN KEY (CESTATUSAPROBACION) REFERENCES TESTATUSAPROBACIONID (CESTATUSAPROBACION),
+    CONSTRAINT CKNEGOCIOSRUC     CHECK (RUC IS NULL OR RUC ~ '^\d{13}$'),
+    CONSTRAINT CKNEGOCIOSMONTOS  CHECK (COSTOENVIO >= 0 AND PEDIDOMINIMO >= 0 AND TIEMPOPREPARACION BETWEEN 5 AND 240 AND RADIOKM > 0 AND RADIOKM <= 50)
+);
+CREATE INDEX IXNEGOCIOSDUENO ON TNEGOCIOS (CUSUARIO) WHERE FHASTA = '2999-12-31 00:00:00-05';
+CREATE INDEX IXNEGOCIOSCATEG ON TNEGOCIOS (CCATEGORIANEGOCIO) WHERE FHASTA = '2999-12-31 00:00:00-05';
+SELECT ACTIVARVERSION('TNEGOCIOS');
+
+-- Estado del negocio que cambia a cada rato (abrir/cerrar, calificación, contadores): sin historial a propósito
+CREATE TABLE TNEGOCIOSESTADO (
+    CNEGOCIO                BIGINT        NOT NULL,
+    ESTAABIERTO             BOOLEAN       NOT NULL DEFAULT FALSE,
+    ACEPTAPEDIDOS           BOOLEAN       NOT NULL DEFAULT TRUE,
+    CALIFICACION            NUMERIC(3,2)  NOT NULL DEFAULT 0,
+    NUMEROCALIFICACIONES    INTEGER       NOT NULL DEFAULT 0,
+    NUMEROPEDIDOS           INTEGER       NOT NULL DEFAULT 0,
+    FULTIMOCAMBIO           TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT IPKNEGOCIOSESTADO PRIMARY KEY (CNEGOCIO),
+    CONSTRAINT FKNEGESTNEGID FOREIGN KEY (CNEGOCIO) REFERENCES TNEGOCIOSID (CNEGOCIO),
+    CONSTRAINT CKNEGESTCALIF CHECK (CALIFICACION BETWEEN 0 AND 5)
+);
+
+-- Si el INSERT no trae CNEGOCIO se toma de la secuencia; el ancla y la fila de estado se crean solas
+CREATE FUNCTION FNASIGNARNEGOCIO() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.CNEGOCIO IS NULL THEN
+        INSERT INTO TNEGOCIOSID DEFAULT VALUES RETURNING CNEGOCIO INTO NEW.CNEGOCIO;
+    ELSE
+        INSERT INTO TNEGOCIOSID (CNEGOCIO) VALUES (NEW.CNEGOCIO) ON CONFLICT DO NOTHING;
+    END IF;
+    INSERT INTO TNEGOCIOSESTADO (CNEGOCIO) VALUES (NEW.CNEGOCIO) ON CONFLICT DO NOTHING;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER TRNEGOCIOSASIGNAR BEFORE INSERT ON TNEGOCIOS FOR EACH ROW EXECUTE FUNCTION FNASIGNARNEGOCIO();
+
+-- Horario de cada día (1 = lunes ... 7 = domingo). Hija del negocio: histórica sin tabla ID.
+CREATE TABLE TNEGOCIOHORARIOS (
+    CNEGOCIO                BIGINT        NOT NULL,
+    NUMERODIA               SMALLINT      NOT NULL,
+    FHASTA                  TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    FDESDE                  TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    VERSIONCONTROL          INTEGER       NOT NULL DEFAULT 0,
+    CUSUARIO_MODIFICACION   VARCHAR(30)   DEFAULT USUARIOACTUAL(),
+    ESCERRADO               BOOLEAN       NOT NULL DEFAULT FALSE,
+    HORAAPERTURA            TIME,
+    HORACIERRE              TIME,
+    CONSTRAINT IPKNEGOCIOHORARIOS PRIMARY KEY (CNEGOCIO, NUMERODIA, FHASTA),
+    CONSTRAINT FKNEGHORNEGID FOREIGN KEY (CNEGOCIO) REFERENCES TNEGOCIOSID (CNEGOCIO),
+    CONSTRAINT CKNEGHORDIA   CHECK (NUMERODIA BETWEEN 1 AND 7),
+    CONSTRAINT CKNEGHORHORAS CHECK (ESCERRADO OR (HORAAPERTURA IS NOT NULL AND HORACIERRE IS NOT NULL AND HORAAPERTURA <> HORACIERRE))
+);
+SELECT ACTIVARVERSION('TNEGOCIOHORARIOS');
+
+-- -----------------------------------------------------------------------------
+-- Productos
+-- -----------------------------------------------------------------------------
+CREATE SEQUENCE SECPRODUCTOS;
+
+CREATE TABLE TPRODUCTOSID (
+    CPRODUCTO BIGINT NOT NULL DEFAULT nextval('secproductos'),
+    CONSTRAINT IPKPRODUCTOSID PRIMARY KEY (CPRODUCTO)
+);
+CREATE TABLE TPRODUCTOS (
+    CPRODUCTO               BIGINT        NOT NULL,
+    FHASTA                  TIMESTAMPTZ   NOT NULL DEFAULT '2999-12-31 00:00:00-05',
+    FDESDE                  TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    VERSIONCONTROL          INTEGER       NOT NULL DEFAULT 0,
+    CUSUARIO_MODIFICACION   VARCHAR(30)   DEFAULT USUARIOACTUAL(),
+    CNEGOCIO                BIGINT        NOT NULL,
+    NOMBRE                  VARCHAR(120)  NOT NULL,
+    DESCRIPCION             VARCHAR(500),
+    PRECIO                  NUMERIC(10,2) NOT NULL,
+    CESTATUSPRODUCTO        CHAR(3)       NOT NULL DEFAULT '001',
+    SECCION                 VARCHAR(60),                          -- sección del menú: "Pizzas", "Bebidas"...
+    CARCHIVO_IMAGEN         BIGINT,
+    ORDEN                   SMALLINT      NOT NULL DEFAULT 0,
+    CONTROLASTOCK           BOOLEAN       NOT NULL DEFAULT FALSE,
+    CONSTRAINT IPKPRODUCTOS PRIMARY KEY (CPRODUCTO, FHASTA),
+    CONSTRAINT FKPRODUCTOSPRODID FOREIGN KEY (CPRODUCTO)        REFERENCES TPRODUCTOSID (CPRODUCTO),
+    CONSTRAINT FKPRODUCTOSNEGID  FOREIGN KEY (CNEGOCIO)         REFERENCES TNEGOCIOSID (CNEGOCIO),
+    CONSTRAINT FKPRODUCTOSESTADO FOREIGN KEY (CESTATUSPRODUCTO) REFERENCES TESTATUSPRODUCTOID (CESTATUSPRODUCTO),
+    CONSTRAINT FKPRODUCTOSIMAGEN FOREIGN KEY (CARCHIVO_IMAGEN)  REFERENCES TARCHIVOS (CARCHIVO),
+    CONSTRAINT CKPRODUCTOSPRECIO CHECK (PRECIO > 0 AND PRECIO < 10000)
+);
+CREATE INDEX IXPRODUCTOSNEGOCIO ON TPRODUCTOS (CNEGOCIO) WHERE FHASTA = '2999-12-31 00:00:00-05';
+SELECT ACTIVARVERSION('TPRODUCTOS');
+
+-- Stock y unidades vendidas: cambian con cada pedido, por eso van aparte y sin historial
+CREATE TABLE TPRODUCTOSINVENTARIO (
+    CPRODUCTO               BIGINT        NOT NULL,
+    STOCK                   INTEGER       NOT NULL DEFAULT 0,
+    NUMEROVENDIDOS          INTEGER       NOT NULL DEFAULT 0,
+    FULTIMOMOVIMIENTO       TIMESTAMPTZ   NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT IPKPRODUCTOSINVENTARIO PRIMARY KEY (CPRODUCTO),
+    CONSTRAINT FKPRODINVPRODID FOREIGN KEY (CPRODUCTO) REFERENCES TPRODUCTOSID (CPRODUCTO),
+    CONSTRAINT CKPRODINVSTOCK  CHECK (STOCK >= 0 AND NUMEROVENDIDOS >= 0)
+);
+
+CREATE FUNCTION FNASIGNARPRODUCTO() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.CPRODUCTO IS NULL THEN
+        INSERT INTO TPRODUCTOSID DEFAULT VALUES RETURNING CPRODUCTO INTO NEW.CPRODUCTO;
+    ELSE
+        INSERT INTO TPRODUCTOSID (CPRODUCTO) VALUES (NEW.CPRODUCTO) ON CONFLICT DO NOTHING;
+    END IF;
+    INSERT INTO TPRODUCTOSINVENTARIO (CPRODUCTO) VALUES (NEW.CPRODUCTO) ON CONFLICT DO NOTHING;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER TRPRODUCTOSASIGNAR BEFORE INSERT ON TPRODUCTOS FOR EACH ROW EXECUTE FUNCTION FNASIGNARPRODUCTO();
+
+-- -----------------------------------------------------------------------------
+-- Comentarios
+-- -----------------------------------------------------------------------------
+COMMENT ON TABLE TARCHIVOS IS 'Imágenes optimizadas a WebP en 3 tamaños; el nombre del archivo es su hash. Sin historial';
+COMMENT ON TABLE TCATEGORIASNEGOCIOID IS 'Códigos de categorías de negocio (destino de las FK)';
+COMMENT ON TABLE TCATEGORIASNEGOCIO IS 'Categorías de negocio: comida, bebidas, postres, panadería, supermercado, farmacia, mascotas, otros';
+COMMENT ON TABLE TESTATUSAPROBACIONID IS 'Códigos de estatus de aprobación (destino de las FK)';
+COMMENT ON TABLE TESTATUSAPROBACION IS 'Aprobación de un negocio: 001 pendiente, 002 aprobado, 003 rechazado, 004 suspendido';
+COMMENT ON TABLE TESTATUSPRODUCTOID IS 'Códigos de estatus de producto (destino de las FK)';
+COMMENT ON TABLE TESTATUSPRODUCTO IS 'Estatus de un producto: 001 disponible, 002 agotado, 003 oculto';
+COMMENT ON TABLE TNEGOCIOSID IS 'Código de cada negocio (lo referencian productos y pedidos)';
+COMMENT ON TABLE TNEGOCIOS IS 'Datos del negocio y su usuario dueño. Con historial';
+COMMENT ON TABLE TNEGOCIOSESTADO IS 'Abierto/cerrado, si acepta pedidos, calificación y contadores. Sin historial a propósito';
+COMMENT ON TABLE TNEGOCIOHORARIOS IS 'Horario de atención por día (1 = lunes ... 7 = domingo). Con historial';
+COMMENT ON TABLE TPRODUCTOSID IS 'Código de cada producto (lo referencian los pedidos)';
+COMMENT ON TABLE TPRODUCTOS IS 'Productos del negocio. Con historial: cada cambio de precio queda registrado';
+COMMENT ON TABLE TPRODUCTOSINVENTARIO IS 'Stock y unidades vendidas de cada producto. Sin historial a propósito';
+COMMENT ON COLUMN TNEGOCIOS.CUSUARIO IS 'Usuario dueño del negocio (rol vendedor)';
+COMMENT ON COLUMN TNEGOCIOS.CDIRECCION IS 'Local del negocio: dirección tipo 005 de la persona dueña';
+COMMENT ON COLUMN TNEGOCIOS.COSTOENVIO IS 'Costo de envío que cobra el negocio';
+COMMENT ON COLUMN TNEGOCIOS.PEDIDOMINIMO IS 'Monto mínimo de un pedido';
+COMMENT ON COLUMN TNEGOCIOS.TIEMPOPREPARACION IS 'Minutos que suele tardar en preparar un pedido';
+COMMENT ON COLUMN TNEGOCIOS.RADIOKM IS 'Distancia máxima de entrega en kilómetros';
+COMMENT ON COLUMN TPRODUCTOS.PRECIO IS 'Precio de venta; cada cambio queda en el historial';
+COMMENT ON COLUMN TPRODUCTOS.SECCION IS 'Sección del menú en la que se muestra';
+COMMENT ON COLUMN TPRODUCTOS.CONTROLASTOCK IS 'Si es verdadero, se descuenta el stock con cada pedido';
+COMMENT ON COLUMN TPRODUCTOSINVENTARIO.STOCK IS 'Unidades disponibles (solo cuenta si el producto controla stock)';

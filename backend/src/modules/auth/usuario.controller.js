@@ -6,7 +6,7 @@ const authService = require('./auth.service');
 // Formato de respuesta { success, data } que ya usa la app.
 
 const obtenerPerfil = asyncHandler(async (req, res) => {
-  res.json({ success: true, data: await authService.obtenerPerfil(req.usuario.id) });
+  res.json({ success: true, data: await authService.obtenerPerfil(req.usuario.id, req) });
 });
 
 const actualizarPerfil = asyncHandler(async (req, res) => {

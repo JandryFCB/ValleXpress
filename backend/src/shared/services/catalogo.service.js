@@ -40,7 +40,7 @@ async function categoriaTexto(registro) {
 
 // Catálogos T con idioma (TTIPOSTELEFONO, TTIPOSDIRECCION): [{ codigo, descripcion }] ordenados por código.
 // "aApi" traduce el código de BD ('001') al texto que usa la app ('MOV'). Tabla y columna vienen de una lista fija.
-const TABLAST = { ttipostelefono: 'ctipotelefono', ttiposdireccion: 'ctipodireccion' };
+const TABLAST = { ttipostelefono: 'ctipotelefono', ttiposdireccion: 'ctipodireccion', tcategoriasnegocio: 'ccategorianegocio' };
 async function tipos(tabla, columna, aApi, { excluir = [] } = {}) {
   if (TABLAST[tabla] !== columna) throw new Error(`Catálogo desconocido: ${tabla}`);
   const filas = await sequelize.query(
