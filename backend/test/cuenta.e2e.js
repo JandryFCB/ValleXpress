@@ -66,6 +66,11 @@ const dir = (extra = {}) => ({ direccion: 'Av. Principal 123 y Calle 2', latitud
     check('createdAt se conserva (primera versión) y updatedAt es posterior', new Date(r.body.direccion.createdAt) <= new Date(r.body.direccion.updatedAt) && r.body.direccion.createdAt === d1.createdAt, `${r.body.direccion.createdAt} / ${d1.createdAt}`);
     let h = await q(`SELECT versioncontrol v, nombre, fhasta, cusuario_modificacion m FROM tpersonadirecciones WHERE cdireccion=$1 ORDER BY fdesde`, [d1.id]);
     check('el historial queda en la MISMA tabla: v0 cerrada y v1 vigente (2999) con quién la cambió', h.length === 2 && h[0].v === 0 && h[0].nombre === 'Mi casa' && h[1].v === 1 && h[1].nombre === 'Casa nueva' && new Date(h[1].fhasta).getUTCFullYear() === 2999 && h[1].m === idA, JSON.stringify(h));
+    r = await api('PUT', `/api/direcciones/${d1.id}`, { nombre: '', referencia: '  ', instrucciones: '' }, A);
+    check('mandar texto vacío BORRA nombre, referencia e indicaciones (quedan null, no "")', r.status === 200 && r.body.direccion.nombre === null && r.body.direccion.referencia === null && r.body.direccion.instrucciones === null, JSON.stringify(r.body.direccion));
+    r = await api('POST', '/api/direcciones', dir({ referencia: '   ', instrucciones: '' }), L);
+    check('al crear, referencia e indicaciones vacías también quedan null', r.status === 201 && r.body.direccion.referencia === null && r.body.direccion.instrucciones === null);
+    await api('DELETE', `/api/direcciones/${r.body.direccion.id}`, null, L);
     r = await api('PATCH', `/api/direcciones/${d1.id}/predeterminada`, null, A);
     check('PATCH predeterminada: 200 y la otra deja de serlo', r.status === 200 && r.body.direccion.esPredeterminada === true && (await api('GET', '/api/direcciones', null, A)).body.direcciones.filter((x) => x.esPredeterminada).length === 1);
     r = await api('PUT', `/api/direcciones/${d2.id}`, { esPredeterminada: true }, A);
@@ -89,7 +94,7 @@ const dir = (extra = {}) => ({ direccion: 'Av. Principal 123 y Calle 2', latitud
     check('Luis no puede borrarla: 404', (await api('DELETE', `/api/direcciones/${d1.id}`, null, L)).status === 404);
     r = await api('POST', '/api/direcciones', dir({ nombre: 'Casa Luis', esPredeterminada: true }), L);
     check('la predeterminada de Luis no afecta a la de Ana', r.status === 201 && (await api('GET', '/api/direcciones/predeterminada', null, A)).body.direccion.id === d2.id);
-    check('la dirección de Ana sigue intacta', (await api('GET', '/api/direcciones', null, A)).body.direcciones.find((x) => x.id === d1.id).nombre === 'Casa nueva');
+    check('la dirección de Ana sigue intacta (Luis no la modificó)', (await api('GET', '/api/direcciones', null, A)).body.direcciones.find((x) => x.id === d1.id).nombre !== 'hack');
 
     seccion('6. El local del negocio no es una dirección de entrega');
     const persona = (await q('SELECT cpersona FROM vusuarios WHERE usuario=$1', [idA]))[0].cpersona;

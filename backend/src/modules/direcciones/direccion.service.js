@@ -81,8 +81,8 @@ async function crear(usuarioId, datos) {
       tipo: TIPODIRECCION[datos.tipo] || TIPODIRECCION.DOM,
       nombre: datos.nombre || null,
       direccion: datos.direccion.trim(),
-      referencia: datos.referencia,
-      instrucciones: datos.instrucciones,
+      referencia: datos.referencia?.trim() || null,
+      instrucciones: datos.instrucciones?.trim() || null,
       latitud: datos.latitud,
       longitud: datos.longitud,
       esPredeterminada: datos.esPredeterminada === true,
@@ -98,7 +98,10 @@ async function actualizar(usuarioId, id, datos) {
     if (datos.esPredeterminada === true) await quitarPredeterminada(personaId, dir.id, t);
     const cambios = {};
     for (const campo of ['nombre', 'direccion', 'referencia', 'instrucciones', 'latitud', 'longitud']) {
-      if (datos[campo] !== undefined) cambios[campo] = datos[campo];
+      if (datos[campo] === undefined) continue;
+      // La app manda texto vacío para BORRAR un dato opcional: en la BD queda vacío de verdad (null), no ''
+      const borrar = ['nombre', 'referencia', 'instrucciones'].includes(campo) && typeof datos[campo] === 'string' && datos[campo].trim() === '';
+      cambios[campo] = borrar ? null : datos[campo];
     }
     if (datos.tipo !== undefined) cambios.tipo = TIPODIRECCION[datos.tipo];
     if (datos.esPredeterminada !== undefined) cambios.esPredeterminada = datos.esPredeterminada === true;
