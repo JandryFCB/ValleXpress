@@ -50,7 +50,7 @@ class _InicioRepartidorScreenState extends State<InicioRepartidorScreen> {
   Widget build(BuildContext context) {
     final c = context.colores;
     return Scaffold(
-      body: IndexedStack(index: _pestana, children: const [_Entregas(), _Historial(), PerfilScreen()]),
+      body: PestanasAnimadas(indice: _pestana, children: const [_Entregas(), _Historial(), PerfilScreen()]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _pestana,
         backgroundColor: c.tarjeta,
@@ -185,7 +185,7 @@ class _EntregasState extends State<_Entregas> {
   }
 
   Widget _contenido() {
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista(cantidad: 4);
     if (_sinPerfil) {
       return EstadoVacio(
         icono: Icons.two_wheeler_rounded,
@@ -287,14 +287,20 @@ class _EntregasState extends State<_Entregas> {
           // Pedidos libres
           if (perfil.disponible && _enCurso == null) ...[
             EncabezadoSeccion('Listos para recoger', subtitulo: _libres.listos.isEmpty ? 'Ahora no hay pedidos listos. Te avisamos al instante.' : null),
-            for (final p in _libres.listos)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _TarjetaLibre(pedido: p, aceptando: _aceptando == p.id, onAceptar: _aceptando == null ? () => _aceptar(p) : null),
+            // Un pedido nuevo entra deslizándose, así el repartidor lo nota
+            for (final (i, p) in _libres.listos.indexed)
+              Aparecer(
+                key: ValueKey('libre-${p.id}'),
+                indice: i,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _TarjetaLibre(pedido: p, aceptando: _aceptando == p.id, onAceptar: _aceptando == null ? () => _aceptar(p) : null),
+                ),
               ),
             if (_libres.proximos.isNotEmpty) ...[
               const EncabezadoSeccion('Se están preparando', subtitulo: 'Podrás aceptarlos cuando el negocio los deje listos'),
-              for (final p in _libres.proximos) Padding(padding: const EdgeInsets.only(bottom: 10), child: _TarjetaLibre(pedido: p)),
+              for (final (i, p) in _libres.proximos.indexed)
+                Aparecer(key: ValueKey('proximo-${p.id}'), indice: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: _TarjetaLibre(pedido: p))),
             ],
           ],
           if (!perfil.disponible && _enCurso == null && perfil.aprobado)
@@ -455,7 +461,7 @@ class _HistorialState extends State<_Historial> {
     return FondoValle(
       appBar: AppBar(title: const Text('Historial'), automaticallyImplyLeading: false),
       child: _cargando
-          ? const Center(child: CircularProgressIndicator())
+          ? const EsqueletoLista()
           : RefreshIndicator(
               onRefresh: _cargar,
               child: _pedidos.isEmpty
@@ -471,7 +477,7 @@ class _HistorialState extends State<_Historial> {
                             Icon(Icons.savings_rounded, color: context.colores.primario, size: 30),
                             const SizedBox(width: 12),
                             Expanded(child: Text('Ganado en envíos', style: Theme.of(context).textTheme.titleSmall)),
-                            Text(Formato.dinero(ganado), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: context.colores.primario)),
+                            DineroAnimado(ganado, estilo: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: context.colores.primario)),
                           ]),
                         ),
                         const SizedBox(height: 12),

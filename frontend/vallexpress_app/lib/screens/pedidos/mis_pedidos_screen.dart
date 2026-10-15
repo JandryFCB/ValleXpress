@@ -111,7 +111,7 @@ class _ListaPedidosState extends State<_ListaPedidos> with AutomaticKeepAliveCli
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_cargando && _pedidos.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (_cargando && _pedidos.isEmpty) return const EsqueletoLista();
     if (_error != null && _pedidos.isEmpty) {
       return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tus pedidos', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
     }
@@ -142,12 +142,16 @@ class _ListaPedidosState extends State<_ListaPedidos> with AutomaticKeepAliveCli
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         itemCount: _pedidos.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, i) => TarjetaPedido(
-          pedido: _pedidos[i],
-          onTap: () async {
-            await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: _pedidos[i].id, inicial: _pedidos[i])));
-            _cargar();
-          },
+        itemBuilder: (_, i) => Aparecer(
+          key: ValueKey('pedido-${_pedidos[i].id}'),
+          indice: i,
+          child: TarjetaPedido(
+            pedido: _pedidos[i],
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: _pedidos[i].id, inicial: _pedidos[i])));
+              _cargar();
+            },
+          ),
         ),
       ),
     );

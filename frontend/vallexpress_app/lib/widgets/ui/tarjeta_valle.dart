@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../config/theme.dart';
+import 'animaciones.dart';
 
 /// Tarjeta estándar con los colores del tema (claro u oscuro). Si recibe [onTap] reacciona al toque.
 class TarjetaValle extends StatelessWidget {
@@ -27,13 +29,22 @@ class TarjetaValle extends StatelessWidget {
       borderRadius: BorderRadius.circular(radio),
       side: BorderSide(color: colorBorde ?? c.borde),
     );
-    return Material(
+    final tarjeta = Material(
       color: color ?? c.tarjeta,
       shape: forma,
       clipBehavior: Clip.antiAlias,
       child: onTap == null
           ? Padding(padding: padding, child: child)
-          : InkWell(onTap: onTap, customBorder: forma, child: Padding(padding: padding, child: child)),
+          : InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+              customBorder: forma,
+              child: Padding(padding: padding, child: child),
+            ),
     );
+    // Tocable: se hunde un poco al presionarla
+    return onTap == null ? tarjeta : Pulsable(onTap: onTap, child: tarjeta);
   }
 }

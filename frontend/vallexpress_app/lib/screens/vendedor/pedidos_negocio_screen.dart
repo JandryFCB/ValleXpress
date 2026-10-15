@@ -89,7 +89,7 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista(cantidad: 4, conImagen: false);
     if (_error != null && _pedidos.isEmpty) {
       return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar los pedidos', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
     }
@@ -118,13 +118,17 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         itemCount: orden.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, i) => TarjetaPedidoNegocio(
-          pedido: orden[i],
-          alCambiar: _cargar,
-          onTap: () async {
-            await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoNegocioScreen(pedidoId: orden[i].id, inicial: orden[i])));
-            _cargar();
-          },
+        itemBuilder: (_, i) => Aparecer(
+          key: ValueKey('pedido-${orden[i].id}'),
+          indice: i,
+          child: TarjetaPedidoNegocio(
+            pedido: orden[i],
+            alCambiar: _cargar,
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoNegocioScreen(pedidoId: orden[i].id, inicial: orden[i])));
+              _cargar();
+            },
+          ),
         ),
       ),
     );

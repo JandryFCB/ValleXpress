@@ -211,6 +211,11 @@ class AppTheme {
       textTheme: texto,
       extensions: [c],
       splashFactory: InkSparkle.splashFactory,
+      // Cambio de pantalla al estilo de Android moderno: la nueva entra deslizándose y la anterior se desvanece
+      pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      }),
 
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,

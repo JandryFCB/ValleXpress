@@ -61,7 +61,7 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
   Widget build(BuildContext context) {
     final c = context.colores;
     return Scaffold(
-      body: IndexedStack(index: _pestana, children: const [PedidosNegocioScreen(conFlechaAtras: false), MiNegocioScreen(), PerfilScreen()]),
+      body: PestanasAnimadas(indice: _pestana, children: const [PedidosNegocioScreen(conFlechaAtras: false), MiNegocioScreen(), PerfilScreen()]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _pestana,
         backgroundColor: c.tarjeta,

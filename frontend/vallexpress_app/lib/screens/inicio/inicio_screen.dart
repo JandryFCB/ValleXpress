@@ -102,8 +102,8 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
     final c = context.colores;
 
     return Scaffold(
-      body: IndexedStack(
-        index: _pestana,
+      body: PestanasAnimadas(
+        indice: _pestana,
         children: [
           NegociosScreen(
             alRefrescar: _refrescar,
@@ -116,7 +116,7 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_pestana == 0 && !carrito.vacio) BarraCarrito(carrito: carrito, onTap: _abrirCarrito),
+          BarraDeslizante(visible: _pestana == 0 && !carrito.vacio, child: BarraCarrito(key: const ValueKey('carrito'), carrito: carrito, onTap: _abrirCarrito)),
           NavigationBar(
             selectedIndex: _pestana,
             backgroundColor: c.tarjeta,
@@ -180,12 +180,12 @@ class _Cabecera extends StatelessWidget {
               IconButton(
                 tooltip: 'Avisos',
                 onPressed: onAvisos,
-                icon: Badge(isLabelVisible: noLeidos > 0, label: Text(noLeidos > 9 ? '9+' : '$noLeidos'), child: const Icon(Icons.notifications_none_rounded)),
+                icon: Rebote(valor: noLeidos, child: Badge(isLabelVisible: noLeidos > 0, label: Text(noLeidos > 9 ? '9+' : '$noLeidos'), child: const Icon(Icons.notifications_none_rounded))),
               ),
               IconButton(
                 tooltip: 'Carrito',
                 onPressed: onCarrito,
-                icon: Badge(isLabelVisible: !carrito.vacio, label: Text('${carrito.cantidadTotal}'), child: const Icon(Icons.shopping_cart_outlined)),
+                icon: Rebote(valor: carrito.cantidadTotal, child: Badge(isLabelVisible: !carrito.vacio, label: Text('${carrito.cantidadTotal}'), child: const Icon(Icons.shopping_cart_outlined))),
               ),
             ],
           ),
@@ -198,7 +198,7 @@ class _Cabecera extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 8),
                 itemCount: enCurso.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (_, i) => _PedidoEnCurso(pedido: enCurso[i], ancho: enCurso.length == 1 ? MediaQuery.of(context).size.width - 32 : 280),
+                itemBuilder: (_, i) => Aparecer(key: ValueKey('en-curso-${enCurso[i].id}'), indice: i, child: _PedidoEnCurso(pedido: enCurso[i], ancho: enCurso.length == 1 ? MediaQuery.of(context).size.width - 32 : 280)),
               ),
             ),
           ],
@@ -228,13 +228,9 @@ class _PedidoEnCurso extends StatelessWidget {
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido))),
         child: Row(
           children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(color: e.color.withValues(alpha: 0.2), shape: BoxShape.circle),
-              child: Icon(e.icono, color: e.color),
-            ),
-            const SizedBox(width: 12),
+            // Late mientras el pedido está en marcha
+            IconoLatiendo(icono: e.icono, color: e.color, activo: e != EstadoPedido.entregado, tamano: 40),
+            const SizedBox(width: 6),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

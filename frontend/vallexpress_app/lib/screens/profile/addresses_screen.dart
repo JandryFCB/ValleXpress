@@ -142,7 +142,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 
   Widget _contenido() {
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista(cantidad: 3);
 
     if (_error != null) {
       return EstadoVacio(

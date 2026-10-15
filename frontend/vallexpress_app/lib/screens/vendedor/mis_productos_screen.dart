@@ -104,7 +104,7 @@ class _MisProductosScreenState extends State<MisProductosScreen> {
   }
 
   Widget _contenido() {
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista();
     if (_sinNegocio) {
       return EstadoVacio(icono: Icons.storefront_outlined, titulo: 'Primero crea tu negocio', mensaje: 'Ve a "Mi negocio" para registrarlo; luego podrás cargar tus productos.', textoAccion: 'Volver', onAccion: () => Navigator.pop(context));
     }

@@ -112,7 +112,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 
   Widget _contenido() {
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista(cantidad: 4, conImagen: false);
     if (_error != null || _usuario == null) {
       return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tu perfil', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
     }

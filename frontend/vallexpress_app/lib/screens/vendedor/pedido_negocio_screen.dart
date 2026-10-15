@@ -80,7 +80,7 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
       child: p == null
           ? (_error != null
               ? EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar el pedido', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar)
-              : const Center(child: CircularProgressIndicator()))
+              : const EsqueletoLista(cantidad: 3, conImagen: false))
           : RefreshIndicator(onRefresh: _cargar, child: _contenido(p)),
     );
   }

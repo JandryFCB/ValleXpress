@@ -124,7 +124,7 @@ class _TelefonosScreenState extends State<TelefonosScreen> {
   }
 
   Widget _contenido() {
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista(cantidad: 3);
     if (_error != null) {
       return EstadoVacio(
         icono: Icons.cloud_off_rounded,

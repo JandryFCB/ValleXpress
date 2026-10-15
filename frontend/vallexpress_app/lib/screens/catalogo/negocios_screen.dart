@@ -199,7 +199,9 @@ class _NegociosScreenState extends State<NegociosScreen> {
   }
 
   List<Widget> _contenido() {
-    if (_cargando) return const [SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))];
+    if (_cargando) {
+      return const [SliverFillRemaining(hasScrollBody: false, child: EsqueletoLista(cantidad: 3, altoImagen: 130, padding: EdgeInsets.fromLTRB(16, 0, 16, 24)))];
+    }
     if (_error != null) {
       return [
         SliverFillRemaining(
@@ -241,12 +243,16 @@ class _NegociosScreenState extends State<NegociosScreen> {
           itemBuilder: (_, i) {
             if (i == _negocios.length) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
             final n = _negocios[i];
-            return TarjetaNegocio(
-              negocio: n,
-              onTap: () {
-                FocusManager.instance.primaryFocus?.unfocus(); // al volver, el buscador no debe abrir el teclado
-                Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n)));
-              },
+            return Aparecer(
+              key: ValueKey('negocio-${n.id}'),
+              indice: i,
+              child: TarjetaNegocio(
+                negocio: n,
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus(); // al volver, el buscador no debe abrir el teclado
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n)));
+                },
+              ),
             );
           },
         ),
@@ -278,12 +284,16 @@ class TarjetaNegocio extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                n.portada != null
-                    ? ImagenRed(url: n.portada, radio: 0)
-                    : Container(
-                        decoration: BoxDecoration(gradient: LinearGradient(colors: [c.primario.withValues(alpha: 0.35), c.acento.withValues(alpha: 0.25)])),
-                        child: Icon(n.categoria.icono, size: 56, color: Colors.white.withValues(alpha: 0.8)),
-                      ),
+                // La portada "vuela" a la cabecera del negocio al abrirlo
+                Hero(
+                  tag: 'portada-negocio-${n.id}',
+                  child: n.portada != null
+                      ? ImagenRed(url: n.portada, radio: 0)
+                      : Container(
+                          decoration: BoxDecoration(gradient: LinearGradient(colors: [c.primario.withValues(alpha: 0.35), c.acento.withValues(alpha: 0.25)])),
+                          child: Icon(n.categoria.icono, size: 56, color: Colors.white.withValues(alpha: 0.8)),
+                        ),
+                ),
                 if (!n.abiertoAhora) Container(color: Colors.black.withValues(alpha: 0.35)),
                 Positioned(
                   top: 10,

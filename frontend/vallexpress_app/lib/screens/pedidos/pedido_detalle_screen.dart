@@ -44,7 +44,8 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
   void initState() {
     super.initState();
     _cargar();
-    _vivo = TiempoReal.instancia.cambios(pedidoId: widget.pedidoId).listen((_) => _cargar());
+    if (widget.recienHecho) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? Confeti.lanzar(context) : null);
+    _vivo =TiempoReal.instancia.cambios(pedidoId: widget.pedidoId).listen((_) => _cargar());
     _gps = TiempoReal.instancia.ubicaciones.where((u) => u.pedidoId == widget.pedidoId).listen((u) {
       if (!mounted) return;
       setState(() {
@@ -76,7 +77,10 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
     try {
       final p = await PedidosService.obtener(widget.pedidoId);
       if (!mounted) return;
-      if (_pedido != null && _pedido!.estado != p.estado) HapticFeedback.mediumImpact();
+      if (_pedido != null && _pedido!.estado != p.estado) {
+        HapticFeedback.mediumImpact();
+        if (p.estado == EstadoPedido.entregado) Confeti.lanzar(context);
+      }
       setState(() {
         _pedido = p;
         _error = null;
@@ -153,7 +157,7 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
       child: p == null
           ? (_error != null
               ? EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar el pedido', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar)
-              : const Center(child: CircularProgressIndicator()))
+              : const EsqueletoLista(cantidad: 3, conImagen: false))
           : RefreshIndicator(onRefresh: _cargar, child: _contenido(p)),
     );
   }
@@ -188,7 +192,8 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
         if (widget.recienHecho && e == EstadoPedido.pendiente)
-          Padding(
+          Aparecer(
+            child: Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: TarjetaValle(
               color: c.primario.withValues(alpha: 0.12),
@@ -202,22 +207,30 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
               ),
             ),
           ),
+          ),
 
         // ---------------------------- Estado actual ----------------------------
         TarjetaValle(
           child: Column(
             children: [
-              Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(color: e.color.withValues(alpha: 0.15), shape: BoxShape.circle),
-                child: Icon(e.icono, size: 40, color: e.color),
+              // Late mientras el pedido avanza; salta al cambiar de estado
+              IconoLatiendo(icono: e.icono, color: e.color, activo: e.activo && e != EstadoPedido.entregado, tamano: 76),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 350),
+                transitionBuilder: (hijo, a) => FadeTransition(
+                  opacity: a,
+                  child: SlideTransition(position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a), child: hijo),
+                ),
+                child: Column(
+                  key: ValueKey(e),
+                  children: [
+                    Text(e.etiqueta, style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+                    const SizedBox(height: 4),
+                    Text(e == EstadoPedido.cancelado || e == EstadoPedido.rechazado ? (p.motivoCancelacion ?? e.descripcion) : e.descripcion,
+                        textAlign: TextAlign.center, style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              Text(e.etiqueta, style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-              const SizedBox(height: 4),
-              Text(e == EstadoPedido.cancelado || e == EstadoPedido.rechazado ? (p.motivoCancelacion ?? e.descripcion) : e.descripcion,
-                  textAlign: TextAlign.center, style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
               if (p.enReparto && _minutosRestantes(p) != null) ...[
                 const SizedBox(height: 12),
                 InsigniaValle('Llega en unos ${_minutosRestantes(p)} min', color: c.primario, icono: Icons.schedule_rounded),
@@ -236,16 +249,18 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
         // ---------------------------- Repartidor y mapa en vivo ----------------------------
         if (p.repartidor != null && (p.enReparto || e == EstadoPedido.entregado)) ...[
           const SizedBox(height: 12),
-          TarjetaRepartidor(repartidor: p.repartidor!),
+          Aparecer(child: TarjetaRepartidor(repartidor: p.repartidor!)),
         ],
         if (p.enReparto) ...[
           const SizedBox(height: 12),
-          MapaPedido(
+          Aparecer(
+            child: MapaPedido(
             negocio: p.negocioLocal,
             entrega: p.entregaPunto,
             repartidor: _repartidorEn ?? p.repartidor?.ubicacion,
             haciaNegocio: e == EstadoPedido.enCamino,
             iconoRepartidor: p.repartidor?.vehiculo?.icono ?? Icons.two_wheeler_rounded,
+          ),
           ),
           if ((_repartidorEn ?? p.repartidor?.ubicacion) == null)
             Padding(
@@ -378,7 +393,7 @@ class _Progreso extends StatelessWidget {
                           ),
                           child: hecho ? const Icon(Icons.check_rounded, size: 14, color: Colors.white) : null,
                         ),
-                        if (!ultimo) Expanded(child: Container(width: 2, color: i < actual ? c.primario : c.borde)),
+                        if (!ultimo) Expanded(child: AnimatedContainer(duration: const Duration(milliseconds: 500), width: 2, color: i < actual ? c.primario : c.borde)),
                       ],
                     ),
                   ),

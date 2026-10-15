@@ -128,7 +128,7 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
   }
 
   Widget _contenido() {
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista(cantidad: 3, altoImagen: 120, conImagen: false);
     if (_error != null) {
       return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tu negocio', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
     }

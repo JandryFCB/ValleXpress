@@ -97,7 +97,7 @@ class _AvisosScreenState extends State<AvisosScreen> {
   }
 
   Widget _contenido() {
-    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const EsqueletoLista(cantidad: 6);
     if (_error != null && _avisos.isEmpty) {
       return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tus avisos', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
     }
@@ -114,7 +114,7 @@ class _AvisosScreenState extends State<AvisosScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (_, i) {
           final a = _avisos[i];
-          return TarjetaValle(
+          return Aparecer(key: ValueKey('aviso-${a.id}'), indice: i, child: TarjetaValle(
             onTap: () => _abrir(a),
             padding: const EdgeInsets.all(14),
             color: a.leida ? null : c.primario.withValues(alpha: 0.08),
@@ -149,7 +149,7 @@ class _AvisosScreenState extends State<AvisosScreen> {
                 ),
               ],
             ),
-          );
+          ));
         },
       ),
     );

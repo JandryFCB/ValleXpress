@@ -87,7 +87,7 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
     }
     carrito.agregar(_negocio, p, cantidad: cantidad, notas: notas);
     HapticFeedback.lightImpact();
-    if (mounted) mostrarExito(context, cantidad == 1 ? '${p.nombre} agregado' : '$cantidad × ${p.nombre} agregados');
+    if (mounted) mostrarExito(context, cantidad == 1 ? 'Agregaste ${p.nombre} al carrito' : 'Agregaste $cantidad × ${p.nombre} al carrito');
   }
 
   @override
@@ -99,7 +99,10 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
     final miCarrito = !carrito.vacio && carrito.negocio?.id == n.id;
 
     return Scaffold(
-      bottomNavigationBar: miCarrito ? BarraCarrito(carrito: carrito, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen()))) : null,
+      bottomNavigationBar: BarraDeslizante(
+        visible: miCarrito,
+        child: BarraCarrito(key: const ValueKey('carrito'), carrito: carrito, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen()))),
+      ),
       body: Container(
         decoration: BoxDecoration(gradient: c.degradadoFondo),
         child: RefreshIndicator(
@@ -116,12 +119,15 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      n.portada != null
-                          ? ImagenRed(url: n.portada, radio: 0)
-                          : Container(
-                              decoration: BoxDecoration(gradient: LinearGradient(colors: [c.primario, c.primario.withValues(alpha: 0.5)])),
-                              child: Icon(n.categoria.icono, size: 80, color: Colors.white.withValues(alpha: 0.7)),
-                            ),
+                      Hero(
+                        tag: 'portada-negocio-${n.id}',
+                        child: n.portada != null
+                            ? ImagenRed(url: n.portada, radio: 0)
+                            : Container(
+                                decoration: BoxDecoration(gradient: LinearGradient(colors: [c.primario, c.primario.withValues(alpha: 0.5)])),
+                                child: Icon(n.categoria.icono, size: 80, color: Colors.white.withValues(alpha: 0.7)),
+                              ),
+                      ),
                       // degradado para que el título y la flecha se lean sobre cualquier foto
                       const DecoratedBox(
                         decoration: BoxDecoration(
@@ -217,7 +223,7 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
   }
 
   List<Widget> _menuSlivers() {
-    if (_cargando) return const [SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))];
+    if (_cargando) return const [SliverFillRemaining(hasScrollBody: false, child: EsqueletoLista(cantidad: 4))];
     if (_error != null) {
       return [
         SliverFillRemaining(
@@ -251,10 +257,14 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
             itemBuilder: (_, i) {
               final p = entrada.value[i];
               final carrito = context.watch<CarritoProvider>();
-              return TarjetaProducto(
-                producto: p,
-                enCarrito: carrito.negocio?.id == _negocio.id ? carrito.cantidadDe(p.id) : 0,
-                onTap: () => _verProducto(p),
+              return Aparecer(
+                key: ValueKey('producto-${p.id}'),
+                indice: i,
+                child: TarjetaProducto(
+                  producto: p,
+                  enCarrito: carrito.negocio?.id == _negocio.id ? carrito.cantidadDe(p.id) : 0,
+                  onTap: () => _verProducto(p),
+                ),
               );
             },
           ),
@@ -292,14 +302,18 @@ class BarraCarrito extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(10)),
-                    child: Text('${carrito.cantidadTotal}', style: tema.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                  // El contador rebota cada vez que se agrega algo
+                  Rebote(
+                    valor: carrito.cantidadTotal,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(10)),
+                      child: Text('${carrito.cantidadTotal}', style: tema.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Text('Ver carrito', style: tema.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800))),
-                  Text(Formato.dinero(carrito.subtotal), style: tema.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                  DineroAnimado(carrito.subtotal, estilo: tema.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
                 ],
               ),
             ),
