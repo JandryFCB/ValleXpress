@@ -212,7 +212,6 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final c = context.colores;
     return Column(
       children: [
         Padding(
@@ -243,7 +242,6 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
                   child: ChoiceChip(
                     label: Text(texto),
                     selected: _filtro == valor,
-                    selectedColor: c.primario.withValues(alpha: 0.2),
                     onSelected: (_) {
                       setState(() => (_filtro = valor, _items = []));
                       _cargar();

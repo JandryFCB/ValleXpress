@@ -302,6 +302,7 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: c.tarjeta,
         selectedColor: c.primario,
+        showCheckmark: false,        // el color ya dice cuál está elegido; la palomita cortaba el texto
         side: BorderSide(color: c.borde),
         labelStyle: texto.labelMedium?.copyWith(color: c.texto),
         secondaryLabelStyle: texto.labelMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),

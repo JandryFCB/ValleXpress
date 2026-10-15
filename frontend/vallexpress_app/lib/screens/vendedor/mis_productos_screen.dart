@@ -95,7 +95,7 @@ class _MisProductosScreenState extends State<MisProductosScreen> {
   @override
   Widget build(BuildContext context) {
     return FondoValle(
-      titulo: 'Mis productos',
+      titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos',
       botonFlotante: (_cargando || _error != null || _sinNegocio || _menu.productos.isEmpty)
           ? null
           : FloatingActionButton.extended(onPressed: () => _abrirFormulario(), icon: const Icon(Icons.add_rounded), label: const Text('Agregar')),

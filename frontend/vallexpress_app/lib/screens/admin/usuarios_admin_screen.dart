@@ -93,7 +93,6 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colores;
     return FondoValle(
       appBar: AppBar(title: Text(_cargando ? 'Usuarios' : 'Usuarios · $_total'), automaticallyImplyLeading: false),
       botonFlotante: FloatingActionButton.extended(onPressed: _crear, icon: const Icon(Icons.person_add_alt_1_rounded), label: const Text('Nueva cuenta')),
@@ -136,7 +135,6 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
                       avatar: valor == null ? null : Icon(UsuarioAdmin.iconosRol[valor], size: 18),
                       label: Text(texto),
                       selected: _rol == valor,
-                      selectedColor: c.primario.withValues(alpha: 0.2),
                       onSelected: (_) {
                         setState(() => (_rol = valor, _usuarios = []));
                         _cargar();
@@ -626,10 +624,9 @@ class _FormularioUsuarioScreenState extends State<FormularioUsuarioScreen> {
                 children: [
                   for (final rol in const ['cliente', 'vendedor', 'repartidor', 'administrador'])
                     ChoiceChip(
-                      avatar: Icon(UsuarioAdmin.iconosRol[rol], size: 18, color: _rol == rol ? UsuarioAdmin.coloresRol[rol] : null),
+                      avatar: Icon(UsuarioAdmin.iconosRol[rol], size: 18, color: _rol == rol ? Colors.white : UsuarioAdmin.coloresRol[rol]),
                       label: Text(UsuarioAdmin.etiquetasRol[rol]!),
                       selected: _rol == rol,
-                      selectedColor: UsuarioAdmin.coloresRol[rol]!.withValues(alpha: 0.2),
                       onSelected: (_) => setState(() => _rol = rol),
                     ),
                 ],
