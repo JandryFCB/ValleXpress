@@ -37,6 +37,9 @@ const registro = [
   // Solo para vendedores: con estos datos se crea su negocio en el mismo registro
   body('nombreNegocio').optional({ values: 'falsy' }).isString().trim().isLength({ min: 2, max: 120 }).withMessage('El nombre del negocio debe tener entre 2 y 120 caracteres'),
   body('categoriaNegocio').optional({ values: 'falsy' }).isIn(Object.values(CATEGORIA)).withMessage('Categoría de negocio inválida'),
+  // Solo para repartidores: con estos datos se crea su perfil de reparto en el mismo registro
+  body('vehiculo').optional({ values: 'falsy' }).isString().isLength({ max: 20 }).withMessage('Vehículo inválido'),
+  body('placa').optional({ values: 'falsy' }).isString().isLength({ max: 12 }).withMessage('Placa inválida'),
   // Datos del dispositivo (opcionales): se guardan en la sesión para poder mostrar "dispositivos con sesión iniciada"
   ...dispositivo,
 ];

@@ -3,6 +3,7 @@ const { sequelize } = require('../../config/database');
 const { columnasHistorial, opcionesHistorial, opcionesSimple } = require('../../shared/models/columnasComunes');
 const { Negocio } = require('../negocios/negocio.model');
 const Usuario = require('../auth/usuario.model');
+const { Repartidor } = require('../repartidores/repartidor.model');
 
 // Tabla TPEDIDOS (histórica): cada cambio de estado deja su versión; de ahí sale la línea de tiempo del seguimiento.
 // El código (CPEDIDO) lo asigna la BD. Los montos y la dirección de entrega se copian al crear el pedido.
@@ -60,5 +61,8 @@ Pedido.hasMany(Calificacion, { foreignKey: 'pedidoId', sourceKey: 'id', as: 'cal
 Pedido.belongsTo(Negocio, { foreignKey: 'negocioId', targetKey: 'id', as: 'negocio' });
 Pedido.belongsTo(Usuario, { foreignKey: 'clienteId', targetKey: 'id', as: 'cliente' });
 Pedido.belongsTo(Usuario, { foreignKey: 'repartidorId', targetKey: 'id', as: 'repartidor' });
+Pedido.belongsTo(Repartidor, { foreignKey: 'repartidorId', targetKey: 'usuarioId', as: 'perfilRepartidor' });
+// El dueño del negocio (su teléfono le sirve al repartidor)
+if (!Negocio.associations.dueno) Negocio.belongsTo(Usuario, { foreignKey: 'duenoId', targetKey: 'id', as: 'dueno' });
 
 module.exports = { Pedido, Detalle, Calificacion };

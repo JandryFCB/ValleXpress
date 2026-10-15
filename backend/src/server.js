@@ -57,7 +57,8 @@ const negociosRoutes = require('./modules/negocios/negocios.routes');
 const miNegocioRoutes = require('./modules/negocios/mi-negocio.routes');
 const pedidosRoutes = require('./modules/pedidos/pedido.routes');
 const notificacionesRoutes = require('./modules/notificaciones/notificacion.routes');
-// Pendiente de migrar: repartidores (flujo 4)
+const repartidorRoutes = require('./modules/repartidores/repartidor.routes');
+const registrarUbicacionSocket = require('./modules/repartidores/ubicacion.socket');
 
 
 
@@ -166,6 +167,7 @@ app.use('/api/negocios', negociosRoutes);
 app.use('/api/mi-negocio', miNegocioRoutes);
 app.use('/api/pedidos', pedidosRoutes);
 app.use('/api/notificaciones', notificacionesRoutes);
+app.use('/api/repartidor', repartidorRoutes);
 
 
 
@@ -184,7 +186,8 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Cambios de estado de un pedido: el servidor emite 'pedido:actualizado' y 'notificacion' a la sala "user:<usuario>"
-// de cada participante. El seguimiento del repartidor en el mapa llega con el flujo 4.
+// de cada participante. La ubicación del repartidor llega por 'repartidor:ubicacion' y se reenvía como
+// 'pedido:ubicacion' solo al cliente y al negocio de su entrega en curso (modules/repartidores/ubicacion.socket.js).
 
 
 
@@ -207,6 +210,8 @@ io.on('connection', (socket) => {
       }
     }
   } catch (_) {}
+
+  registrarUbicacionSocket(io, socket);
 
   socket.on('disconnect', () => {
     console.log('❌ Cliente desconectado:', socket.id);

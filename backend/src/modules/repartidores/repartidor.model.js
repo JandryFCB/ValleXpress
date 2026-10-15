@@ -1,43 +1,46 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesVersionada } = require('../../shared/models/columnasComunes');
+const { columnasHistorial, opcionesHistorial, opcionesSimple } = require('../../shared/models/columnasComunes');
 const Usuario = require('../auth/usuario.model');
 
-// Tabla TREPARTIDORES (historial en la misma tabla): el repartidor ES un usuario con rol repartidor y su perfil cuelga
-// de CUSUARIO (pruiz), que en el modelo es "id" (igual a usuarioId). "foto" es ARCHIVOS (fotoId); la cédula vive en la persona.
+// Tabla TREPARTIDORES (histórica): perfil del repartidor. La clave es su usuario (CUSUARIO): no tiene código propio.
 const Repartidor = sequelize.define('Repartidor', {
-  id: { type: DataTypes.STRING(30), primaryKey: true, field: 'cusuario' },          // TUSUARIOSID.CUSUARIO
-  usuarioId: {
-    type: DataTypes.VIRTUAL(DataTypes.STRING, ['id']),
-    get() { return this.getDataValue('id'); },
-    set(valor) { this.setDataValue('id', valor); },
-  },
-  vehiculo: { type: DataTypes.CHAR(3), field: 'vehiculo' },                // TIPOVEHICULO.CODIGO
+  usuarioId: { type: DataTypes.STRING(30), primaryKey: true, field: 'cusuario' },
+  vehiculo: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: '001', field: 'ctipovehiculo' },   // TTIPOSVEHICULOID
   placa: { type: DataTypes.STRING(10), field: 'placa' },
-  marca: { type: DataTypes.STRING(50), field: 'marca' },
-  modelo: { type: DataTypes.STRING(50), field: 'modelo' },
-  color: { type: DataTypes.STRING(30), field: 'color' },
-  anio: { type: DataTypes.SMALLINT, field: 'anio' },
-  licencia: { type: DataTypes.STRING(30), field: 'licencia' },
-  licenciaTipo: { type: DataTypes.STRING(5), field: 'licenciatipo' },
-  licenciaVence: { type: DataTypes.DATEONLY, field: 'licenciavence' },
-  fotoId: { type: DataTypes.STRING(30), field: 'foto' },                   // ARCHIVOS.ARCHIVO
-  disponible: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'disponible' },
-  enServicio: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'enservicio' },
+  color: { type: DataTypes.STRING(30), field: 'colorvehiculo' },
+  aprobacion: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: '001', field: 'cestatusaprobacion' },
+  aprobadoEn: { type: DataTypes.DATE, field: 'faprobacion' },
+  ...columnasHistorial,
+}, opcionesHistorial('TREPARTIDORES'));
+
+// Tabla TREPARTIDORESESTADO (simple): en línea, última ubicación, calificación y entregas. La crea el trigger.
+const RepartidorEstado = sequelize.define('RepartidorEstado', {
+  usuarioId: { type: DataTypes.STRING(30), primaryKey: true, field: 'cusuario' },
+  disponible: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'estadisponible' },
   latitud: { type: DataTypes.DECIMAL(10, 8), field: 'latitud' },
   longitud: { type: DataTypes.DECIMAL(11, 8), field: 'longitud' },
-  ubicacionEn: { type: DataTypes.DATE, field: 'ubicacionen' },
-  calificacionPromedio: { type: DataTypes.DECIMAL(3, 2), defaultValue: 0, field: 'calificacion' },
-  totalCalificaciones: { type: DataTypes.INTEGER, defaultValue: 0, field: 'totalcalif' },
-  pedidosCompletados: { type: DataTypes.INTEGER, defaultValue: 0, field: 'pedidoscompletos' },
-  saldoEfectivo: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0, field: 'saldoefectivo' },
-  ganancias: { type: DataTypes.DECIMAL(12, 2), defaultValue: 0, field: 'ganancias' },
-  aprobacion: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: '001', field: 'aprobacion' },  // ESTADOAPROBACION.CODIGO
-  aprobadoPor: { type: DataTypes.STRING(30), field: 'aprobadopor' },
-  aprobadoEn: { type: DataTypes.DATE, field: 'aprobadoen' },
-  ...columnasComunes,
-}, opcionesVersionada('TREPARTIDORES'));
+  ubicacionEn: { type: DataTypes.DATE, field: 'fubicacion' },
+  calificacion: { type: DataTypes.DECIMAL(3, 2), allowNull: false, defaultValue: 0, field: 'calificacion' },
+  numeroCalificaciones: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'numerocalificaciones' },
+  numeroEntregas: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'numeroentregas' },
+  ultimoCambio: { type: DataTypes.DATE, field: 'fultimocambio' },
+}, opcionesSimple('TREPARTIDORESESTADO'));
 
-Repartidor.belongsTo(Usuario, { foreignKey: 'id', as: 'usuario' });
+// Tabla TREPARTIDORUBICACIONES (simple): puntos del recorrido de cada entrega
+const Ubicacion = sequelize.define('RepartidorUbicacion', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true, field: 'subicacion' },
+  usuarioId: { type: DataTypes.STRING(30), allowNull: false, field: 'cusuario' },
+  pedidoId: { type: DataTypes.BIGINT, allowNull: false, field: 'cpedido' },
+  latitud: { type: DataTypes.DECIMAL(10, 8), allowNull: false, field: 'latitud' },
+  longitud: { type: DataTypes.DECIMAL(11, 8), allowNull: false, field: 'longitud' },
+  precision: { type: DataTypes.DECIMAL(7, 1), field: 'precisionm' },
+  velocidadKmh: { type: DataTypes.DECIMAL(5, 1), field: 'velocidadkmh' },
+  rumbo: { type: DataTypes.DECIMAL(5, 1), field: 'rumbo' },
+  registradoEn: { type: DataTypes.DATE, field: 'fregistro' },
+}, opcionesSimple('TREPARTIDORUBICACIONES'));
 
-module.exports = Repartidor;
+Repartidor.hasOne(RepartidorEstado, { foreignKey: 'usuarioId', sourceKey: 'usuarioId', as: 'estado' });
+Repartidor.belongsTo(Usuario, { foreignKey: 'usuarioId', targetKey: 'id', as: 'usuario' });
+
+module.exports = { Repartidor, RepartidorEstado, Ubicacion };

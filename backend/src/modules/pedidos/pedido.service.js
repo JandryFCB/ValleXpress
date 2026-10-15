@@ -7,13 +7,15 @@ const Direccion = require('../direcciones/direccion.model');
 const Usuario = require('../auth/usuario.model');
 const NegocioService = require('../negocios/negocio.service');
 const NotificacionService = require('../notificaciones/notificacion.service');
+const RepartidorService = require('../repartidores/repartidor.service');
+const { Repartidor, RepartidorEstado } = require('../repartidores/repartidor.model');
 const { ACTIVOS, TERMINADOS, validarTransicion } = require('./pedido_estado.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const ArchivoService = require('../../shared/services/archivo.service');
 const { auditar } = require('../../shared/services/log.service');
 const {
-  ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO,
+  ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO, VEHICULOAAPI,
 } = require('../../shared/constants/codigos');
 
 // Lógica de los PEDIDOS.
@@ -23,6 +25,9 @@ const {
 //     y se devuelve si el pedido se cancela o se rechaza.
 //   * Cada cambio de estado pasa por la máquina de estados y deja su versión en el historial de TPEDIDOS.
 //   * Solo ven un pedido su cliente, el dueño del negocio y el repartidor asignado. A cualquier otro: 404.
+//     Excepción: un repartidor en línea ve los pedidos LISTOS sin repartidor (sin los datos de contacto del cliente)
+//     para decidir si los acepta.
+//   * El repartidor tiene una sola entrega en curso a la vez; si dos aceptan el mismo pedido, gana uno (bloqueo de fila).
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const centavos = (v) => Math.round(Number(v) * 100);
@@ -42,10 +47,12 @@ function distanciaKm(a, b) {
 const INCLUIR = [
   { model: Detalle, as: 'detalles', required: false },
   { model: Calificacion, as: 'calificaciones', required: false },
-  { model: Negocio, as: 'negocio', include: [{ model: Direccion, as: 'local', required: false }] },
+  { model: Negocio, as: 'negocio', include: [{ model: Direccion, as: 'local', required: false }, { model: Usuario, as: 'dueno', attributes: ['id', 'telefono'] }] },
   { model: Usuario, as: 'cliente', attributes: ['id', 'nombre', 'apellido', 'telefono'] },
   { model: Usuario, as: 'repartidor', attributes: ['id', 'nombre', 'apellido', 'telefono'], required: false },
+  { model: Repartidor, as: 'perfilRepartidor', required: false, include: [{ model: RepartidorEstado, as: 'estado' }] },
 ];
+const ENCURSO = [E.ENCAMINO, E.RECOGIDO];          // el repartidor ya tiene el pedido
 const ORDEN = [['fechaPedido', 'DESC'], [{ model: Detalle, as: 'detalles' }, 'linea', 'ASC']];
 const cargar = (id) => Pedido.findOne({ where: { id }, include: INCLUIR, order: ORDEN });
 
@@ -59,9 +66,28 @@ async function lineaDeTiempo(pedidoId) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Formato que recibe la app. rol = quién mira: el cliente no necesita su propio teléfono; el negocio sí el del cliente.
+// Formato que recibe la app. rol = quién mira:
+//   cliente     -> no recibe sus propios datos de contacto
+//   vendedor    -> recibe los del cliente
+//   repartidor  -> recibe los del cliente y el teléfono del negocio (solo si es el repartidor asignado)
+//   candidato   -> repartidor que todavía no lo acepta: ve a dónde va, pero no quién es el cliente
 // ---------------------------------------------------------------------------------------------
 const persona = (u) => u && { usuario: u.id, nombre: u.nombre, apellido: u.apellido, telefono: u.telefono };
+
+function repartidorApi(p) {
+  if (!p.repartidor) return null;
+  const perfil = p.perfilRepartidor;
+  const e = perfil?.estado;
+  return {
+    ...persona(p.repartidor),
+    vehiculo: perfil ? VEHICULOAAPI[perfil.vehiculo] : null,
+    placa: perfil?.placa || null,
+    color: perfil?.color || null,
+    calificacion: e ? num(e.calificacion) : null,
+    // Ubicación solo mientras lleva el pedido (después ya no es asunto del cliente ni del negocio)
+    ubicacion: ENCURSO.includes(p.estado) && e?.latitud != null ? { latitud: num(e.latitud), longitud: num(e.longitud), fecha: e.ubicacionEn } : null,
+  };
+}
 
 async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
   const lista = Array.isArray(entrada) ? entrada : [entrada];
@@ -84,8 +110,11 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
         id: Number(n.id),
         nombre: n.nombre,
         logo: urls[String(n.logoId)]?.miniatura || null,
-        local: n.local ? { direccion: n.local.direccion, latitud: num(n.local.latitud), longitud: num(n.local.longitud) } : null,
+        local: n.local ? { direccion: n.local.direccion, referencia: n.local.referencia, latitud: num(n.local.latitud), longitud: num(n.local.longitud) } : null,
+        ...(rol === 'repartidor' && { telefono: n.dueno?.telefono || null }),
       },
+      // Distancia del negocio a la entrega (en línea recta): le sirve al repartidor para decidir
+      distanciaKm: n?.local ? Number(distanciaKm({ lat: num(n.local.latitud), lng: num(n.local.longitud) }, { lat: num(p.latitud), lng: num(p.longitud) }).toFixed(2)) : null,
       entrega: { direccion: p.direccionEntrega, referencia: p.referenciaEntrega, latitud: num(p.latitud), longitud: num(p.longitud) },
       metodoPago: METODOPAGOAAPI[p.metodoPago],
       pagado: p.pagado,
@@ -108,11 +137,12 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
         imagen: urls[String(imagenDe[String(d.productoId)])]?.miniatura || null,
       })),
       cantidadProductos: (p.detalles || []).reduce((s, d) => s + d.cantidad, 0),
-      repartidor: persona(p.repartidor),
+      repartidor: repartidorApi(p),
       calificacion: calif('NEGOCIO') ? { puntuacion: calif('NEGOCIO').puntuacion, comentario: calif('NEGOCIO').comentario } : null,
-      calificacionRepartidor: calif('REPARTIDOR') ? { puntuacion: calif('REPARTIDOR').puntuacion } : null,
-      ...(rol !== 'cliente' && { cliente: persona(p.cliente) }),
+      calificacionRepartidor: calif('REPARTIDOR') ? { puntuacion: calif('REPARTIDOR').puntuacion, comentario: calif('REPARTIDOR').comentario } : null,
+      ...((rol === 'vendedor' || rol === 'repartidor') && { cliente: persona(p.cliente) }),
     };
+    if (rol === 'candidato') delete item.calificacion;
     if (detalle) item.lineaTiempo = await lineaDeTiempo(p.id);
     salida.push(item);
   }
@@ -169,10 +199,12 @@ async function devolverStock(pedidoId, t) {
 // ---------------------------------------------------------------------------------------------
 // Avisos: notificación guardada + evento en vivo para refrescar las pantallas abiertas
 // ---------------------------------------------------------------------------------------------
-function avisarCambio(io, pedido, duenoId) {
+// repartidores=true avisa también a todos los repartidores conectados (un pedido apareció o dejó de estar libre)
+function avisarCambio(io, pedido, duenoId, { repartidores = false } = {}) {
   if (!io) return;
   const evento = { pedidoId: Number(pedido.id), estado: ESTADOPEDIDOAAPI[pedido.estado] };
   for (const u of [pedido.clienteId, duenoId, pedido.repartidorId].filter(Boolean)) io.to(`user:${u}`).emit('pedido:actualizado', evento);
+  if (repartidores) io.to('role:repartidor').emit('pedido:actualizado', evento);
 }
 
 const AVISOCLIENTE = {
@@ -180,7 +212,24 @@ const AVISOCLIENTE = {
   [E.PREPARANDO]: ['pedido_preparando', 'Preparando tu pedido 👨‍🍳', (p, n) => `${n} está preparando tu pedido #${p.id}`],
   [E.LISTO]: ['pedido_listo', '¡Tu pedido está listo! 🍽️', (p) => `Tu pedido #${p.id} está listo; pronto saldrá hacia ti`],
   [E.RECHAZADO]: ['pedido_rechazado', 'Pedido rechazado', (p, n) => `${n} no pudo atender tu pedido #${p.id}${p.motivoCancelacion ? `: ${p.motivoCancelacion}` : ''}`],
+  [E.ENCAMINO]: ['pedido_en_camino', 'Repartidor asignado 🛵', (p, n, r) => `${r} va a ${n} a recoger tu pedido #${p.id}`],
+  [E.RECOGIDO]: ['pedido_recogido', '¡Tu pedido va hacia ti! 🛵', (p, n, r) => `${r} recogió tu pedido #${p.id}. Síguelo en el mapa`],
+  [E.ENTREGADO]: ['pedido_entregado', '¡Pedido entregado! 🎉', (p) => `Tu pedido #${p.id} llegó. Confírmalo y califica tu experiencia`],
 };
+
+// Avisa a los repartidores en línea y aprobados que hay un pedido listo para recoger
+async function avisarRepartidores(io, pedido, negocioNombre) {
+  const enLinea = await RepartidorEstado.findAll({ where: { disponible: true }, attributes: ['usuarioId'] });
+  const aprobados = enLinea.length
+    ? await Repartidor.findAll({ where: { usuarioId: enLinea.map((r) => r.usuarioId), aprobacion: APROBACION.APROBADO }, attributes: ['usuarioId'] })
+    : [];
+  for (const r of aprobados) {
+    await NotificacionService.notificar({
+      io, usuarioId: r.usuarioId, tipo: 'pedido_disponible', titulo: 'Pedido listo para recoger 📦',
+      mensaje: `${negocioNombre}: pedido #${pedido.id} · ganas $${num(pedido.costoEnvio).toFixed(2)}`, pedidoId: pedido.id, datos: { estado: 'listo' },
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Cliente: crear
@@ -296,7 +345,12 @@ function rolEn(pedido, usuario) {
 
 async function obtener(usuario, id, req) {
   const p = await cargar(id);
-  const rol = p && rolEn(p, usuario);
+  let rol = p && rolEn(p, usuario);
+  // Un repartidor aprobado puede ver un pedido libre (listo o por estar listo) para decidir si lo acepta
+  if (p && !rol && usuario.tipoUsuario === 'repartidor' && !p.repartidorId && [E.CONFIRMADO, E.PREPARANDO, E.LISTO].includes(p.estado)) {
+    const r = await Repartidor.findOne({ where: { usuarioId: usuario.id }, attributes: ['usuarioId', 'aprobacion'] });
+    if (r?.aprobacion === APROBACION.APROBADO) rol = 'candidato';
+  }
   if (!rol) throw noEncontrado();
   return aApi(p, req, { rol, detalle: true });
 }
@@ -324,8 +378,91 @@ async function cambiarEstadoNegocio(usuario, id, { estado, motivo, tiempoEstimad
   auditar({ usuarioId: usuario.id, accion: `PEDIDO${String(estado).toUpperCase()}`, entidad: 'PEDIDOS', entidadId: id, req });
   const [tipo, titulo, mensaje] = AVISOCLIENTE[siguiente];
   await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo, titulo, mensaje: mensaje(pedido, negocio.nombre), pedidoId: pedido.id, datos: { estado } });
-  avisarCambio(req.io, pedido, negocio.duenoId);
+  if (siguiente === E.LISTO) await avisarRepartidores(req.io, pedido, negocio.nombre);
+  avisarCambio(req.io, pedido, negocio.duenoId, { repartidores: [E.CONFIRMADO, E.PREPARANDO, E.LISTO, E.RECHAZADO].includes(siguiente) });
   return aApi(await cargar(id), req, { rol: 'vendedor', detalle: true });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Repartidor: pedidos libres, aceptar, recoger y entregar
+// ---------------------------------------------------------------------------------------------
+// Libres: "listos" (se pueden aceptar ya) y "próximos" (el negocio los está preparando). Sin datos del cliente.
+// Si el repartidor compartió su ubicación, cada pedido trae también a qué distancia está el negocio.
+async function libresParaRepartidor(usuarioId, req) {
+  const r = await RepartidorService.exigirPerfil(usuarioId);
+  RepartidorService.exigirAprobado(r);
+  const filas = await Pedido.findAll({
+    where: { repartidorId: null, estado: { [Op.in]: [E.CONFIRMADO, E.PREPARANDO, E.LISTO] } },
+    include: INCLUIR, order: [['fechaPedido', 'ASC'], [{ model: Detalle, as: 'detalles' }, 'linea', 'ASC']], limit: 100,
+  });
+  const yo = r.estado?.latitud != null ? { lat: num(r.estado.latitud), lng: num(r.estado.longitud) } : null;
+  const pedidos = await aApi(filas, req, { rol: 'candidato' });
+  for (const [i, p] of pedidos.entries()) {
+    const local = filas[i].negocio?.local;
+    p.distanciaAlNegocioKm = yo && local ? Number(distanciaKm(yo, { lat: num(local.latitud), lng: num(local.longitud) }).toFixed(2)) : null;
+  }
+  return { listos: pedidos.filter((p) => p.estado === 'listo'), proximos: pedidos.filter((p) => p.estado !== 'listo'), enLinea: r.estado?.disponible === true };
+}
+
+async function listarDelRepartidor(usuarioId, query, req) {
+  await RepartidorService.exigirPerfil(usuarioId);
+  const estado = query.estado === 'activos' ? { [Op.in]: [...ENCURSO, E.ENTREGADO] } : filtroEstado(query.estado);
+  return listar({ repartidorId: usuarioId, ...(estado && { estado }) }, query, req, 'repartidor');
+}
+
+async function aceptar(usuario, id, req) {
+  const r = await RepartidorService.exigirPerfil(usuario.id);
+  RepartidorService.exigirAprobado(r);
+  if (!r.estado?.disponible) throw AppError.conflict('Conéctate ("En línea") para aceptar pedidos', 'REPARTIDORDESCONECTADO');
+
+  const pedido = await withTransaction(async (t) => {
+    // Una entrega a la vez: así el cliente sabe que va directo hacia él
+    if (await Pedido.count({ where: { repartidorId: usuario.id, estado: { [Op.in]: ENCURSO } }, transaction: t })) {
+      throw AppError.conflict('Termina tu entrega en curso antes de aceptar otra', 'ENTREGAENCURSO');
+    }
+    const p = await Pedido.findOne({ where: { id }, transaction: t, lock: t.LOCK.UPDATE });   // si dos aceptan a la vez, gana uno
+    if (!p) throw noEncontrado();
+    if (p.repartidorId) throw AppError.conflict('Otro repartidor ya tomó este pedido', 'PEDIDOASIGNADO');
+    if (p.estado !== E.LISTO) throw AppError.conflict('El negocio todavía no tiene listo este pedido', 'PEDIDONOLISTO');
+    validarTransicion(p.estado, E.ENCAMINO, 'repartidor');
+    await p.update({ estado: E.ENCAMINO, repartidorId: usuario.id }, { transaction: t });
+    return p;
+  }, { usuarioId: usuario.id });
+
+  auditar({ usuarioId: usuario.id, accion: 'PEDIDOACEPTADO', entidad: 'PEDIDOS', entidadId: id, req });
+  await avisarPasoRepartidor(req, pedido, usuario, { repartidores: true });
+  return aApi(await cargar(id), req, { rol: 'repartidor', detalle: true });
+}
+
+// Recoger (EN CAMINO -> RECOGIDO) o entregar (RECOGIDO -> ENTREGADO): solo el repartidor asignado
+async function pasoRepartidor(usuario, id, siguiente, req) {
+  const pedido = await withTransaction(async (t) => {
+    const p = await Pedido.findOne({ where: { id, repartidorId: usuario.id }, transaction: t, lock: t.LOCK.UPDATE });
+    if (!p) throw noEncontrado();
+    validarTransicion(p.estado, siguiente, 'repartidor');
+    await p.update({ estado: siguiente }, { transaction: t });
+    if (siguiente === E.ENTREGADO) await RepartidorEstado.increment('numeroEntregas', { by: 1, where: { usuarioId: usuario.id }, transaction: t });
+    return p;
+  }, { usuarioId: usuario.id });
+
+  auditar({ usuarioId: usuario.id, accion: siguiente === E.RECOGIDO ? 'PEDIDORECOGIDO' : 'PEDIDOENTREGADO', entidad: 'PEDIDOS', entidadId: id, req });
+  await avisarPasoRepartidor(req, pedido, usuario);
+  return aApi(await cargar(id), req, { rol: 'repartidor', detalle: true });
+}
+
+// Avisos de un paso del repartidor: al cliente siempre; al negocio cuando le asignan repartidor y cuando lo recoge
+async function avisarPasoRepartidor(req, pedido, repartidor, opciones = {}) {
+  const negocio = await Negocio.findOne({ where: { id: pedido.negocioId }, attributes: ['id', 'nombre', 'duenoId'] });
+  const [tipo, titulo, mensaje] = AVISOCLIENTE[pedido.estado];
+  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo, titulo, mensaje: mensaje(pedido, negocio.nombre, repartidor.nombre), pedidoId: pedido.id, datos: { estado: ESTADOPEDIDOAAPI[pedido.estado] } });
+  const alNegocio = {
+    [E.ENCAMINO]: ['repartidor_asignado', 'Repartidor en camino 🛵', `${repartidor.nombre} va por el pedido #${pedido.id}`],
+    [E.RECOGIDO]: ['pedido_recogido', 'Pedido recogido ✅', `${repartidor.nombre} recogió el pedido #${pedido.id}`],
+  }[pedido.estado];
+  if (alNegocio) {
+    await NotificacionService.notificar({ io: req.io, usuarioId: negocio.duenoId, tipo: alNegocio[0], titulo: alNegocio[1], mensaje: alNegocio[2], pedidoId: pedido.id, datos: { estado: ESTADOPEDIDOAAPI[pedido.estado] } });
+  }
+  avisarCambio(req.io, pedido, negocio.duenoId, opciones);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -388,6 +525,17 @@ async function recalcularNegocio(negocioId, t) {
   );
 }
 
+// Recalcula el promedio y el número de calificaciones del repartidor
+async function recalcularRepartidor(usuarioId, t) {
+  await sequelize.query(
+    `UPDATE trepartidoresestado SET
+       calificacion = COALESCE((SELECT ROUND(AVG(puntuacion), 2) FROM tcalificaciones WHERE cusuario_repartidor = :id AND destino = 'REPARTIDOR'), 0),
+       numerocalificaciones = (SELECT COUNT(*) FROM tcalificaciones WHERE cusuario_repartidor = :id AND destino = 'REPARTIDOR')
+     WHERE cusuario = :id`,
+    { replacements: { id: usuarioId }, transaction: t },
+  );
+}
+
 async function calificar(usuario, id, { puntuacion, comentario, destino = 'negocio' }, req) {
   const p = await Pedido.findOne({ where: { id, clienteId: usuario.id } });
   if (!p) throw noEncontrado();
@@ -402,6 +550,7 @@ async function calificar(usuario, id, { puntuacion, comentario, destino = 'negoc
       negocioId: DESTINO === 'NEGOCIO' ? p.negocioId : null, repartidorId: DESTINO === 'REPARTIDOR' ? p.repartidorId : null,
     }, { transaction: t });
     if (DESTINO === 'NEGOCIO') await recalcularNegocio(p.negocioId, t);
+    else await recalcularRepartidor(p.repartidorId, t);
   }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'PEDIDOCALIFICADO', entidad: 'CALIFICACIONES', entidadId: id, detalle: { destino: DESTINO, puntuacion }, req });
@@ -419,5 +568,8 @@ async function metodosPago() {
 
 module.exports = {
   crear, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, metodosPago,
+  libresParaRepartidor, listarDelRepartidor, aceptar,
+  recoger: (usuario, id, req) => pasoRepartidor(usuario, id, E.RECOGIDO, req),
+  entregar: (usuario, id, req) => pasoRepartidor(usuario, id, E.ENTREGADO, req),
   aApi, cargar, distanciaKm,
 };

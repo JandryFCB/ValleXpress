@@ -1,216 +1,166 @@
 const { Op } = require('sequelize');
-const Repartidor = require('./repartidor.model');
-const Usuario = require('../auth/usuario.model');
-const Pedido = require('../pedidos/pedido.model');
-const Vendedor = require('../vendedores/vendedor.model');
-const PedidoService = require('../pedidos/pedido.service');
+const { Repartidor, RepartidorEstado, Ubicacion } = require('./repartidor.model');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
-const ArchivoService = require('../../shared/services/archivo.service');
-const CatalogoService = require('../../shared/services/catalogo.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
-const { auditar } = require('../../shared/services/log.service');
+const { auditar, logMensaje } = require('../../shared/services/log.service');
 const { normalizarPlaca } = require('../../shared/utils/normalizers');
-const { ESTADOPEDIDO: E, APROBACION, vehiculoACodigo } = require('../../shared/constants/codigos');
+const {
+  APROBACION, APROBACIONAAPI, TIPOVEHICULO, VEHICULOAAPI, APIAVEHICULO, VEHICULOSINPLACA, ESTADOPEDIDO: E, vehiculoACodigo,
+} = require('../../shared/constants/codigos');
 
-// Lógica de negocio de los repartidores. El controller solo llama a estos métodos.
-// Las acciones sobre un pedido (aceptar, recoger, entregar) las hace pedido.service: aquí no se duplican.
+// Lógica del REPARTIDOR: su perfil (vehículo y placa), estar en línea y su ubicación en vivo.
+// Las acciones sobre un pedido (aceptar, recoger, entregar) están en pedido.service: aquí no se duplican.
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
-const capitalizar = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : t);
-const DATOSPERSONA = ['id', 'nombre', 'apellido', 'telefono'];
-const ACTIVOS = [E.ENCAMINO, E.RECOGIDO];                             // entregas en curso
+const PLACA = /^[A-Z]{2,3}\d{3,4}[A-Z]?$/;
+const ENCURSO = [E.ENCAMINO, E.RECOGIDO];
+const INTERVALOGUARDADO = 15 * 1000;        // un punto del recorrido cada 15 s por pedido (el mapa en vivo va aparte)
 
-// El vehículo es texto libre en la app ("Moto"); la BD usa el catálogo TIPOVEHICULO. Si el texto no coincide con
-// ninguno, se guarda sin código y el texto original queda en DATOSEXTRA ("vehiculo=Patineta") para devolverlo igual.
-function vehiculoParaGuardar(texto) {
-  const codigo = vehiculoACodigo(texto);
-  const limpio = String(texto || '').trim();
-  return { vehiculo: codigo, datosExtra: codigo || !limpio ? null : `vehiculo=${limpio}`.slice(0, 250) };
-}
-async function vehiculoTexto(r) {
-  if (r.datosExtra && r.datosExtra.startsWith('vehiculo=')) return r.datosExtra.slice('vehiculo='.length);
-  return r.vehiculo ? capitalizar((await CatalogoService.mapa('tipovehiculo'))[r.vehiculo]) : null;
+// El vehículo puede llegar como texto de la API ('moto'), como lo escribe el registro ('Moto', 'Bicicleta') o como código
+function vehiculoDe(valor) {
+  const t = String(valor || '').trim().toLowerCase();
+  if (APIAVEHICULO[t]) return APIAVEHICULO[t];
+  if (Object.values(TIPOVEHICULO).includes(t)) return t;
+  return vehiculoACodigo(t);
 }
 
-// privado=true agrega el correo del propio repartidor; el público/otros roles no ven datos de contacto
-async function aApi(entrada, req, { privado = false } = {}) {
-  const lista = Array.isArray(entrada) ? entrada : [entrada];
-  const urls = await ArchivoService.mapaUrls(req, lista.map((r) => r.fotoId));
-  const salida = await Promise.all(lista.map(async (r) => ({
-    id: r.id,
-    usuarioId: r.usuarioId,
-    vehiculo: await vehiculoTexto(r),
-    vehiculoCodigo: r.vehiculo,
+// Valida y normaliza la placa según el vehículo (bici y a pie no llevan placa)
+function placaPara(vehiculo, placa) {
+  if (VEHICULOSINPLACA.includes(vehiculo)) return null;
+  const p = normalizarPlaca(placa);
+  if (!p) throw AppError.badRequest('Escribe la placa de tu vehículo', 'PLACAREQUERIDA');
+  if (!PLACA.test(p)) throw AppError.badRequest('La placa no es válida (ej: ABC-1234 o AB-123C)', 'PLACAINVALIDA');
+  return p;
+}
+
+async function exigirPlacaLibre(placa, usuarioId, opciones = {}) {
+  if (!placa) return;
+  const otro = await Repartidor.findOne({ where: { placa, usuarioId: { [Op.ne]: usuarioId } }, ...opciones });
+  if (otro) throw AppError.conflict('Esta placa ya está registrada por otro repartidor', 'PLACADUPLICADA');
+}
+
+function aApi(r) {
+  const e = r.estado || {};
+  return {
+    usuario: r.usuarioId,
+    nombre: r.usuario?.nombre,
+    apellido: r.usuario?.apellido,
+    vehiculo: VEHICULOAAPI[r.vehiculo],
     placa: r.placa,
-    licencia: r.licencia,
-    calificacionPromedio: num(r.calificacionPromedio),
-    totalCalificaciones: r.totalCalificaciones,
-    disponible: r.disponible,
-    enServicio: r.enServicio,
-    latitud: num(r.latitud),
-    longitud: num(r.longitud),
-    pedidosCompletados: r.pedidosCompletados,
-    foto: urls[r.fotoId]?.url || null,
-    aprobacion: r.aprobacion,
-    ...(r.usuario && { usuario: privado ? { id: r.usuario.id, nombre: r.usuario.nombre, apellido: r.usuario.apellido, email: r.usuario.email, telefono: r.usuario.telefono } : { id: r.usuario.id, nombre: r.usuario.nombre, apellido: r.usuario.apellido } }),
-  })));
-  return Array.isArray(entrada) ? salida : salida[0];
+    color: r.color,
+    aprobacion: APROBACIONAAPI[r.aprobacion],
+    disponible: e.disponible === true,
+    calificacion: num(e.calificacion) ?? 0,
+    numeroCalificaciones: e.numeroCalificaciones ?? 0,
+    numeroEntregas: e.numeroEntregas ?? 0,
+    ubicacion: e.latitud != null ? { latitud: num(e.latitud), longitud: num(e.longitud), fecha: e.ubicacionEn } : null,
+  };
 }
 
-const INCLUIR = [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'apellido', 'email', 'telefono'] }];
+const INCLUIR = [{ model: RepartidorEstado, as: 'estado' }, { association: 'usuario', attributes: ['id', 'nombre', 'apellido'] }];
+const cargar = (usuarioId, opciones = {}) => Repartidor.findOne({ where: { usuarioId }, include: INCLUIR, ...opciones });
 
-async function delUsuario(usuarioId, mensaje = 'Repartidor no encontrado', opciones = {}) {
-  const r = await Repartidor.findOne({ where: { id: usuarioId }, include: INCLUIR, ...opciones });
-  if (!r) throw AppError.notFound(mensaje, 'REPARTIDORNOENCONTRADO');
+async function exigirPerfil(usuarioId, opciones = {}) {
+  const r = await cargar(usuarioId, opciones);
+  if (!r) throw AppError.notFound('Aún no tienes tu perfil de repartidor', 'REPARTIDORNOENCONTRADO');
   return r;
 }
-const exigirAprobado = (r) => {
-  if (r.aprobacion !== APROBACION.APROBADO) throw AppError.forbidden('Tu cuenta de repartidor aún no está aprobada', 'REPARTIDORNOAPROBADO');
-};
 
-// Crea el perfil de repartidor (lo usa el registro y POST /repartidores). La licencia es opcional: se completa luego.
-async function crearPerfil(usuarioId, datos, { transaction } = {}) {
-  const estado = await ConfiguracionService.aprobacionInicial();
+function exigirAprobado(r) {
+  if (r.aprobacion !== APROBACION.APROBADO) throw AppError.forbidden('Tu cuenta de repartidor aún no está aprobada', 'REPARTIDORNOAPROBADO');
+}
+
+// ---------------------------------------------------------------------------------------------
+// Perfil
+// ---------------------------------------------------------------------------------------------
+// Lo usa el registro (dentro de su transacción) y POST /api/repartidor. Mientras no haya panel de administración,
+// nace aprobado si APROBACIONAUTOMATICA está activa (igual que los negocios).
+async function crearPerfil(usuarioId, datos, opciones = {}) {
+  const vehiculo = vehiculoDe(datos.vehiculo) || (datos.placa ? TIPOVEHICULO.MOTOCICLETA : TIPOVEHICULO.APIE);
+  const placa = placaPara(vehiculo, datos.placa);
+  await exigirPlacaLibre(placa, usuarioId, opciones);
+  const automatica = (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true;
   return Repartidor.create({
-    id: usuarioId,
-    ...vehiculoParaGuardar(datos.vehiculo),
-    placa: datos.placa ? normalizarPlaca(datos.placa) : null,
-    licencia: datos.licencia ? String(datos.licencia).trim().toUpperCase() : null,
-    disponible: false,
-    aprobacion: estado.aprobacion,
-    aprobadoEn: estado.aprobadoEn,
-    creadoPor: usuarioId,
-  }, { transaction });
+    usuarioId,
+    vehiculo,
+    placa,
+    color: datos.color?.trim() || null,
+    aprobacion: automatica ? APROBACION.APROBADO : APROBACION.PENDIENTE,
+    aprobadoEn: automatica ? new Date() : null,
+  }, opciones);
 }
 
 async function crear(usuarioId, datos, req) {
-  if (await Repartidor.findOne({ where: { id: usuarioId } })) throw AppError.conflict('Ya tienes un perfil de repartidor registrado', 'REPARTIDOREXISTENTE');
-  const placa = normalizarPlaca(datos.placa);
-  if (await Repartidor.findOne({ where: { placa }, paranoid: false })) throw AppError.conflict('Esta placa ya está registrada por otro repartidor', 'PLACADUPLICADA');
-  const nuevo = await withTransaction((t) => crearPerfil(usuarioId, datos, { transaction: t }), { usuarioId });
-  auditar({ usuarioId, accion: 'REPARTIDORCREADO', entidad: 'TREPARTIDORES', entidadId: nuevo.id, req });
-  return { repartidor: await aApi(await delUsuario(usuarioId), req, { privado: true }) };
+  if (await cargar(usuarioId)) throw AppError.conflict('Ya tienes tu perfil de repartidor', 'REPARTIDOREXISTENTE');
+  await withTransaction((t) => crearPerfil(usuarioId, datos, { transaction: t }), { usuarioId });
+  auditar({ usuarioId, accion: 'REPARTIDORCREADO', entidad: 'REPARTIDORES', entidadId: usuarioId, req });
+  return aApi(await cargar(usuarioId));
 }
 
-const miPerfil = async (usuarioId, req) =>
-  ({ repartidor: await aApi(await delUsuario(usuarioId, 'No tienes un perfil de repartidor registrado'), req, { privado: true }) });
+const miPerfil = async (usuarioId) => aApi(await exigirPerfil(usuarioId));
 
 async function actualizar(usuarioId, datos, req) {
-  const r = await delUsuario(usuarioId);
-  const cambios = { actualizadoPor: usuarioId };
-  if (datos.vehiculo) Object.assign(cambios, vehiculoParaGuardar(datos.vehiculo));
-  if (datos.placa) {
-    const placa = normalizarPlaca(datos.placa);
-    if (placa !== r.placa && await Repartidor.findOne({ where: { placa }, paranoid: false })) {
-      throw AppError.conflict('Esta placa ya está registrada por otro repartidor', 'PLACADUPLICADA');
-    }
-    cambios.placa = placa;
-  }
-  if (datos.licencia) cambios.licencia = String(datos.licencia).trim().toUpperCase();
+  const r = await exigirPerfil(usuarioId);
+  const vehiculo = datos.vehiculo !== undefined ? vehiculoDe(datos.vehiculo) : r.vehiculo;
+  if (!vehiculo) throw AppError.badRequest('Tipo de vehículo inválido', 'VEHICULOINVALIDO');
+  const placa = placaPara(vehiculo, datos.placa !== undefined ? datos.placa : r.placa);
+  await exigirPlacaLibre(placa, usuarioId);
+  const cambios = { vehiculo, placa };
+  if (datos.color !== undefined) cambios.color = datos.color?.trim() || null;
   await withTransaction((t) => r.update(cambios, { transaction: t }), { usuarioId });
-  auditar({ usuarioId, accion: 'REPARTIDORACTUALIZADO', entidad: 'TREPARTIDORES', entidadId: r.id, req });
-  return { repartidor: await aApi(await delUsuario(usuarioId), req, { privado: true }) };
+  auditar({ usuarioId, accion: 'REPARTIDORACTUALIZADO', entidad: 'REPARTIDORES', entidadId: usuarioId, detalle: cambios, req });
+  return aApi(await cargar(usuarioId));
 }
 
-async function cambiarFoto(usuarioId, base64, req) {
-  const r = await delUsuario(usuarioId);
-  const archivo = await ArchivoService.guardarBase64({ base64, categoria: 'PERFIL', propietario: usuarioId });
-  await withTransaction((t) => r.update({ fotoId: archivo.id, actualizadoPor: usuarioId }, { transaction: t }), { usuarioId });
-  return (await ArchivoService.mapaUrls(req, [archivo.id]))[archivo.id].url;
-}
-
-// Disponible = quiere recibir avisos de pedidos listos. Solo un repartidor aprobado puede activarlo.
+// En línea = recibe avisos de pedidos listos y puede aceptarlos. Solo un repartidor aprobado puede conectarse.
 async function cambiarDisponibilidad(usuarioId, disponible, req) {
-  const r = await delUsuario(usuarioId);
+  const r = await exigirPerfil(usuarioId);
   if (disponible) exigirAprobado(r);
-  await withTransaction((t) => r.update({ disponible, actualizadoPor: usuarioId }, { transaction: t }), { usuarioId });
-  return { disponible, repartidor: await aApi(r, req, { privado: true }) };
+  await RepartidorEstado.update({ disponible, ultimoCambio: new Date() }, { where: { usuarioId } });
+  auditar({ usuarioId, accion: disponible ? 'REPARTIDORENLINEA' : 'REPARTIDORFUERADELINEA', entidad: 'REPARTIDORES', entidadId: usuarioId, req });
+  return aApi(await cargar(usuarioId));
 }
 
-// Posición actual (por REST). Se avisa SOLO a quienes siguen sus entregas en curso (sala del pedido); antes se
-// emitía a TODOS los clientes conectados.
-async function actualizarUbicacion(usuarioId, { latitud, longitud }, req) {
-  const r = await delUsuario(usuarioId);
-  await r.update({ latitud: Number(latitud), longitud: Number(longitud), ubicacionEn: new Date() });    // columnas volátiles: no generan versiones
-  if (req.io) {
-    const activos = await Pedido.findAll({ where: { repartidorId: r.id, estado: { [Op.in]: ACTIVOS } }, attributes: ['id'] });
-    for (const p of activos) req.io.to(`pedido:${p.id}`).emit('pedido:ubicacion', { pedidoId: p.id, lat: Number(latitud), lng: Number(longitud), ts: Date.now(), repartidorUsuarioId: usuarioId, source: 'live' });
+// ---------------------------------------------------------------------------------------------
+// Ubicación en vivo
+// ---------------------------------------------------------------------------------------------
+const ultimoGuardado = new Map();       // pedido -> momento del último punto guardado
+
+// Guarda la posición actual y la reenvía SOLO al cliente y al dueño del negocio de sus entregas en curso.
+// Cada 15 s deja además un punto del recorrido. Devuelve cuántas entregas en curso recibieron la ubicación.
+async function registrarUbicacion(usuarioId, { lat, lng, precision, velocidad, rumbo }, io) {
+  const ahora = new Date();
+  await RepartidorEstado.update({ latitud: lat, longitud: lng, ubicacionEn: ahora }, { where: { usuarioId } });
+
+  const { Pedido } = require('../pedidos/pedido.model');         // perezoso: pedido.model también usa este módulo
+  const { Negocio } = require('../negocios/negocio.model');
+  const entregas = await Pedido.findAll({
+    where: { repartidorId: usuarioId, estado: { [Op.in]: ENCURSO } },
+    attributes: ['id', 'clienteId', 'negocioId'],
+    include: [{ model: Negocio, as: 'negocio', attributes: ['id', 'duenoId'] }],
+  });
+  const velocidadKmh = velocidad != null ? Math.max(0, Number(velocidad) * 3.6) : null;   // el GPS la da en m/s
+  for (const p of entregas) {
+    const evento = { pedidoId: Number(p.id), latitud: lat, longitud: lng, rumbo: rumbo ?? null, velocidadKmh, fecha: ahora };
+    if (io) for (const u of [p.clienteId, p.negocio?.duenoId, usuarioId]) io.to(`user:${u}`).emit('pedido:ubicacion', evento);
+    if (Date.now() - (ultimoGuardado.get(String(p.id)) || 0) >= INTERVALOGUARDADO) {
+      ultimoGuardado.set(String(p.id), Date.now());
+      Ubicacion.create({ usuarioId, pedidoId: p.id, latitud: lat, longitud: lng, precision: precision ?? null, velocidadKmh, rumbo: rumbo ?? null })
+        .catch((e) => logMensaje({ nivel: 'ADVERTENCIA', modulo: 'REPARTIDORES', accion: 'UBICACIONNOGUARDADA', mensaje: 'No se pudo guardar el punto del recorrido', detalle: { error: e.message }, usuarioId, pedidoId: p.id }));
+    }
   }
-  return { latitud: Number(latitud), longitud: Number(longitud) };
+  if (ultimoGuardado.size > 1000) ultimoGuardado.clear();
+  return { entregas: entregas.length };
 }
 
-// Solo ve dónde está un repartidor: él mismo, o el cliente o el vendedor de un pedido SUYO que va en curso.
-async function ubicacion(usuario, repartidorId) {
-  const r = await Repartidor.findOne({ where: { id: repartidorId }, attributes: ['id', 'latitud', 'longitud'] });
-  let permitido = !!r && r.usuarioId === usuario.id;
-  if (r && !permitido) {
-    const entrega = await Pedido.findOne({
-      where: { repartidorId: r.id, estado: { [Op.in]: ACTIVOS } },
-      include: [{ model: Vendedor, as: 'vendedor', attributes: ['id'] }],
-    });
-    permitido = !!entrega && (entrega.clienteId === usuario.id || entrega.vendedor?.usuarioId === usuario.id);
-  }
-  if (!permitido) throw AppError.notFound('Repartidor no encontrado', 'REPARTIDORNOENCONTRADO');
-  if (r.latitud == null || r.longitud == null) throw AppError.notFound('Ubicación no disponible', 'UBICACIONNODISPONIBLE');
-  return { repartidorId: r.id, lat: num(r.latitud), lng: num(r.longitud) };
-}
-
-// ---- Pedidos desde el punto de vista del repartidor ----
-async function pedidos(where, usuarioId, req, { ocultarCliente = false, limite = 200 } = {}) {
-  const lista = await Pedido.findAll({ where, include: PedidoService.INCLUIR, order: PedidoService.ORDEN, limit: limite });
-  return { lista: await PedidoService.aApi(lista, req, { ocultarCliente }), usuarioId };
-}
-
-// Pedidos LISTOS sin repartidor (sin el teléfono del cliente hasta que acepte)
-async function pendientes(usuarioId, req) {
-  exigirAprobado(await delUsuario(usuarioId));
-  return { pedidos: (await pedidos({ estado: E.LISTO, repartidorId: null }, usuarioId, req, { ocultarCliente: true })).lista };
-}
-
-// Pedidos que se están preparando (aviso anticipado para el repartidor)
-async function pedidosVista(usuarioId, req) {
-  exigirAprobado(await delUsuario(usuarioId));
-  return { pedidos: (await pedidos({ estado: { [Op.in]: [E.CONFIRMADO, E.PREPARANDO] } }, usuarioId, req, { ocultarCliente: true })).lista };
-}
-
-async function misPedidos(usuarioId, req) {
-  const r = await delUsuario(usuarioId);
-  return { pedidos: (await pedidos({ repartidorId: r.id }, usuarioId, req)).lista };
-}
-
-async function entregasActivas(usuarioId, req) {
-  const r = await delUsuario(usuarioId);
-  return { entregas: (await pedidos({ repartidorId: r.id, estado: { [Op.in]: ACTIVOS } }, usuarioId, req)).lista };
-}
-
-// Ruta heredada PUT /pedidos/:id/estado { estado: 'en_camino' | 'entregado' }. Con el flujo actual el repartidor ya
-// queda "en camino" al aceptar, así que 'en_camino' significa "recogí el pedido y voy hacia el cliente" (recogido).
-async function cambiarEstadoPedido(usuario, id, estado, req) {
-  const pedidoAntes = await Pedido.findOne({ where: { id }, attributes: ['id', 'estado', 'repartidorId'], include: [{ model: Repartidor, as: 'repartidor', attributes: ['usuarioId'] }] });
-  if (!pedidoAntes || pedidoAntes.repartidor?.usuarioId !== usuario.id) throw AppError.notFound('Pedido no encontrado', 'PEDIDONOENCONTRADO');
-
-  if (estado === 'en_camino' && pedidoAntes.estado === E.ENCAMINO) await PedidoService.marcarRecogido(usuario, id, req);
-  else if (estado === 'entregado') await PedidoService.marcarEntregado(usuario, id, req);
-  else if (!(estado === 'en_camino' && pedidoAntes.estado === E.RECOGIDO)) {      // ya estaba recogido: no hay nada que hacer
-    throw AppError.conflict('El pedido no puede pasar a ese estado desde su estado actual', 'TRANSICIONINVALIDA');
-  }
-  return { pedido: await PedidoService.aApi(await PedidoService.cargar(id), req) };
-}
-
-// Solo vendedores (y administradores): repartidores disponibles, sin datos de contacto
-async function listarDisponibles(req) {
-  const lista = await Repartidor.findAll({ where: { disponible: true, aprobacion: APROBACION.APROBADO, activo: true }, include: [{ model: Usuario, as: 'usuario', attributes: ['id', 'nombre', 'apellido'] }] });
-  return { repartidores: await aApi(lista, req) };
-}
-
-// Solo administradores: todos los repartidores con datos de contacto
-async function listar(req) {
-  const lista = await Repartidor.findAll({ include: INCLUIR, order: [['creadoEn', 'DESC']] });
-  return { repartidores: await aApi(lista, req, { privado: true }) };
+// Recorrido guardado de una entrega (para dibujar la ruta)
+async function recorrido(pedidoId) {
+  const puntos = await Ubicacion.findAll({ where: { pedidoId }, order: [['registradoEn', 'ASC']], attributes: ['latitud', 'longitud', 'registradoEn'], limit: 500 });
+  return puntos.map((u) => ({ latitud: num(u.latitud), longitud: num(u.longitud), fecha: u.registradoEn }));
 }
 
 module.exports = {
-  crearPerfil, crear, miPerfil, actualizar, cambiarFoto, cambiarDisponibilidad, actualizarUbicacion, ubicacion,
-  pendientes, pedidosVista, misPedidos, entregasActivas, cambiarEstadoPedido, listarDisponibles, listar,
+  crearPerfil, crear, miPerfil, actualizar, cambiarDisponibilidad, registrarUbicacion, recorrido,
+  exigirPerfil, exigirAprobado, cargar, aApi, vehiculoDe, ENCURSO,
 };

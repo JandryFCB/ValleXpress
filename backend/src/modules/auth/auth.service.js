@@ -11,6 +11,7 @@ const CodigoService = require('../../shared/services/codigo.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const ArchivoService = require('../../shared/services/archivo.service');
 const NegocioService = require('../negocios/negocio.service');
+const RepartidorService = require('../repartidores/repartidor.service');
 const { logMensaje, auditar } = require('../../shared/services/log.service');
 const { hashClave, compararClave, HASHRELLENO } = require('../../shared/utils/clave');
 const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
@@ -120,6 +121,10 @@ async function registrar(datos, req) {
     // El vendedor nace con su negocio (nombre y categoría; el resto lo completa en "Mi negocio")
     if (tipo === 'vendedor' && datos.nombreNegocio?.trim()) {
       await NegocioService.crearParaUsuario(nueva.id, { nombre: datos.nombreNegocio, categoria: datos.categoriaNegocio }, { transaction: t });
+    }
+    // El repartidor nace con su perfil de reparto (vehículo y placa; la placa se valida según el vehículo)
+    if (tipo === 'repartidor' && datos.vehiculo) {
+      await RepartidorService.crearPerfil(nueva.id, { vehiculo: datos.vehiculo, placa: datos.placa }, { transaction: t });
     }
 
     // 4) El código de verificación queda consumido (no sirve para registrar otra cuenta)

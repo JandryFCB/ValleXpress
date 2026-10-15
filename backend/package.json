@@ -9,11 +9,9 @@
     "test:auth": "node test/auth.e2e.js",
     "test:cuenta": "node test/cuenta.e2e.js",
     "test:catalogo": "node test/catalogo.e2e.js",
-    "test:tienda": "node test/tienda.e2e.js",
     "test:pedidos": "node test/pedidos.e2e.js",
-    "test": "npm run test:auth && npm run test:cuenta && npm run test:catalogo && npm run test:pedidos",
-    "test:repartidores": "node test/repartidores.e2e.js",
-    "test:identidad": "node test/identidad.e2e.js"
+    "test": "npm run test:auth && npm run test:cuenta && npm run test:catalogo && npm run test:pedidos && npm run test:repartidores",
+    "test:repartidores": "node test/repartidores.e2e.js"
   },
   "keywords": [
     "delivery",
