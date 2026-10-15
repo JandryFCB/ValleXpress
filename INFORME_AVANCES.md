@@ -7,7 +7,7 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 
 ## Estado actual
 
-**Reconstrucción desde cero por flujos** · Flujos 1 (Cuenta) y 2 (Catálogo) **hechos** · Siguiente: Flujo 3 (Pedidos del cliente) · Última actualización: 2026-10-14
+**Reconstrucción desde cero por flujos** · Flujos 1 (Cuenta), 2 (Catálogo) y 3 (Pedidos del cliente) **hechos** · Siguiente: Flujo 4 (Vendedor y repartidor) · Última actualización: 2026-10-14
 
 > El 2026-10-12 se borró el esquema anterior (v2/V3) y la BD se rehízo con el patrón T de `PATRON_TABLAS_FITBANK.md`,
 > por bloques (`database/migraciones`). Los bloques 1 a 13 de abajo describen el esquema ANTERIOR: quedan como historial.
@@ -15,8 +15,8 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 
 | Área | Estado |
 |---|---|
-| Ramas: `main` (estable), `desarrollo`, `feat/bd-desde-cero`, `feat/app-sesion`, `feat/flujo-cuenta`, `feat/flujo-catalogo` | Hecho, todo subido a GitHub |
-| BD nueva: migraciones 000 a 006 (41 tablas + vista `VUSUARIOS`), PostgreSQL 17 en Docker | **Hecha y probada** |
+| Ramas: `main` (estable), `desarrollo`, `feat/bd-desde-cero`, `feat/app-sesion`, `feat/flujo-cuenta`, `feat/flujo-catalogo`, `feat/flujo-pedidos` | Hecho, todo subido a GitHub |
+| BD nueva: migraciones 000 a 007 (50 tablas + vista `VUSUARIOS`), PostgreSQL 17 en Docker | **Hecha y probada** |
 | Sesión persistente (token 15 min + refresh token 90 días con rotación) | **Hecha y probada** (backend y app, también en el móvil) |
 | Backend **auth** | **Hecho: 104 pruebas** |
 | Backend **direcciones y teléfonos** | **Hecho: 71 pruebas** |
@@ -24,9 +24,17 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 | App rediseñada: login, registro (4 pasos), recuperar clave, perfil, direcciones con mapa, teléfonos, configuración | **Hecho: 24 pruebas**, verificado en el móvil |
 | Backend **negocios, horarios, productos, inventario e imágenes** (+ foto de perfil real) | **Hecho: 72 pruebas** (total 247) |
 | App: explorar negocios y su menú (cliente); mi negocio, horario y productos (vendedor) | **Hecho**, verificado en el móvil |
-| Flujo 3 · Pedidos del cliente: carrito, pedido, seguimiento en vivo, calificaciones, notificaciones | Pendiente |
+| Backend **pedidos, calificaciones y notificaciones** (+ avisos en vivo por socket) | **Hecho: 79 pruebas** (total 326) |
+| App: inicio nuevo del cliente, carrito, pedido, seguimiento en vivo, recibir, calificar, avisos | **Hecho: 7 pruebas nuevas**, verificado en el móvil |
 | Flujo 4 · Vendedor y repartidor: gestión de pedidos, repartidores, rutas | Pendiente |
 | Antes de producción (claves, HTTPS, almacenamiento de imágenes) y reglas de negocio (IVA, comisión, envío) | Pendiente |
+
+### Bloque 16 (2026-10-14): flujo Pedidos del cliente
+- Migración 007: estatus de pedido y métodos de pago (con cuáles están activos), `TPEDIDOS` histórica (cada cambio de estado deja su versión: de ahí sale la hora de cada paso del seguimiento), detalle con el precio de ese momento, calificaciones y notificaciones.
+- Reglas del servidor: negocio abierto (interruptor + horario) y aceptando pedidos, dirección propia y dentro del radio de entrega, pedido mínimo, solo productos disponibles, stock descontado de forma atómica y devuelto al cancelar o rechazar, montos siempre de la BD.
+- El negocio confirma (con tiempo estimado), prepara, deja listo o rechaza; el cliente cancela mientras está pendiente, confirma que lo recibió y califica. Cada paso avisa al otro por socket y queda en su lista de avisos.
+- App: inicio nuevo del cliente con pestañas, carrito de un solo negocio, seguimiento en vivo, mis pedidos y avisos. Probado en el móvil de punta a punta.
+- Corregido en la prueba: el cliente de Socket.IO de Flutter entrega los datos dentro de una lista y se descartaban sin error (los avisos no llegaban).
 
 ### Bloque 15 (2026-10-14): flujo Catálogo
 - Migración 006: archivos (imágenes), categorías de negocio, negocios con código propio y dueño, estado abierto/acepta pedidos, horario semanal (cruza medianoche), productos con historial e inventario aparte.
