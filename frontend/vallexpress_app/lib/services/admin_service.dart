@@ -1,0 +1,120 @@
+import 'dart:convert';
+import '../config/constants.dart';
+import '../models/admin.dart';
+import '../models/pedido.dart';
+import 'api_error.dart';
+import 'api_http.dart' as http;
+import 'session_store.dart';
+
+/// Panel del administrador (/api/admin): resumen, aprobaciones, pedidos, usuarios y configuración.
+class AdminService {
+  static Future<Map<String, String>> _cabeceras() async {
+    final token = await SessionStore.accessToken();
+    if (token == null || token.isEmpty) throw Exception('Tu sesión no está activa. Inicia sesión de nuevo.');
+    return {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'};
+  }
+
+  static Uri _url(String ruta, [Map<String, String?>? query]) {
+    final q = {for (final e in (query ?? {}).entries) if (e.value != null && e.value!.isNotEmpty) e.key: e.value!};
+    return Uri.parse('${AppConstants.baseUrl}/admin$ruta').replace(queryParameters: q.isEmpty ? null : q);
+  }
+
+  static Map<String, dynamic> _json(http.Response res, String error) {
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, error));
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Pagina<T> _pagina<T>(Map<String, dynamic> datos, String clave, T Function(Map<String, dynamic>) leer) => Pagina(
+        (datos[clave] as List).map((e) => leer(Map<String, dynamic>.from(e))).toList(),
+        hayMas: datos['pagination']?['hasNext'] == true,
+        total: (datos['pagination']?['total'] as num?)?.toInt() ?? 0,
+      );
+
+  static Future<ResumenAdmin> resumen() async =>
+      ResumenAdmin.desdeJson(_json(await http.get(_url('/resumen'), headers: await _cabeceras()), 'No se pudo cargar el resumen'));
+
+  // --- Negocios y repartidores ---
+  static Future<Pagina<NegocioAdmin>> negocios({String? aprobacion, String? busqueda, int pagina = 1}) async {
+    final res = await http.get(_url('/negocios', {'aprobacion': aprobacion, 'q': busqueda?.trim(), 'page': '$pagina'}), headers: await _cabeceras());
+    return _pagina(_json(res, 'No se pudieron cargar los negocios'), 'negocios', NegocioAdmin.desdeJson);
+  }
+
+  /// estado: 'aprobado' | 'rechazado' | 'suspendido' | 'pendiente'. Rechazar o suspender exige el motivo.
+  static Future<NegocioAdmin> aprobacionNegocio(int id, String estado, {String? motivo}) async {
+    final res = await http.patch(_url('/negocios/$id/aprobacion'), headers: await _cabeceras(), body: jsonEncode({'estado': estado, if (motivo != null) 'motivo': motivo}));
+    return NegocioAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo cambiar la aprobación')['negocio']));
+  }
+
+  static Future<Pagina<RepartidorAdmin>> repartidores({String? aprobacion, String? busqueda, int pagina = 1}) async {
+    final res = await http.get(_url('/repartidores', {'aprobacion': aprobacion, 'q': busqueda?.trim(), 'page': '$pagina'}), headers: await _cabeceras());
+    return _pagina(_json(res, 'No se pudieron cargar los repartidores'), 'repartidores', RepartidorAdmin.desdeJson);
+  }
+
+  static Future<RepartidorAdmin> aprobacionRepartidor(String usuario, String estado, {String? motivo}) async {
+    final res = await http.patch(_url('/repartidores/$usuario/aprobacion'), headers: await _cabeceras(), body: jsonEncode({'estado': estado, if (motivo != null) 'motivo': motivo}));
+    return RepartidorAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo cambiar la aprobación')['repartidor']));
+  }
+
+  // --- Pedidos ---
+  /// estado: 'activos' | 'historial' | null (todos)
+  static Future<Pagina<Pedido>> pedidos({String? estado, int pagina = 1}) async {
+    final res = await http.get(_url('/pedidos', {'estado': estado, 'page': '$pagina'}), headers: await _cabeceras());
+    return _pagina(_json(res, 'No se pudieron cargar los pedidos'), 'pedidos', Pedido.desdeJson);
+  }
+
+  static Future<Pedido> pedido(int id) async =>
+      Pedido.desdeJson(Map<String, dynamic>.from(_json(await http.get(_url('/pedidos/$id'), headers: await _cabeceras()), 'No se pudo cargar el pedido')['pedido']));
+
+  static Future<Pedido> cancelarPedido(int id, String motivo) async {
+    final res = await http.patch(_url('/pedidos/$id/cancelar'), headers: await _cabeceras(), body: jsonEncode({'motivo': motivo.trim()}));
+    return Pedido.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo cancelar el pedido')['pedido']));
+  }
+
+  // --- Usuarios ---
+  static Future<Pagina<UsuarioAdmin>> usuarios({String? rol, String? busqueda, int pagina = 1}) async {
+    final res = await http.get(_url('/usuarios', {'rol': rol, 'q': busqueda?.trim(), 'page': '$pagina'}), headers: await _cabeceras());
+    return _pagina(_json(res, 'No se pudieron cargar los usuarios'), 'usuarios', UsuarioAdmin.desdeJson);
+  }
+
+  /// Bloquear (activo = false) exige el motivo; se cierran todas sus sesiones.
+  static Future<UsuarioAdmin> cambiarEstadoUsuario(String usuario, {required bool activo, String? motivo}) async {
+    final res = await http.patch(_url('/usuarios/$usuario/estado'), headers: await _cabeceras(), body: jsonEncode({'activo': activo, if (motivo != null) 'motivo': motivo}));
+    return UsuarioAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo cambiar el estado de la cuenta')['usuario']));
+  }
+
+  static UsuarioAdmin _usuario(http.Response res, String error) => UsuarioAdmin.desdeJson(Map<String, dynamic>.from(_json(res, error)['usuario']));
+
+  static Future<UsuarioAdmin> usuario(String usuario) async => _usuario(await http.get(_url('/usuarios/$usuario'), headers: await _cabeceras()), 'No se pudo cargar la cuenta');
+
+  /// Crea una cuenta de cualquier rol. datos: nombre, apellido, email, cedula, telefono, password, rol y, según el rol,
+  /// nombreNegocio/categoriaNegocio (vendedor) o vehiculo/placa/color (repartidor).
+  static Future<UsuarioAdmin> crearUsuario(Map<String, dynamic> datos) async {
+    final res = await http.post(_url('/usuarios'), headers: await _cabeceras(), body: jsonEncode(datos));
+    if (res.statusCode != 201) throw Exception(mensajeDeError(res, 'No se pudo crear la cuenta'));
+    return UsuarioAdmin.desdeJson(Map<String, dynamic>.from(jsonDecode(res.body)['usuario']));
+  }
+
+  static Future<UsuarioAdmin> editarUsuario(String usuario, Map<String, dynamic> cambios) async =>
+      _usuario(await http.put(_url('/usuarios/$usuario'), headers: await _cabeceras(), body: jsonEncode(cambios)), 'No se pudieron guardar los cambios');
+
+  static Future<UsuarioAdmin> ponerClave(String usuario, String clave) async =>
+      _usuario(await http.put(_url('/usuarios/$usuario/clave'), headers: await _cabeceras(), body: jsonEncode({'clave': clave})), 'No se pudo cambiar la contraseña');
+
+  static Future<UsuarioAdmin> fotoUsuario(String usuario, String base64) async =>
+      _usuario(await http.put(_url('/usuarios/$usuario/foto'), headers: await _cabeceras(), body: jsonEncode({'imagen': base64})), 'No se pudo subir la foto');
+
+  /// Dar de baja: la cuenta queda inactiva (no se borra su historial) y se puede reactivar
+  static Future<UsuarioAdmin> darDeBaja(String usuario, String motivo) async =>
+      _usuario(await http.delete(_url('/usuarios/$usuario'), headers: await _cabeceras(), body: jsonEncode({'motivo': motivo})), 'No se pudo dar de baja la cuenta');
+
+  static Future<RepartidorAdmin> editarRepartidor(String usuario, {required String vehiculo, String? placa, String? color}) async {
+    final res = await http.put(_url('/repartidores/$usuario'), headers: await _cabeceras(), body: jsonEncode({'vehiculo': vehiculo, 'placa': placa, 'color': color}));
+    return RepartidorAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo guardar el vehículo')['repartidor']));
+  }
+
+  // --- Configuración ---
+  static Future<bool> cambiarAprobacionAutomatica(bool activa) async {
+    final res = await http.put(_url('/configuracion'), headers: await _cabeceras(), body: jsonEncode({'aprobacionAutomatica': activa}));
+    return _json(res, 'No se pudo guardar la configuración')['aprobacionAutomatica'] == true;
+  }
+}

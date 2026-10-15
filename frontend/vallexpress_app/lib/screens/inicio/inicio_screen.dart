@@ -11,6 +11,7 @@ import '../../services/tiempo_real.dart';
 import '../../widgets/ui/ui.dart';
 import '../catalogo/negocio_detalle_screen.dart';
 import '../catalogo/negocios_screen.dart';
+import '../admin/inicio_admin_screen.dart';
 import '../repartidor/inicio_repartidor_screen.dart';
 import '../vendedor/inicio_vendedor_screen.dart';
 import '../pedidos/avisos_screen.dart';
@@ -29,6 +30,7 @@ class InicioScreen extends StatelessWidget {
     return switch (rol) {
       'vendedor' => const InicioVendedorScreen(),
       'repartidor' => const InicioRepartidorScreen(),
+      'administrador' => const InicioAdminScreen(),
       _ => const InicioClienteScreen(),
     };
   }

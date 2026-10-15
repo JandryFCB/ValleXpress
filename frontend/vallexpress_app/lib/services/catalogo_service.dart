@@ -11,6 +11,26 @@ import 'session_store.dart';
 ///   * Del vendedor (su negocio):     /api/mi-negocio
 /// Reemplaza a los servicios viejos vendedor_service y product_service.
 class CatalogoService {
+  /// Negocio que el administrador está gestionando (null = el vendedor gestiona el suyo).
+  static int? _gestionando;
+
+  // Las rutas de gestión son las mismas para el vendedor y para el administrador; cambia solo la base
+  static String get _base => _gestionando == null ? '/mi-negocio' : '/admin/negocios/$_gestionando/gestion';
+
+  /// El administrador abre las pantallas del vendedor (Mi negocio, productos, horario) sobre otro negocio:
+  ///     await CatalogoService.gestionarComoAdmin(negocioId, () => Navigator.push(...));
+  /// Mientras la acción no termina, todas las llamadas de "mi negocio" van a ese negocio.
+  static Future<T> gestionarComoAdmin<T>(int negocioId, Future<T> Function() accion) async {
+    _gestionando = negocioId;
+    try {
+      return await accion();
+    } finally {
+      _gestionando = null;
+    }
+  }
+
+  static bool get gestionandoComoAdmin => _gestionando != null;
+
   static Future<Map<String, String>> _cabeceras() async {
     final token = await SessionStore.accessToken();
     if (token == null || token.isEmpty) throw Exception('Tu sesión no está activa. Inicia sesión de nuevo.');
@@ -67,34 +87,34 @@ class CatalogoService {
   // -------------------------------------------------------------------------------------------
   /// El negocio del vendedor, o null si todavía no tiene uno
   static Future<Negocio?> miNegocio() async {
-    final res = await http.get(_url('/mi-negocio'), headers: await _cabeceras());
+    final res = await http.get(_url(_base), headers: await _cabeceras());
     if (res.statusCode == 404) return null;
     return _negocio(res);
   }
 
   static Future<Negocio> crearNegocio({required String nombre, required String categoria, String? descripcion}) async => _negocio(
-        await http.post(_url('/mi-negocio'), headers: await _cabeceras(), body: jsonEncode({'nombre': nombre, 'categoria': categoria, 'descripcion': descripcion})),
+        await http.post(_url(_base), headers: await _cabeceras(), body: jsonEncode({'nombre': nombre, 'categoria': categoria, 'descripcion': descripcion})),
         201,
       );
 
   static Future<Negocio> actualizarNegocio(Map<String, dynamic> cambios) async =>
-      _negocio(await http.put(_url('/mi-negocio'), headers: await _cabeceras(), body: jsonEncode(cambios)));
+      _negocio(await http.put(_url(_base), headers: await _cabeceras(), body: jsonEncode(cambios)));
 
   static Future<Negocio> fijarLocal({required String direccion, String? referencia, required double latitud, required double longitud}) async => _negocio(
         await http.put(
-          _url('/mi-negocio/local'),
+          _url('$_base/local'),
           headers: await _cabeceras(),
           body: jsonEncode({'direccion': direccion, 'referencia': referencia, 'latitud': latitud, 'longitud': longitud}),
         ),
       );
 
   static Future<Negocio> fijarHorarios(List<HorarioDia> horarios) async => _negocio(
-        await http.put(_url('/mi-negocio/horarios'), headers: await _cabeceras(), body: jsonEncode({'horarios': horarios.map((h) => h.aJson()).toList()})),
+        await http.put(_url('$_base/horarios'), headers: await _cabeceras(), body: jsonEncode({'horarios': horarios.map((h) => h.aJson()).toList()})),
       );
 
   static Future<Negocio> cambiarEstado({bool? abierto, bool? aceptaPedidos}) async => _negocio(
         await http.patch(
-          _url('/mi-negocio/estado'),
+          _url('$_base/estado'),
           headers: await _cabeceras(),
           body: jsonEncode({if (abierto != null) 'abierto': abierto, if (aceptaPedidos != null) 'aceptaPedidos': aceptaPedidos}),
         ),
@@ -102,33 +122,33 @@ class CatalogoService {
 
   /// tipo: 'logo' | 'portada'. La imagen va en base64.
   static Future<Negocio> subirImagenNegocio(String tipo, String base64) async =>
-      _negocio(await http.put(_url('/mi-negocio/$tipo'), headers: await _cabeceras(), body: jsonEncode({'imagen': base64})));
+      _negocio(await http.put(_url('$_base/$tipo'), headers: await _cabeceras(), body: jsonEncode({'imagen': base64})));
 
   // -------------------------------------------------------------------------------------------
   // Productos de mi negocio
   // -------------------------------------------------------------------------------------------
   static Future<Menu> misProductos() async {
-    final res = await http.get(_url('/mi-negocio/productos'), headers: await _cabeceras());
+    final res = await http.get(_url('$_base/productos'), headers: await _cabeceras());
     return Menu.desdeJson(_json(res, 200, 'No se pudieron cargar tus productos'));
   }
 
   static Future<Producto> crearProducto(Map<String, dynamic> datos) async =>
-      _producto(await http.post(_url('/mi-negocio/productos'), headers: await _cabeceras(), body: jsonEncode(datos)), 201);
+      _producto(await http.post(_url('$_base/productos'), headers: await _cabeceras(), body: jsonEncode(datos)), 201);
 
   static Future<Producto> actualizarProducto(int id, Map<String, dynamic> cambios) async =>
-      _producto(await http.put(_url('/mi-negocio/productos/$id'), headers: await _cabeceras(), body: jsonEncode(cambios)));
+      _producto(await http.put(_url('$_base/productos/$id'), headers: await _cabeceras(), body: jsonEncode(cambios)));
 
   static Future<Producto> cambiarEstadoProducto(int id, EstadoProducto estado) async =>
-      _producto(await http.patch(_url('/mi-negocio/productos/$id/estado'), headers: await _cabeceras(), body: jsonEncode({'estado': estado.codigo})));
+      _producto(await http.patch(_url('$_base/productos/$id/estado'), headers: await _cabeceras(), body: jsonEncode({'estado': estado.codigo})));
 
   static Future<Producto> fijarStock(int id, int stock) async =>
-      _producto(await http.patch(_url('/mi-negocio/productos/$id/stock'), headers: await _cabeceras(), body: jsonEncode({'stock': stock})));
+      _producto(await http.patch(_url('$_base/productos/$id/stock'), headers: await _cabeceras(), body: jsonEncode({'stock': stock})));
 
   static Future<Producto> subirImagenProducto(int id, String base64) async =>
-      _producto(await http.put(_url('/mi-negocio/productos/$id/imagen'), headers: await _cabeceras(), body: jsonEncode({'imagen': base64})));
+      _producto(await http.put(_url('$_base/productos/$id/imagen'), headers: await _cabeceras(), body: jsonEncode({'imagen': base64})));
 
   static Future<void> eliminarProducto(int id) async {
-    final res = await http.delete(_url('/mi-negocio/productos/$id'), headers: await _cabeceras());
+    final res = await http.delete(_url('$_base/productos/$id'), headers: await _cabeceras());
     if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudo eliminar el producto'));
   }
 }

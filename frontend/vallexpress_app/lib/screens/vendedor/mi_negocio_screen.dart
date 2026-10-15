@@ -124,7 +124,7 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FondoValle(titulo: 'Mi negocio', child: _contenido());
+    return FondoValle(titulo: CatalogoService.gestionandoComoAdmin ? 'Gestionar negocio' : 'Mi negocio', child: _contenido());
   }
 
   Widget _contenido() {
@@ -264,7 +264,7 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
             padding: EdgeInsets.zero,
             child: Column(
               children: [
-                _Fila(icono: Icons.restaurant_menu_rounded, titulo: 'Mis productos', valor: 'Menú, precios, stock e imágenes', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisProductosScreen()))),
+                _Fila(icono: Icons.restaurant_menu_rounded, titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos', valor: 'Menú, precios, stock e imágenes', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisProductosScreen()))),
                 Divider(height: 1, indent: 70, color: c.borde),
                 _Fila(icono: Icons.schedule_rounded, titulo: 'Horario', valor: n.horarios.isEmpty ? 'Sin horario: configúralo' : 'Hoy: ${n.horarioHoy?.texto ?? 'Cerrado'}', onTap: _horarios),
                 Divider(height: 1, indent: 70, color: c.borde),

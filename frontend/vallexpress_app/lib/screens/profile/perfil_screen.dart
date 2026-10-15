@@ -10,6 +10,7 @@ import '../../services/api_error.dart';
 import '../../services/profile_service.dart';
 import '../../services/telefono_service.dart';
 import '../../utils/formato.dart';
+import '../../utils/imagen.dart';
 import '../../widgets/ui/ui.dart';
 import 'addresses_screen.dart';
 import 'settings_screen.dart';
@@ -33,6 +34,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Map<String, dynamic>? _usuario;
   List<Telefono> _telefonos = [];
   List<Direccion> _direcciones = [];
+  bool _subiendoFoto = false;
 
   @override
   void initState() {
@@ -83,6 +85,23 @@ class _PerfilScreenState extends State<PerfilScreen> {
     await _cargar();
   }
 
+  Future<void> _cambiarFoto() async {
+    final base64 = await elegirImagenBase64(context, titulo: 'Tu foto de perfil');
+    if (base64 == null || !mounted) return;
+    setState(() => _subiendoFoto = true);
+    try {
+      final url = await ProfileService.subirFoto(base64);
+      if (!mounted) return;
+      setState(() => _usuario = {...?_usuario, 'fotoPerfil': url});
+      await context.read<AuthProvider>().actualizarUsuario({'fotoPerfil': url});   // el inicio la muestra al instante
+      if (mounted) mostrarExito(context, '¡Foto actualizada! Te ves genial');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _subiendoFoto = false);
+    }
+  }
+
   Future<void> _abrir(Widget pantalla) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
     if (mounted) _cargar(); // al volver, el resumen refleja lo que se cambió
@@ -120,11 +139,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
     final u = _usuario!;
     final c = context.colores;
     final rol = '${u['tipoUsuario'] ?? 'cliente'}';
-    final (colorRol, etiquetaRol) = switch (rol) {
-      'vendedor' => (AppTheme.vendedorColor, 'Vendedor'),
-      'repartidor' => (AppTheme.repartidorColor, 'Repartidor'),
-      'administrador' => (AppTheme.infoColor, 'Administrador'),
-      _ => (AppTheme.clienteColor, 'Cliente'),
+    final (colorRol, etiquetaRol, iconoRol) = switch (rol) {
+      'vendedor' => (AppTheme.vendedorColor, 'Vendedor', Icons.storefront_rounded),
+      'repartidor' => (AppTheme.repartidorColor, 'Repartidor', Icons.two_wheeler_rounded),
+      'administrador' => (AppTheme.infoColor, 'Administrador', Icons.admin_panel_settings_rounded),
+      _ => (AppTheme.clienteColor, 'Cliente', Icons.favorite_rounded),
     };
     final predeterminada = _direcciones.where((d) => d.esPredeterminada).firstOrNull ?? _direcciones.firstOrNull;
     final principal = _telefonos.where((t) => t.principal).firstOrNull ?? _telefonos.firstOrNull;
@@ -136,32 +155,18 @@ class _PerfilScreenState extends State<PerfilScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           // ------------------------------ Cabecera ------------------------------
-          TarjetaValle(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                AvatarValle(nombre: '${u['nombre'] ?? ''}', apellido: '${u['apellido'] ?? ''}', tamano: 76, color: colorRol),
-                const SizedBox(width: 18),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(nombreCompleto, style: Theme.of(context).textTheme.titleLarge, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 2),
-                      Text('@${u['usuario'] ?? u['id'] ?? ''}', style: Theme.of(context).textTheme.bodyMedium),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          InsigniaValle(etiquetaRol, color: colorRol),
-                          if (u['verificado'] == true) const InsigniaValle('Correo verificado', color: AppTheme.successColor, icono: Icons.verified_rounded),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          Aparecer(
+            child: _CabeceraPerfil(
+              nombre: nombreCompleto,
+              usuario: '${u['usuario'] ?? u['id'] ?? ''}',
+              iniciales: ('${u['nombre'] ?? ''}', '${u['apellido'] ?? ''}'),
+              foto: u['fotoPerfil']?.toString(),
+              color: colorRol,
+              etiquetaRol: etiquetaRol,
+              iconoRol: iconoRol,
+              verificado: u['verificado'] == true,
+              subiendo: _subiendoFoto,
+              onFoto: _cambiarFoto,
             ),
           ),
 
@@ -259,6 +264,167 @@ class _PerfilScreenState extends State<PerfilScreen> {
       ),
     );
   }
+}
+
+/// Cabecera del perfil: banner con el degradado del rol, la foto (o las iniciales) con un botón de cámara,
+/// el nombre, el usuario y las insignias. Tocar la foto la cambia.
+class _CabeceraPerfil extends StatelessWidget {
+  const _CabeceraPerfil({
+    required this.nombre,
+    required this.usuario,
+    required this.iniciales,
+    required this.foto,
+    required this.color,
+    required this.etiquetaRol,
+    required this.iconoRol,
+    required this.verificado,
+    required this.subiendo,
+    required this.onFoto,
+  });
+
+  final String nombre;
+  final String usuario;
+  final (String, String) iniciales;
+  final String? foto;
+  final Color color;
+  final String etiquetaRol;
+  final IconData iconoRol;
+  final bool verificado;
+  final bool subiendo;
+  final VoidCallback onFoto;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    return TarjetaValle(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          // Banner con el color del rol y burbujas decorativas; la foto se monta sobre su borde
+          SizedBox(
+            height: 190,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: 130,
+                  child: ClipRect(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(colors: [color, Color.lerp(color, AppTheme.accentColor, 0.45)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                            ),
+                          ),
+                        ),
+                        Positioned(right: -30, top: -40, child: _Burbuja(tamano: 150, color: Colors.white.withValues(alpha: 0.12))),
+                        Positioned(left: 30, bottom: -60, child: _Burbuja(tamano: 120, color: Colors.white.withValues(alpha: 0.08))),
+                        Positioned(
+                          right: 14,
+                          top: 14,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(iconoRol, size: 16, color: Colors.white),
+                              const SizedBox(width: 6),
+                              Text(etiquetaRol, style: tema.labelLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                            ]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Pulsable(
+                      onTap: subiendo ? null : onFoto,
+                      child: GestureDetector(
+                        onTap: subiendo ? null : onFoto,
+                        child: Stack(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: c.tarjeta,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6))],
+                              ),
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 400),
+                                child: AvatarValle(key: ValueKey(foto), nombre: iniciales.$1, apellido: iniciales.$2, fotoUrl: foto, tamano: 104, color: color),
+                              ),
+                            ),
+                            if (subiendo)
+                              Positioned.fill(
+                                child: Container(
+                                  margin: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                                  child: const Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))),
+                                ),
+                              ),
+                            Positioned(
+                              right: 2,
+                              bottom: 2,
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(color: c.primario, shape: BoxShape.circle, border: Border.all(color: c.tarjeta, width: 3)),
+                                child: const Icon(Icons.photo_camera_rounded, size: 18, color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              children: [
+                Text(nombre, style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text('@$usuario', style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    InsigniaValle(etiquetaRol, color: color, icono: iconoRol),
+                    if (verificado) const InsigniaValle('Correo verificado', color: AppTheme.successColor, icono: Icons.verified_rounded),
+                    if (foto == null) InsigniaValle('Toca la foto para agregar una', color: c.textoSuave, icono: Icons.add_a_photo_rounded),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Burbuja extends StatelessWidget {
+  const _Burbuja({required this.tamano, required this.color});
+
+  final double tamano;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(width: tamano, height: tamano, decoration: BoxDecoration(shape: BoxShape.circle, color: color));
 }
 
 class _Fila extends StatelessWidget {

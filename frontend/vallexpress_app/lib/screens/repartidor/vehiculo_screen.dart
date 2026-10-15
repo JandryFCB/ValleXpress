@@ -3,15 +3,19 @@ import '../../config/theme.dart';
 import '../../models/pedido.dart';
 import '../../models/repartidor.dart';
 import '../../services/api_error.dart';
+import '../../services/admin_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../widgets/ui/ui.dart';
 
 /// Mi vehículo (repartidor): tipo, placa (si lleva) y color. Si aún no tiene perfil de repartidor, lo crea.
 /// Devuelve el perfil guardado.
 class VehiculoScreen extends StatefulWidget {
-  const VehiculoScreen({super.key, this.actual});
+  const VehiculoScreen({super.key, this.actual, this.deUsuario});
 
   final PerfilRepartidor? actual;
+
+  /// Si lo abre el administrador: el usuario del repartidor cuyo vehículo edita
+  final String? deUsuario;
 
   @override
   State<VehiculoScreen> createState() => _VehiculoScreenState();
@@ -39,7 +43,9 @@ class _VehiculoScreenState extends State<VehiculoScreen> {
       _error = null;
     });
     try {
-      final perfil = await PedidosService.guardarVehiculo(vehiculo: _vehiculo, placa: _placa.text.trim(), color: _color.text.trim(), crear: widget.actual == null);
+      final Object perfil = widget.deUsuario != null
+          ? await AdminService.editarRepartidor(widget.deUsuario!, vehiculo: _vehiculo.codigo, placa: _vehiculo.llevaPlaca ? _placa.text.trim() : null, color: _color.text.trim())
+          : await PedidosService.guardarVehiculo(vehiculo: _vehiculo, placa: _placa.text.trim(), color: _color.text.trim(), crear: widget.actual == null);
       if (!mounted) return;
       mostrarExito(context, 'Vehículo guardado');
       Navigator.pop(context, perfil);
@@ -55,7 +61,7 @@ class _VehiculoScreenState extends State<VehiculoScreen> {
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
     return FondoValle(
-      titulo: 'Mi vehículo',
+      titulo: widget.deUsuario != null ? 'Vehículo del repartidor' : 'Mi vehículo',
       barraInferior: SafeArea(
         top: false,
         child: Container(
