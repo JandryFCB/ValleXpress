@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'providers/auth_provider.dart';
 import 'providers/carrito_provider.dart';
-import 'providers/pedidos_provider.dart';
 import 'providers/tema_provider.dart';
 
 import 'config/theme.dart';
@@ -42,9 +41,6 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
-        ChangeNotifierProvider<PedidosProvider>(
-          create: (_) => PedidosProvider(),
-        ),
         ChangeNotifierProvider<TemaProvider>(create: (_) => TemaProvider()),
         ChangeNotifierProvider<CarritoProvider>(create: (_) => CarritoProvider()),
       ],

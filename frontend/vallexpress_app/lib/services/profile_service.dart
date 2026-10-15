@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'api_http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import 'session_store.dart';
 import 'session_manager.dart';

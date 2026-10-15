@@ -1,12 +1,13 @@
 import 'dart:convert';
 import '../config/constants.dart';
 import '../models/pedido.dart';
+import '../models/repartidor.dart';
 import 'api_error.dart';
 import 'api_http.dart' as http;
 import 'session_store.dart';
 
-/// Pedidos del cliente (/api/pedidos) y avisos (/api/notificaciones).
-/// Reemplaza al servicio viejo pedido_service.
+/// Pedidos: del cliente (/api/pedidos), del negocio (/api/mi-negocio/pedidos), del repartidor (/api/repartidor)
+/// y avisos (/api/notificaciones). Reemplaza a los servicios viejos de pedidos, vendedor y repartidor.
 class PedidosService {
   static Future<Map<String, String>> _cabeceras() async {
     final token = await SessionStore.accessToken();
@@ -84,6 +85,85 @@ class PedidosService {
         ),
         'No se pudo guardar tu calificación',
       );
+
+  static Future<Pedido> calificarRepartidor(int id, {required int puntuacion, String? comentario}) async => _pedido(
+        await http.post(
+          _url('/pedidos/$id/calificar'),
+          headers: await _cabeceras(),
+          body: jsonEncode({'puntuacion': puntuacion, 'destino': 'repartidor', if (comentario != null && comentario.trim().isNotEmpty) 'comentario': comentario.trim()}),
+        ),
+        'No se pudo guardar tu calificación',
+      );
+
+  // -------------------------------------------------------------------------------------------
+  // Pedidos de mi negocio (vendedor)
+  // -------------------------------------------------------------------------------------------
+  static Future<({List<Pedido> pedidos, bool hayMas})> pedidosDelNegocio({String? estado, int pagina = 1}) async {
+    final res = await http.get(_url('/mi-negocio/pedidos', {if (estado != null) 'estado': estado, 'page': '$pagina'}), headers: await _cabeceras());
+    final datos = _json(res, 200, 'No se pudieron cargar los pedidos');
+    final lista = (datos['pedidos'] as List).map((p) => Pedido.desdeJson(Map<String, dynamic>.from(p))).toList();
+    return (pedidos: lista, hayMas: datos['pagination']?['hasNext'] == true);
+  }
+
+  /// estado: 'confirmado' | 'preparando' | 'listo' | 'rechazado'
+  static Future<Pedido> cambiarEstadoNegocio(int id, String estado, {String? motivo, int? tiempoEstimado}) async => _pedido(
+        await http.patch(
+          _url('/mi-negocio/pedidos/$id/estado'),
+          headers: await _cabeceras(),
+          body: jsonEncode({'estado': estado, if (motivo != null && motivo.trim().isNotEmpty) 'motivo': motivo.trim(), if (tiempoEstimado != null) 'tiempoEstimado': tiempoEstimado}),
+        ),
+        'No se pudo cambiar el estado del pedido',
+      );
+
+  // -------------------------------------------------------------------------------------------
+  // Repartidor
+  // -------------------------------------------------------------------------------------------
+  static PerfilRepartidor _perfil(http.Response res, [int esperado = 200]) =>
+      PerfilRepartidor.desdeJson(_json(res, esperado, 'No se pudo cargar tu perfil de repartidor')['repartidor'] as Map<String, dynamic>);
+
+  /// Mi perfil de repartidor, o null si aún no lo tengo
+  static Future<PerfilRepartidor?> miPerfilRepartidor() async {
+    final res = await http.get(_url('/repartidor'), headers: await _cabeceras());
+    if (res.statusCode == 404) return null;
+    return _perfil(res);
+  }
+
+  static Future<PerfilRepartidor> guardarVehiculo({required Vehiculo vehiculo, String? placa, String? color, bool crear = false}) async {
+    final cuerpo = jsonEncode({'vehiculo': vehiculo.codigo, 'placa': vehiculo.llevaPlaca ? placa : null, 'color': color});
+    final res = crear
+        ? await http.post(_url('/repartidor'), headers: await _cabeceras(), body: cuerpo)
+        : await http.put(_url('/repartidor'), headers: await _cabeceras(), body: cuerpo);
+    return _perfil(res, crear ? 201 : 200);
+  }
+
+  static Future<PerfilRepartidor> cambiarDisponibilidad(bool disponible) async =>
+      _perfil(await http.patch(_url('/repartidor/disponibilidad'), headers: await _cabeceras(), body: jsonEncode({'disponible': disponible})));
+
+  static Future<PedidosLibres> pedidosLibres() async {
+    final res = await http.get(_url('/repartidor/pedidos/libres'), headers: await _cabeceras());
+    return PedidosLibres.desdeJson(_json(res, 200, 'No se pudieron cargar los pedidos disponibles'));
+  }
+
+  static Future<({List<Pedido> pedidos, bool hayMas})> misEntregas({String? estado, int pagina = 1}) async {
+    final res = await http.get(_url('/repartidor/pedidos', {if (estado != null) 'estado': estado, 'page': '$pagina'}), headers: await _cabeceras());
+    final datos = _json(res, 200, 'No se pudieron cargar tus entregas');
+    final lista = (datos['pedidos'] as List).map((p) => Pedido.desdeJson(Map<String, dynamic>.from(p))).toList();
+    return (pedidos: lista, hayMas: datos['pagination']?['hasNext'] == true);
+  }
+
+  static Future<Pedido> aceptarPedido(int id) async =>
+      _pedido(await http.patch(_url('/repartidor/pedidos/$id/aceptar'), headers: await _cabeceras()), 'No se pudo aceptar el pedido');
+
+  static Future<Pedido> marcarRecogido(int id) async =>
+      _pedido(await http.patch(_url('/repartidor/pedidos/$id/recogido'), headers: await _cabeceras()), 'No se pudo marcar como recogido');
+
+  static Future<Pedido> marcarEntregado(int id) async =>
+      _pedido(await http.patch(_url('/repartidor/pedidos/$id/entregado'), headers: await _cabeceras()), 'No se pudo marcar como entregado');
+
+  /// Respaldo por HTTP cuando el socket no está conectado
+  static Future<void> enviarUbicacion(double latitud, double longitud) async {
+    await http.put(_url('/repartidor/ubicacion'), headers: await _cabeceras(), body: jsonEncode({'latitud': latitud, 'longitud': longitud}));
+  }
 
   // -------------------------------------------------------------------------------------------
   // Avisos (notificaciones)

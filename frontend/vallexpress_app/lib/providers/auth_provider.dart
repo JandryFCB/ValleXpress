@@ -10,7 +10,8 @@ import '../services/session_manager.dart';
 import '../services/session_store.dart';
 import '../services/tiempo_real.dart';
 import 'carrito_provider.dart';
-import '../services/socket_tracking_service.dart';
+import '../services/gps_repartidor.dart';
+import '../services/pedidos_service.dart';
 import '../services/fcm_mobile.dart'
     if (dart.library.html) 'fcm_stub_import.dart';
 
@@ -169,7 +170,8 @@ class AuthProvider with ChangeNotifier {
   // Cerrar sesión
   // ---------------------------------------------------------------------------------------------
   Future<void> logout() async {
-    TrackingSocketService().reset(); // limpiar el socket antes de cerrar sesión
+    // Un repartidor que cierra sesión deja de estar en línea (si no, le seguirían llegando pedidos)
+    if (_usuario?['tipoUsuario'] == 'repartidor') await PedidosService.cambiarDisponibilidad(false).then((_) {}).catchError((_) {});
     if (_token != null) await FcmService.quitarDispositivo(_token!);
 
     // Se avisa al servidor para que este refresh token deje de servir, y se borra todo lo local
@@ -185,8 +187,9 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> _limpiarLocal() async {
-    // Lo de esta cuenta no debe pasar a la siguiente: avisos en vivo y carrito
+    // Lo de esta cuenta no debe pasar a la siguiente: avisos en vivo, GPS del repartidor y carrito
     TiempoReal.instancia.detener();
+    GpsRepartidor.instancia.detener();
     final ctx = navigatorKey.currentContext;
     if (ctx != null && ctx.mounted) Provider.of<CarritoProvider>(ctx, listen: false).vaciar();
     await SessionStore.limpiar();
@@ -198,7 +201,6 @@ class AuthProvider with ChangeNotifier {
 
   // El servidor cerró la sesión (venció, la cerraron desde otro equipo, cuenta desactivada...)
   Future<void> _alTerminarSesion(String codigo) async {
-    TrackingSocketService().reset();
     await _limpiarLocal();
     notifyListeners();
 

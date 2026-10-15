@@ -92,6 +92,29 @@ void main() {
       expect(p.llegadaEstimada, p.fecha!.add(const Duration(minutes: 35)));
     });
 
+    test('repartidor con vehículo y ubicación; el mapa solo mientras lo lleva', () {
+      final p = Pedido.desdeJson({
+        ...json,
+        'estado': 'recogido',
+        'negocio': {'id': 1, 'nombre': 'Pizzería', 'local': {'direccion': 'Av. 1', 'latitud': -3.82, 'longitud': -78.75}, 'telefono': '0991112222'},
+        'entrega': {'direccion': 'Calle 1', 'latitud': -3.83, 'longitud': -78.76},
+        'distanciaKm': 1.45,
+        'repartidor': {'nombre': 'Pedro', 'apellido': 'Vera', 'telefono': '0987', 'vehiculo': 'moto', 'placa': 'AB123C', 'color': 'Roja', 'calificacion': 4.5, 'ubicacion': {'latitud': -3.825, 'longitud': -78.755}},
+      });
+      expect(p.enReparto, isTrue);
+      expect(p.repartidor!.vehiculo, Vehiculo.moto);
+      expect(p.repartidor!.descripcionVehiculo, 'Moto roja · AB123C');
+      expect(p.repartidor!.ubicacion!.latitud, -3.825);
+      expect(p.negocioLocal!.longitud, -78.75);
+      expect(p.negocioTelefono, '0991112222');
+      expect(p.entregaPunto!.latitud, -3.83);
+      expect(p.distanciaKm, 1.45);
+      expect(Pedido.desdeJson({...json, 'estado': 'entregado'}).enReparto, isFalse);
+      expect(Pedido.desdeJson({...json, 'estado': 'recibido', 'repartidor': {'nombre': 'Pedro'}}).puedeCalificarRepartidor, isTrue);
+      expect(Pedido.desdeJson({...json, 'estado': 'recibido', 'repartidor': {'nombre': 'Pedro'}, 'calificacionRepartidor': {'puntuacion': 5}}).puedeCalificarRepartidor, isFalse);
+      expect(Vehiculo.deCodigo('bicicleta').llevaPlaca, isFalse);
+    });
+
     test('acciones permitidas según el estado', () {
       Pedido con(String estado, [Map? calif]) => Pedido.desdeJson({...json, 'estado': estado, 'calificacion': calif});
       expect(con('pendiente').puedeCancelar, isTrue);

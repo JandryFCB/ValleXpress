@@ -64,6 +64,12 @@
             <data android:scheme="geo" />
         </intent>
 
+        <!-- Llamar al cliente, al negocio o al repartidor -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+
         <package android:name="com.google.android.apps.maps" />
     </queries>
 

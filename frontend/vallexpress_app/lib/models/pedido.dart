@@ -86,6 +86,19 @@ class LineaPedido {
       );
 }
 
+/// Un punto del mapa
+class Punto {
+  const Punto(this.latitud, this.longitud);
+
+  final double latitud;
+  final double longitud;
+
+  static Punto? desdeJson(Object? j) {
+    if (j is! Map || j['latitud'] == null || j['longitud'] == null) return null;
+    return Punto(_num(j['latitud']), _num(j['longitud']));
+  }
+}
+
 /// Persona de contacto (cliente o repartidor)
 class Contacto {
   const Contacto({required this.nombre, this.apellido, this.telefono});
@@ -99,6 +112,55 @@ class Contacto {
   static Contacto? desdeJson(Object? j) {
     if (j is! Map) return null;
     return Contacto(nombre: '${j['nombre'] ?? ''}', apellido: _texto(j['apellido']), telefono: _texto(j['telefono']));
+  }
+}
+
+/// Tipos de vehículo del repartidor (el servidor los maneja como texto)
+enum Vehiculo {
+  moto('moto', 'Moto', Icons.two_wheeler_rounded, true),
+  auto('auto', 'Auto', Icons.directions_car_rounded, true),
+  camioneta('camioneta', 'Camioneta', Icons.local_shipping_rounded, true),
+  bicicleta('bicicleta', 'Bicicleta', Icons.pedal_bike_rounded, false),
+  aPie('a_pie', 'A pie', Icons.directions_walk_rounded, false);
+
+  const Vehiculo(this.codigo, this.etiqueta, this.icono, this.llevaPlaca);
+
+  final String codigo;
+  final String etiqueta;
+  final IconData icono;
+  final bool llevaPlaca;
+
+  static Vehiculo deCodigo(String? c) => Vehiculo.values.firstWhere((v) => v.codigo == c, orElse: () => Vehiculo.moto);
+}
+
+/// El repartidor de un pedido: contacto, vehículo y su última ubicación (solo mientras lleva el pedido)
+class RepartidorPedido extends Contacto {
+  const RepartidorPedido({required super.nombre, super.apellido, super.telefono, this.vehiculo, this.placa, this.color, this.calificacion, this.ubicacion});
+
+  final Vehiculo? vehiculo;
+  final String? placa;
+  final String? color;
+  final double? calificacion;
+  final Punto? ubicacion;
+
+  /// "Moto roja · ABC1234"
+  String get descripcionVehiculo => [
+        if (vehiculo != null) [vehiculo!.etiqueta, if (color != null) color!.toLowerCase()].join(' '),
+        if (placa != null) placa!,
+      ].join(' · ');
+
+  static RepartidorPedido? desdeJson(Object? j) {
+    if (j is! Map) return null;
+    return RepartidorPedido(
+      nombre: '${j['nombre'] ?? ''}',
+      apellido: _texto(j['apellido']),
+      telefono: _texto(j['telefono']),
+      vehiculo: j['vehiculo'] == null ? null : Vehiculo.deCodigo('${j['vehiculo']}'),
+      placa: _texto(j['placa']),
+      color: _texto(j['color']),
+      calificacion: j['calificacion'] == null ? null : _num(j['calificacion']),
+      ubicacion: Punto.desdeJson(j['ubicacion']),
+    );
   }
 }
 
@@ -128,8 +190,15 @@ class Pedido {
     this.lineaTiempo = const {},
     this.calificacion,
     this.comentarioCalificacion,
+    this.calificacionRepartidor,
     this.cliente,
     this.repartidor,
+    this.negocioLocal,
+    this.negocioDireccion,
+    this.negocioTelefono,
+    this.entregaPunto,
+    this.distanciaKm,
+    this.distanciaAlNegocioKm,
   });
 
   final int id;
@@ -159,12 +228,31 @@ class Pedido {
   /// Estrellas que el cliente le dio al negocio (null si aún no calificó)
   final int? calificacion;
   final String? comentarioCalificacion;
+  final int? calificacionRepartidor;
+
+  /// Solo llega al negocio y al repartidor asignado
   final Contacto? cliente;
-  final Contacto? repartidor;
+  final RepartidorPedido? repartidor;
+  final Punto? negocioLocal;
+  final String? negocioDireccion;
+
+  /// Solo llega al repartidor asignado
+  final String? negocioTelefono;
+  final Punto? entregaPunto;
+
+  /// Del negocio a la entrega, en línea recta
+  final double? distanciaKm;
+
+  /// Del repartidor al negocio (solo en la lista de pedidos libres)
+  final double? distanciaAlNegocioKm;
 
   bool get puedeCancelar => estado == EstadoPedido.pendiente;
   bool get puedeConfirmarRecibido => estado == EstadoPedido.entregado;
   bool get puedeCalificar => (estado == EstadoPedido.entregado || estado == EstadoPedido.recibido) && calificacion == null;
+  bool get puedeCalificarRepartidor => (estado == EstadoPedido.entregado || estado == EstadoPedido.recibido) && repartidor != null && calificacionRepartidor == null;
+
+  /// El repartidor ya lo tiene y va en camino: se muestra el mapa en vivo
+  bool get enReparto => estado == EstadoPedido.enCamino || estado == EstadoPedido.recogido;
 
   /// Hora aproximada de llegada, a partir de cuando se hizo el pedido
   DateTime? get llegadaEstimada => (fecha == null || tiempoEstimado == null) ? null : fecha!.add(Duration(minutes: tiempoEstimado!));
@@ -176,6 +264,7 @@ class Pedido {
     final negocio = j['negocio'] is Map ? Map<String, dynamic>.from(j['negocio']) : const <String, dynamic>{};
     final entrega = j['entrega'] is Map ? Map<String, dynamic>.from(j['entrega']) : const <String, dynamic>{};
     final calif = j['calificacion'] is Map ? Map<String, dynamic>.from(j['calificacion']) : null;
+    final local = negocio['local'] is Map ? Map<String, dynamic>.from(negocio['local']) : null;
     return Pedido(
       id: (j['id'] as num).toInt(),
       estado: EstadoPedido.deCodigo(j['estado']?.toString()),
@@ -203,8 +292,15 @@ class Pedido {
       },
       calificacion: (calif?['puntuacion'] as num?)?.toInt(),
       comentarioCalificacion: _texto(calif?['comentario']),
+      calificacionRepartidor: ((j['calificacionRepartidor'] as Map?)?['puntuacion'] as num?)?.toInt(),
       cliente: Contacto.desdeJson(j['cliente']),
-      repartidor: Contacto.desdeJson(j['repartidor']),
+      repartidor: RepartidorPedido.desdeJson(j['repartidor']),
+      negocioLocal: Punto.desdeJson(local),
+      negocioDireccion: _texto(local?['direccion']),
+      negocioTelefono: _texto(negocio['telefono']),
+      entregaPunto: Punto.desdeJson(entrega),
+      distanciaKm: j['distanciaKm'] == null ? null : _num(j['distanciaKm']),
+      distanciaAlNegocioKm: j['distanciaAlNegocioKm'] == null ? null : _num(j['distanciaAlNegocioKm']),
     );
   }
 }

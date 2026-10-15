@@ -11,22 +11,26 @@ import '../../services/tiempo_real.dart';
 import '../../widgets/ui/ui.dart';
 import '../catalogo/negocio_detalle_screen.dart';
 import '../catalogo/negocios_screen.dart';
-import '../home/home_screen.dart';
+import '../repartidor/inicio_repartidor_screen.dart';
+import '../vendedor/inicio_vendedor_screen.dart';
 import '../pedidos/avisos_screen.dart';
 import '../pedidos/carrito_screen.dart';
 import '../pedidos/mis_pedidos_screen.dart';
 import '../pedidos/pedido_detalle_screen.dart';
 import '../profile/perfil_screen.dart';
 
-/// Primera pantalla con sesión. El cliente entra al inicio nuevo; vendedor y repartidor siguen con el inicio
-/// anterior hasta que se rehaga su flujo.
+/// Primera pantalla con sesión: cada rol tiene su inicio.
 class InicioScreen extends StatelessWidget {
   const InicioScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final rol = context.select<AuthProvider, String>((a) => '${a.usuario?['tipoUsuario'] ?? 'cliente'}');
-    return rol == 'cliente' ? const InicioClienteScreen() : const HomeScreen();
+    return switch (rol) {
+      'vendedor' => const InicioVendedorScreen(),
+      'repartidor' => const InicioRepartidorScreen(),
+      _ => const InicioClienteScreen(),
+    };
   }
 }
 

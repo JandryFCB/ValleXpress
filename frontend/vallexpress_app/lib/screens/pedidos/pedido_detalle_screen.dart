@@ -7,6 +7,8 @@ import '../../services/api_error.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
 import '../../utils/formato.dart';
+import '../../utils/contacto.dart';
+import '../../widgets/mapa_pedido.dart';
 import '../../widgets/ui/ui.dart';
 
 /// Seguimiento de un pedido: estado actual, barra de progreso con la hora de cada paso, productos, totales y
@@ -32,6 +34,11 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
   String? _error;
   bool _ocupado = false;
   StreamSubscription? _vivo;
+  StreamSubscription? _gps;
+
+  /// Última posición del repartidor recibida en vivo (mientras lleva el pedido)
+  Punto? _repartidorEn;
+  double? _velocidadKmh;
 
   @override
   void initState() {
@@ -41,12 +48,31 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
       HapticFeedback.mediumImpact();
       _cargar();
     });
+    _gps = TiempoReal.instancia.ubicaciones.where((u) => u.pedidoId == widget.pedidoId).listen((u) {
+      if (!mounted) return;
+      setState(() {
+        _repartidorEn = u.punto;
+        _velocidadKmh = u.velocidadKmh;
+      });
+    });
   }
 
   @override
   void dispose() {
     _vivo?.cancel();
+    _gps?.cancel();
     super.dispose();
+  }
+
+  /// Minutos que le faltan al repartidor, a partir de la distancia que le queda (velocidad real o 20 km/h)
+  int? _minutosRestantes(Pedido p) {
+    final desde = _repartidorEn ?? p.repartidor?.ubicacion;
+    final hasta = p.estado == EstadoPedido.recogido ? p.entregaPunto : p.negocioLocal;
+    if (desde == null || hasta == null) return null;
+    var km = distanciaKm(desde, hasta);
+    if (p.estado == EstadoPedido.enCamino && p.entregaPunto != null && p.negocioLocal != null) km += distanciaKm(p.negocioLocal!, p.entregaPunto!);
+    final velocidad = (_velocidadKmh != null && _velocidadKmh! > 8) ? _velocidadKmh! : 20.0;
+    return (km * 1.3 / velocidad * 60).ceil().clamp(1, 240);   // 1.3: las calles no van en línea recta
   }
 
   Future<void> _cargar() async {
@@ -109,6 +135,16 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
     if (r != null) await _accion(() => PedidosService.calificar(widget.pedidoId, puntuacion: r.estrellas, comentario: r.comentario), '¡Gracias por tu calificación!');
   }
 
+  Future<void> _calificarRepartidor() async {
+    final r = await showModalBottomSheet<({int estrellas, String comentario})>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _HojaCalificar(negocio: _pedido!.repartidor!.nombre, pregunta: '¿Qué tal te atendió ${_pedido!.repartidor!.nombre}?'),
+    );
+    if (r != null) await _accion(() => PedidosService.calificarRepartidor(widget.pedidoId, puntuacion: r.estrellas, comentario: r.comentario), '¡Gracias por tu calificación!');
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = _pedido;
@@ -128,6 +164,8 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
       if (p.puedeConfirmarRecibido)
         BotonValle(texto: 'Ya lo recibí', icono: Icons.check_circle_rounded, cargando: _ocupado, onPressed: () => _accion(() => PedidosService.confirmarRecibido(p.id), '¡Buen provecho!')),
       if (p.puedeCalificar) BotonValle(texto: 'Calificar a ${p.negocioNombre}', icono: Icons.star_rounded, tipo: p.puedeConfirmarRecibido ? TipoBoton.secundario : TipoBoton.principal, onPressed: _ocupado ? null : _calificar),
+      if (!p.puedeCalificar && p.puedeCalificarRepartidor)
+        BotonValle(texto: 'Calificar a ${p.repartidor!.nombre}', icono: Icons.two_wheeler_rounded, tipo: p.puedeConfirmarRecibido ? TipoBoton.secundario : TipoBoton.principal, onPressed: _ocupado ? null : _calificarRepartidor),
       if (p.puedeCancelar) BotonValle(texto: 'Cancelar pedido', icono: Icons.close_rounded, tipo: TipoBoton.peligro, cargando: _ocupado, onPressed: _cancelar),
     ];
     if (botones.isEmpty) return null;
@@ -181,7 +219,10 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
               const SizedBox(height: 4),
               Text(e == EstadoPedido.cancelado || e == EstadoPedido.rechazado ? (p.motivoCancelacion ?? e.descripcion) : e.descripcion,
                   textAlign: TextAlign.center, style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
-              if (e.activo && e.paso < 5 && p.llegadaEstimada != null) ...[
+              if (p.enReparto && _minutosRestantes(p) != null) ...[
+                const SizedBox(height: 12),
+                InsigniaValle('Llega en unos ${_minutosRestantes(p)} min', color: c.primario, icono: Icons.schedule_rounded),
+              ] else if (e.activo && e.paso < 5 && p.llegadaEstimada != null) ...[
                 const SizedBox(height: 12),
                 InsigniaValle('Llega aprox. a las ${Formato.hora(p.llegadaEstimada!)}', color: c.primario, icono: Icons.schedule_rounded),
               ],
@@ -192,6 +233,27 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
             ],
           ),
         ),
+
+        // ---------------------------- Repartidor y mapa en vivo ----------------------------
+        if (p.repartidor != null && (p.enReparto || e == EstadoPedido.entregado)) ...[
+          const SizedBox(height: 12),
+          TarjetaRepartidor(repartidor: p.repartidor!),
+        ],
+        if (p.enReparto) ...[
+          const SizedBox(height: 12),
+          MapaPedido(
+            negocio: p.negocioLocal,
+            entrega: p.entregaPunto,
+            repartidor: _repartidorEn ?? p.repartidor?.ubicacion,
+            haciaNegocio: e == EstadoPedido.enCamino,
+            iconoRepartidor: p.repartidor?.vehiculo?.icono ?? Icons.two_wheeler_rounded,
+          ),
+          if ((_repartidorEn ?? p.repartidor?.ubicacion) == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('Esperando la ubicación del repartidor…', textAlign: TextAlign.center, style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+            ),
+        ],
 
         if (p.calificacion != null) ...[
           const SizedBox(height: 12),
@@ -258,7 +320,10 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
               const SizedBox(height: 12),
               _Dato(Icons.payments_outlined, MetodoPago.nombre(p.metodoPago), p.pagado ? 'Pagado' : 'Se paga al recibir'),
               if (p.notas != null) ...[const SizedBox(height: 12), _Dato(Icons.chat_bubble_outline_rounded, 'Indicaciones', p.notas)],
-              if (p.repartidor != null) ...[const SizedBox(height: 12), _Dato(Icons.two_wheeler_rounded, p.repartidor!.nombreCompleto, 'Tu repartidor')],
+              if (p.repartidor != null && !(p.enReparto || e == EstadoPedido.entregado)) ...[
+                const SizedBox(height: 12),
+                _Dato(p.repartidor!.vehiculo?.icono ?? Icons.two_wheeler_rounded, p.repartidor!.nombreCompleto, 'Te llevó el pedido${p.calificacionRepartidor != null ? ' · le diste ${p.calificacionRepartidor} ★' : ''}'),
+              ],
             ],
           ),
         ),
@@ -395,11 +460,62 @@ class _Dato extends StatelessWidget {
   }
 }
 
-/// Hoja para calificar al negocio: estrellas y un comentario opcional
+/// Tarjeta del repartidor: nombre, vehículo, calificación y botón para llamarlo
+class TarjetaRepartidor extends StatelessWidget {
+  const TarjetaRepartidor({super.key, required this.repartidor, this.titulo = 'Tu repartidor'});
+
+  final RepartidorPedido repartidor;
+  final String titulo;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    final r = repartidor;
+    return TarjetaValle(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(color: AppTheme.infoColor.withValues(alpha: 0.15), shape: BoxShape.circle),
+            child: Icon(r.vehiculo?.icono ?? Icons.two_wheeler_rounded, color: AppTheme.infoColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titulo, style: tema.labelSmall?.copyWith(color: c.textoSuave)),
+                Row(
+                  children: [
+                    Flexible(child: Text(r.nombreCompleto, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis)),
+                    if ((r.calificacion ?? 0) > 0) ...[
+                      const SizedBox(width: 6),
+                      const Icon(Icons.star_rounded, size: 16, color: AppTheme.accentColor),
+                      Text(r.calificacion!.toStringAsFixed(1), style: tema.labelMedium),
+                    ],
+                  ],
+                ),
+                if (r.descripcionVehiculo.isNotEmpty) Text(r.descripcionVehiculo, style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+              ],
+            ),
+          ),
+          if (r.telefono != null)
+            IconButton.filledTonal(tooltip: 'Llamar', onPressed: () => llamar(context, r.telefono!), icon: const Icon(Icons.call_rounded)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Hoja para calificar (al negocio o al repartidor): estrellas y un comentario opcional
 class _HojaCalificar extends StatefulWidget {
-  const _HojaCalificar({required this.negocio});
+  const _HojaCalificar({required this.negocio, this.pregunta});
 
   final String negocio;
+  final String? pregunta;
 
   @override
   State<_HojaCalificar> createState() => _HojaCalificarState();
@@ -426,7 +542,7 @@ class _HojaCalificarState extends State<_HojaCalificar> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('¿Qué tal estuvo ${widget.negocio}?', style: tema.titleLarge, textAlign: TextAlign.center),
+            Text(widget.pregunta ?? '¿Qué tal estuvo ${widget.negocio}?', style: tema.titleLarge, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,

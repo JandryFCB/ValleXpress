@@ -20,6 +20,10 @@ class TiempoReal {
 
   final _pedidos = StreamController<({int pedidoId, EstadoPedido estado})>.broadcast();
   final _avisos = StreamController<Aviso>.broadcast();
+  final _ubicaciones = StreamController<({int pedidoId, Punto punto, double? rumbo, double? velocidadKmh})>.broadcast();
+
+  /// Posición del repartidor de un pedido en curso (la reciben su cliente y el negocio)
+  Stream<({int pedidoId, Punto punto, double? rumbo, double? velocidadKmh})> get ubicaciones => _ubicaciones.stream;
 
   /// Cambios de estado de cualquier pedido del usuario
   Stream<({int pedidoId, EstadoPedido estado})> get pedidos => _pedidos.stream;
@@ -69,6 +73,14 @@ class TiempoReal {
       final datos = _mapa(crudo);
       if (datos?['id'] != null) _avisos.add(Aviso.desdeJson(datos!));
     });
+    s.on('pedido:ubicacion', (crudo) {
+      final datos = _mapa(crudo);
+      final id = (datos?['pedidoId'] as num?)?.toInt();
+      final punto = Punto.desdeJson(datos);
+      if (id != null && punto != null) {
+        _ubicaciones.add((pedidoId: id, punto: punto, rumbo: (datos!['rumbo'] as num?)?.toDouble(), velocidadKmh: (datos['velocidadKmh'] as num?)?.toDouble()));
+      }
+    });
     _socket = s..connect();
   }
 
@@ -90,6 +102,18 @@ class TiempoReal {
     } finally {
       _renovando = false;
     }
+  }
+
+  /// El repartidor envía su posición. Devuelve false si no hay conexión (se usa el respaldo por HTTP).
+  Future<bool> enviarUbicacion({required double lat, required double lng, double? precision, double? velocidad, double? rumbo}) async {
+    final s = _socket;
+    if (s == null || !s.connected) return false;
+    final respuesta = Completer<bool>();
+    s.emitWithAck('repartidor:ubicacion', {'lat': lat, 'lng': lng, 'precision': precision, 'velocidad': velocidad, 'rumbo': rumbo}, ack: (r) {
+      final datos = _mapa(r);
+      if (!respuesta.isCompleted) respuesta.complete(datos?['ok'] == true || datos?['error'] == 'MUYFRECUENTE');
+    });
+    return respuesta.future.timeout(const Duration(seconds: 5), onTimeout: () => false);
   }
 
   /// Al cerrar sesión: se corta la conexión (otro usuario no debe recibir estos avisos)
