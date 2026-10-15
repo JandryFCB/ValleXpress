@@ -325,6 +325,7 @@ class Aviso {
         'pedido_preparando' => Icons.soup_kitchen_rounded,
         'pedido_listo' => Icons.inventory_2_rounded,
         'pedido_en_camino' || 'pedido_recogido' => Icons.delivery_dining_rounded,
+        'repartidor_cerca' => Icons.near_me_rounded,
         'pedido_entregado' || 'pedido_recibido' => Icons.check_circle_rounded,
         'pedido_rechazado' || 'pedido_cancelado' => Icons.cancel_rounded,
         _ => Icons.notifications_rounded,

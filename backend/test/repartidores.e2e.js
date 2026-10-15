@@ -137,11 +137,29 @@ const LOCAL = { lat: -0.18, lng: -78.48 };
     r = await api('PATCH', `/api/repartidor/pedidos/${p1.id}/recogido`, null, ganador.token);
     check('recogido: 200', r.status === 200 && r.body.pedido.estado === 'recogido');
     check('el cliente recibe "tu pedido va hacia ti"', (await avisoRecogido)?.tipo === 'pedido_recogido');
+
+    // Geocerca: la entrega es (-0.19, -78.49)
+    const cercas = () => q("SELECT 1 FROM tnotificaciones WHERE cpedido=$1 AND tipo='repartidor_cerca'", [p1.id]);
+    await t.dormir(2100);
+    let avisoCerca = t.esperar(sCarlos, 'notificacion', 800);
+    await t.emitir(ganador.socket, 'repartidor:ubicacion', { lat: -0.181, lng: -78.49 });   // ~1 km
+    check('a 1 km de la entrega: todavía no avisa que está cerca', (await avisoCerca) === null && (await cercas()).length === 0);
+    await t.dormir(2100);
+    avisoCerca = t.esperar(sCarlos, 'notificacion');
+    await t.emitir(ganador.socket, 'repartidor:ubicacion', { lat: -0.1905, lng: -78.49 });  // ~55 m
+    const ac2 = await avisoCerca;
+    check('a menos de 150 m: el cliente recibe "¡Tu repartidor está cerca!"', ac2?.tipo === 'repartidor_cerca' && ac2.pedidoId === p1.id, JSON.stringify(ac2));
+    await t.dormir(2100);
+    await t.emitir(ganador.socket, 'repartidor:ubicacion', { lat: -0.1902, lng: -78.49 });
+    await t.dormir(300);
+    check('sigue cerca: el aviso no se repite', (await cercas()).length === 1);
+
     r = await api('PATCH', `/api/repartidor/pedidos/${p1.id}/entregado`, null, ganador.token);
     check('entregado: 200', r.status === 200 && r.body.pedido.estado === 'entregado');
     r = await api('GET', `/api/pedidos/${p1.id}`, null, C);
     check('entregado: el cliente ya no ve la ubicación del repartidor', r.body.pedido.estado === 'entregado' && r.body.pedido.repartidor.ubicacion === null);
     check('línea de tiempo completa hasta entregado', r.body.pedido.lineaTiempo.map((x) => x.estado).join() === 'pendiente,confirmado,listo,en_camino,recogido,entregado', JSON.stringify(r.body.pedido.lineaTiempo));
+    await t.dormir(2100);
     ack = await t.emitir(ganador.socket, 'repartidor:ubicacion', { lat: -0.19, lng: -78.49 });
     check('con la entrega terminada, su ubicación ya no se reenvía a nadie', ack?.ok === true && ack.entregas === 0);
 

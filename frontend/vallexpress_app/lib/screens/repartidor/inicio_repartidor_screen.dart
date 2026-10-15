@@ -91,7 +91,7 @@ class _EntregasState extends State<_Entregas> {
   void initState() {
     super.initState();
     _cargar();
-    _vivo = TiempoReal.instancia.pedidos.listen((_) => _cargar());
+    _vivo = TiempoReal.instancia.cambios().listen((_) => _cargar());
   }
 
   @override
@@ -431,7 +431,7 @@ class _HistorialState extends State<_Historial> {
   void initState() {
     super.initState();
     _cargar();
-    _vivo = TiempoReal.instancia.pedidos.listen((_) => _cargar());
+    _vivo = TiempoReal.instancia.cambios().listen((_) => _cargar());
   }
 
   @override

@@ -14,6 +14,7 @@ const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const ArchivoService = require('../../shared/services/archivo.service');
 const { auditar } = require('../../shared/services/log.service');
+const { distanciaKm } = require('../../shared/utils/geo');
 const {
   ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO, VEHICULOAAPI,
 } = require('../../shared/constants/codigos');
@@ -34,15 +35,6 @@ const centavos = (v) => Math.round(Number(v) * 100);
 const dinero = (c) => c / 100;
 const noEncontrado = () => AppError.notFound('Pedido no encontrado', 'PEDIDONOENCONTRADO');
 const MINUTOSENTREGA = 15;     // se suman al tiempo de preparación del negocio para estimar la entrega
-
-// Distancia en km entre dos puntos (fórmula del haversine)
-function distanciaKm(a, b) {
-  const rad = (g) => (g * Math.PI) / 180;
-  const dLat = rad(b.lat - a.lat);
-  const dLng = rad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(h));
-}
 
 const INCLUIR = [
   { model: Detalle, as: 'detalles', required: false },

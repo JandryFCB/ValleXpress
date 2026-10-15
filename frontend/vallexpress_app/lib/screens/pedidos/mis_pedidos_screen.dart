@@ -57,7 +57,7 @@ class _ListaPedidosState extends State<_ListaPedidos> with AutomaticKeepAliveCli
   void initState() {
     super.initState();
     _cargar();
-    _vivo = TiempoReal.instancia.pedidos.listen((_) => _cargar());
+    _vivo = TiempoReal.instancia.cambios().listen((_) => _cargar());
     _scroll.addListener(() {
       if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 200) _cargarMas();
     });

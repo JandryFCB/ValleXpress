@@ -39,7 +39,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
       if (problema != null && mounted) mostrarError(context, problema);
     });
     _subs.add(GpsRepartidor.instancia.posiciones.listen((p) => mounted ? setState(() => _yo = p) : null));
-    _subs.add(TiempoReal.instancia.pedidos.where((e) => e.pedidoId == widget.pedidoId).listen((_) => _cargar()));
+    _subs.add(TiempoReal.instancia.cambios(pedidoId: widget.pedidoId).listen((_) => _cargar()));
   }
 
   @override

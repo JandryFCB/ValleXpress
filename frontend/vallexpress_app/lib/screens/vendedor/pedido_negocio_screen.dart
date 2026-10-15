@@ -34,7 +34,7 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
   void initState() {
     super.initState();
     _cargar();
-    _subs.add(TiempoReal.instancia.pedidos.where((e) => e.pedidoId == widget.pedidoId).listen((_) => _cargar()));
+    _subs.add(TiempoReal.instancia.cambios(pedidoId: widget.pedidoId).listen((_) => _cargar()));
     _subs.add(TiempoReal.instancia.ubicaciones.where((u) => u.pedidoId == widget.pedidoId).listen((u) {
       if (mounted) setState(() => _repartidorEn = u.punto);
     }));

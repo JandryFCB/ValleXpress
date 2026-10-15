@@ -56,7 +56,7 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
   void initState() {
     super.initState();
     _cargar();
-    _vivo = TiempoReal.instancia.pedidos.listen((_) => _cargar());
+    _vivo = TiempoReal.instancia.cambios().listen((_) => _cargar());
     // "hace 3 min" se actualiza solo
     _reloj = Timer.periodic(const Duration(minutes: 1), (_) => mounted ? setState(() {}) : null);
   }

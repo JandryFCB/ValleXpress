@@ -35,7 +35,7 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
       }
       mostrarMensaje(context, a.tipo == 'pedido_nuevo' ? '🛒 ${a.titulo} ${a.mensaje}' : a.titulo);
     }));
-    _subs.add(TiempoReal.instancia.pedidos.listen((_) => _contar()));
+    _subs.add(TiempoReal.instancia.cambios().listen((_) => _contar()));
     _contar();
   }
 

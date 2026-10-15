@@ -5,6 +5,7 @@ const withTransaction = require('../../shared/helpers/withTransaction');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const { auditar, logMensaje } = require('../../shared/services/log.service');
 const { normalizarPlaca } = require('../../shared/utils/normalizers');
+const { distanciaKm } = require('../../shared/utils/geo');
 const {
   APROBACION, APROBACIONAAPI, TIPOVEHICULO, VEHICULOAAPI, APIAVEHICULO, VEHICULOSINPLACA, ESTADOPEDIDO: E, vehiculoACodigo,
 } = require('../../shared/constants/codigos');
@@ -137,8 +138,8 @@ async function registrarUbicacion(usuarioId, { lat, lng, precision, velocidad, r
   const { Negocio } = require('../negocios/negocio.model');
   const entregas = await Pedido.findAll({
     where: { repartidorId: usuarioId, estado: { [Op.in]: ENCURSO } },
-    attributes: ['id', 'clienteId', 'negocioId'],
-    include: [{ model: Negocio, as: 'negocio', attributes: ['id', 'duenoId'] }],
+    attributes: ['id', 'clienteId', 'negocioId', 'estado', 'latitud', 'longitud'],
+    include: [{ model: Negocio, as: 'negocio', attributes: ['id', 'duenoId', 'nombre'] }],
   });
   const velocidadKmh = velocidad != null ? Math.max(0, Number(velocidad) * 3.6) : null;   // el GPS la da en m/s
   for (const p of entregas) {
@@ -149,9 +150,37 @@ async function registrarUbicacion(usuarioId, { lat, lng, precision, velocidad, r
       Ubicacion.create({ usuarioId, pedidoId: p.id, latitud: lat, longitud: lng, precision: precision ?? null, velocidadKmh, rumbo: rumbo ?? null })
         .catch((e) => logMensaje({ nivel: 'ADVERTENCIA', modulo: 'REPARTIDORES', accion: 'UBICACIONNOGUARDADA', mensaje: 'No se pudo guardar el punto del recorrido', detalle: { error: e.message }, usuarioId, pedidoId: p.id }));
     }
+    if (p.estado === E.RECOGIDO) avisarSiEstaCerca(p, { lat, lng }, io);
   }
   if (ultimoGuardado.size > 1000) ultimoGuardado.clear();
   return { entregas: entregas.length };
+}
+
+// Geocerca: cuando el repartidor (ya con el pedido) entra a METROSCERCA de la entrega, el cliente recibe un aviso
+// push "¡Tu repartidor está cerca!" aunque tenga la app cerrada o en segundo plano. Se avisa UNA sola vez por
+// pedido: la memoria evita consultas repetidas y la BD lo garantiza aunque el servidor se reinicie.
+const METROSCERCA = 150;
+const avisadosCerca = new Set();
+
+async function avisarSiEstaCerca(p, posicion, io) {
+  const clave = String(p.id);
+  if (avisadosCerca.has(clave)) return;
+  const metros = distanciaKm(posicion, { lat: num(p.latitud), lng: num(p.longitud) }) * 1000;
+  if (metros > METROSCERCA) return;
+  avisadosCerca.add(clave);
+  if (avisadosCerca.size > 1000) avisadosCerca.clear();
+  try {
+    const Notificacion = require('../notificaciones/notificacion.model');
+    if (await Notificacion.count({ where: { pedidoId: p.id, tipo: 'repartidor_cerca' } })) return;
+    const NotificacionService = require('../notificaciones/notificacion.service');
+    await NotificacionService.notificar({
+      io, usuarioId: p.clienteId, tipo: 'repartidor_cerca', titulo: '¡Tu repartidor está cerca! 📍',
+      mensaje: `Tu pedido #${p.id} de ${p.negocio?.nombre ?? 'tu negocio'} llega en un momento. Ve saliendo a recibirlo`,
+      pedidoId: p.id, datos: { estado: 'recogido', metros: Math.round(metros) },
+    });
+  } catch (e) {
+    logMensaje({ nivel: 'ADVERTENCIA', modulo: 'REPARTIDORES', accion: 'AVISOCERCANOFALLIDO', mensaje: 'No se pudo avisar que el repartidor está cerca', detalle: { error: e.message }, pedidoId: p.id });
+  }
 }
 
 // Recorrido guardado de una entrega (para dibujar la ruta)

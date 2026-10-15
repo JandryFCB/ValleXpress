@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../config/constants.dart';
 import '../models/pedido.dart';
@@ -33,8 +33,31 @@ class TiempoReal {
 
   bool get conectado => _socket?.connected ?? false;
 
+  /// Cuándo recargar una pantalla: un cambio de estado (de ese pedido, o de cualquiera si no se indica) o el
+  /// regreso de la app desde segundo plano, porque lo que pasó mientras el socket dormía no llegó por él.
+  Stream<void> cambios({int? pedidoId}) {
+    final subs = <StreamSubscription>[];
+    late final StreamController<void> c;
+    c = StreamController<void>(
+      onListen: () {
+        subs.add(pedidos.where((e) => pedidoId == null || e.pedidoId == pedidoId).listen((_) => c.add(null)));
+        subs.add(_reanudado.stream.listen((_) => c.add(null)));
+      },
+      onCancel: () {
+        for (final s in subs) {
+          s.cancel();
+        }
+      },
+    );
+    return c.stream;
+  }
+
+  final _reanudado = StreamController<void>.broadcast();
+  _Ciclo? _ciclo;
+
   /// Conecta (o reconecta con el token actual). Se llama al entrar a la app con sesión.
   Future<void> iniciar() async {
+    _ciclo ??= _Ciclo(_alVolver)..escuchar();
     var token = await SessionStore.accessToken();
     if (token != null && !SessionStore.accesoVigente(token) && await SessionManager.instance.refrescar()) {
       token = await SessionStore.accessToken();
@@ -116,11 +139,36 @@ class TiempoReal {
     return respuesta.future.timeout(const Duration(seconds: 5), onTimeout: () => false);
   }
 
+  // La app volvió al frente: se reconecta de inmediato (sin esperar el siguiente reintento) y las pantallas
+  // abiertas se recargan para traer el estado y la última ubicación conocida del repartidor.
+  Future<void> _alVolver() async {
+    if (_socket == null) return;
+    await iniciar();
+    _reanudado.add(null);
+  }
+
   /// Al cerrar sesión: se corta la conexión (otro usuario no debe recibir estos avisos)
   void detener() {
+    _ciclo?.dejar();
+    _ciclo = null;
     _socket?.dispose();
     _socket = null;
     _renovado?.cancel();
     _renovado = null;
+  }
+}
+
+/// Avisa cuando la app pasa de segundo plano al frente
+class _Ciclo with WidgetsBindingObserver {
+  _Ciclo(this.alVolver);
+
+  final Future<void> Function() alVolver;
+
+  void escuchar() => WidgetsBinding.instance.addObserver(this);
+  void dejar() => WidgetsBinding.instance.removeObserver(this);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    if (estado == AppLifecycleState.resumed) alVolver();
   }
 }

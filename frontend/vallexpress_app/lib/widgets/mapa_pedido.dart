@@ -26,15 +26,17 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
   late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
   LatLng? _desde;
   LatLng? _hasta;
+  DateTime? _ultimaPosicion;
   bool _listo = false;
 
   static LatLng? _ll(Punto? p) => p == null ? null : LatLng(p.latitud, p.longitud);
 
-  /// Posición dibujada del repartidor (interpolada durante la animación)
+  /// Posición dibujada del repartidor (interpolada durante la animación). El avance es lineal: así la moto
+  /// encadena un tramo con el siguiente sin frenar en cada posición.
   LatLng? get _repartidor {
     if (_hasta == null) return null;
     if (_desde == null) return _hasta;
-    final t = Curves.easeInOut.transform(_anim.value);
+    final t = _anim.value;
     return LatLng(_desde!.latitude + (_hasta!.latitude - _desde!.latitude) * t, _desde!.longitude + (_hasta!.longitude - _desde!.longitude) * t);
   }
 
@@ -53,6 +55,12 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
     final primeraVez = _hasta == null;
     _desde = _repartidor ?? nuevo;
     _hasta = nuevo;
+    // El deslizamiento dura lo que tardó en llegar esta posición (el GPS manda cada ~3 s): cuando termina,
+    // ya está por llegar la siguiente. Si hubo un corte largo, no se arrastra más de 4 s.
+    final ahora = DateTime.now();
+    final intervalo = _ultimaPosicion == null ? 900 : ahora.difference(_ultimaPosicion!).inMilliseconds.clamp(600, 4000);
+    _ultimaPosicion = ahora;
+    _anim.duration = Duration(milliseconds: intervalo);
     _anim.forward(from: 0);
     if (primeraVez) WidgetsBinding.instance.addPostFrameCallback((_) => _encuadrar());
   }

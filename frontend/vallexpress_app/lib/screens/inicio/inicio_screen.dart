@@ -59,7 +59,7 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
       setState(() => _noLeidos++);
       mostrarMensaje(context, a.titulo, tipo: a.tipo == 'pedido_rechazado' ? TipoMensaje.error : TipoMensaje.info);
     }));
-    _subs.add(TiempoReal.instancia.pedidos.listen((_) => _cargarEnCurso()));
+    _subs.add(TiempoReal.instancia.cambios().listen((_) => _cargarEnCurso()));
     _refrescar();
   }
 

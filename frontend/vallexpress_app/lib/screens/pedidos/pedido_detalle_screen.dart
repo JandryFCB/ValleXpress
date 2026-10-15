@@ -44,10 +44,7 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
   void initState() {
     super.initState();
     _cargar();
-    _vivo = TiempoReal.instancia.pedidos.where((e) => e.pedidoId == widget.pedidoId).listen((_) {
-      HapticFeedback.mediumImpact();
-      _cargar();
-    });
+    _vivo = TiempoReal.instancia.cambios(pedidoId: widget.pedidoId).listen((_) => _cargar());
     _gps = TiempoReal.instancia.ubicaciones.where((u) => u.pedidoId == widget.pedidoId).listen((u) {
       if (!mounted) return;
       setState(() {
@@ -79,9 +76,11 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
     try {
       final p = await PedidosService.obtener(widget.pedidoId);
       if (!mounted) return;
+      if (_pedido != null && _pedido!.estado != p.estado) HapticFeedback.mediumImpact();
       setState(() {
         _pedido = p;
         _error = null;
+        _repartidorEn = null;     // manda la última ubicación que guardó el servidor; las siguientes llegan en vivo
       });
     } catch (e) {
       if (mounted) setState(() => _error = textoDeError(e));
