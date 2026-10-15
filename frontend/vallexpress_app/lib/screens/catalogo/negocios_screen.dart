@@ -9,8 +9,14 @@ import '../../widgets/ui/ui.dart';
 import 'negocio_detalle_screen.dart';
 
 /// Explorar negocios: buscador, categorías, "abiertos ahora" y la lista (se cargan más al llegar al final).
+/// Con [cabecera] se usa como pestaña de inicio: sin barra de título y con la cabecera arriba del buscador.
 class NegociosScreen extends StatefulWidget {
-  const NegociosScreen({super.key});
+  const NegociosScreen({super.key, this.cabecera, this.alRefrescar});
+
+  final Widget? cabecera;
+
+  /// Se llama también al deslizar para refrescar (el inicio recarga sus pedidos en curso)
+  final Future<void> Function()? alRefrescar;
 
   @override
   State<NegociosScreen> createState() => _NegociosScreenState();
@@ -102,12 +108,13 @@ class _NegociosScreenState extends State<NegociosScreen> {
   Widget build(BuildContext context) {
     final c = context.colores;
     return FondoValle(
-      titulo: 'Explorar',
+      titulo: widget.cabecera == null ? 'Explorar' : null,
       child: RefreshIndicator(
-        onRefresh: _cargar,
+        onRefresh: () => Future.wait([_cargar(), if (widget.alRefrescar != null) widget.alRefrescar!()]),
         child: CustomScrollView(
           controller: _scroll,
           slivers: [
+            if (widget.cabecera != null) SliverToBoxAdapter(child: widget.cabecera),
             // Buscador
             SliverToBoxAdapter(
               child: Padding(
@@ -115,6 +122,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
                 child: TextField(
                   controller: _busqueda,
                   textInputAction: TextInputAction.search,
+                  onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                   onChanged: (v) {
                     setState(() {});
                     _alBuscar(v);
@@ -235,7 +243,10 @@ class _NegociosScreenState extends State<NegociosScreen> {
             final n = _negocios[i];
             return TarjetaNegocio(
               negocio: n,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n))),
+              onTap: () {
+                FocusManager.instance.primaryFocus?.unfocus(); // al volver, el buscador no debe abrir el teclado
+                Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n)));
+              },
             );
           },
         ),

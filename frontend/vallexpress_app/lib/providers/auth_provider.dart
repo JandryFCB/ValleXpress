@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import '../config/navegacion.dart';
 import '../services/auth_service.dart';
 import '../services/session_manager.dart';
 import '../services/session_store.dart';
+import '../services/tiempo_real.dart';
+import 'carrito_provider.dart';
 import '../services/socket_tracking_service.dart';
 import '../services/fcm_mobile.dart'
     if (dart.library.html) 'fcm_stub_import.dart';
@@ -182,6 +185,10 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> _limpiarLocal() async {
+    // Lo de esta cuenta no debe pasar a la siguiente: avisos en vivo y carrito
+    TiempoReal.instancia.detener();
+    final ctx = navigatorKey.currentContext;
+    if (ctx != null && ctx.mounted) Provider.of<CarritoProvider>(ctx, listen: false).vaciar();
     await SessionStore.limpiar();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('usuario');
