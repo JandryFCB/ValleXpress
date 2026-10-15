@@ -79,55 +79,60 @@ async function enviarCorreoCodigo(tipo, { email, codigo, nombre }, req) {
 // ---------------------------------------------------------------------------------------------
 // Crea la persona, la cuenta (el CUSUARIO lo genera la BD a partir del nombre) y el teléfono principal.
 // El perfil de negocio (vendedor) o de reparto (repartidor) se completa en sus propios módulos.
+// Crea persona, cuenta, teléfono principal y, según el rol, el negocio o el perfil de reparto, dentro de la
+// transacción "t". La usan el registro público (con el correo ya verificado) y el administrador.
+// Si el negocio o el repartidor nacen aprobados lo decide APROBACIONAUTOMATICA, salvo que se indique "aprobado".
+async function crearCuenta(tipo, datos, t, { correoVerificadoEn = new Date(), aprobado } = {}) {
+  const email = normalizarEmail(datos.email);
+  const telefono = normalizarTelefono(datos.telefono);
+  const ahora = new Date();
+
+  // Datos únicos entre las personas vigentes
+  if (await Persona.findOne({ where: { correo: email }, transaction: t })) throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
+  if (await Persona.findOne({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: datos.cedula }, transaction: t })) throw AppError.conflict('La cédula ya está registrada', 'CEDULADUPLICADA');
+  if (await Telefono.findOne({ where: { numero: telefono }, transaction: t })) throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
+
+  // Persona -> cuenta -> teléfono (la BD asigna CPERSONA desde el 2 y genera el CUSUARIO)
+  const persona = await Persona.create({
+    tipoDoc: TIPODOCCEDULA,
+    numeroDoc: datos.cedula,
+    nombres: datos.nombre.trim(),
+    apellidos: datos.apellido.trim(),
+    correo: email,
+    correoVerificadoEn,
+  }, { transaction: t });
+
+  const nueva = await UsuarioCuenta.create({
+    personaId: persona.id,
+    rol: APIAROL[tipo],
+    claveHash: await hashClave(datos.password),
+    terminosEn: ahora,
+    terminosVer: String(await ConfiguracionService.obtener('VERSIONTERMINOS', '1.0')),
+  }, { transaction: t });
+
+  await Telefono.create({ personaId: persona.id, numero: telefono, principal: true }, { transaction: t });
+
+  // El vendedor nace con su negocio (nombre y categoría; el resto lo completa en "Mi negocio")
+  if (tipo === 'vendedor' && datos.nombreNegocio?.trim()) {
+    await NegocioService.crearParaUsuario(nueva.id, { nombre: datos.nombreNegocio, categoria: datos.categoriaNegocio, aprobado }, { transaction: t });
+  }
+  // El repartidor nace con su perfil de reparto (vehículo y placa; la placa se valida según el vehículo)
+  if (tipo === 'repartidor' && datos.vehiculo) {
+    await RepartidorService.crearPerfil(nueva.id, { vehiculo: datos.vehiculo, placa: datos.placa, color: datos.color, aprobado }, { transaction: t });
+  }
+  return nueva;
+}
+
 async function registrar(datos, req) {
   const tipo = datos.tipoUsuario || 'cliente';
   if (!ROLESREGISTRABLES.includes(tipo)) throw AppError.badRequest('Tipo de usuario inválido', 'TIPOUSUARIOINVALIDO');
-
   const email = normalizarEmail(datos.email);
-  const telefono = normalizarTelefono(datos.telefono);
-  const terminosVer = String(await ConfiguracionService.obtener('VERSIONTERMINOS', '1.0'));
-  const claveHash = await hashClave(datos.password);
-  const ahora = new Date();
 
   const cuenta = await withTransaction(async (t) => {
-    // 1) El email debe haberse verificado (la app ya lo exige; ahora también el servidor)
+    // El email debe haberse verificado (la app ya lo exige; también el servidor)
     const verificacion = await CodigoService.exigirEmailVerificado(email, { transaction: t });
-
-    // 2) Datos únicos entre las personas vigentes
-    if (await Persona.findOne({ where: { correo: email }, transaction: t })) throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
-    if (await Persona.findOne({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: datos.cedula }, transaction: t })) throw AppError.conflict('La cédula ya está registrada', 'CEDULADUPLICADA');
-    if (await Telefono.findOne({ where: { numero: telefono }, transaction: t })) throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
-
-    // 3) Persona -> cuenta -> teléfono (la BD asigna CPERSONA desde el 2 y genera el CUSUARIO)
-    const persona = await Persona.create({
-      tipoDoc: TIPODOCCEDULA,
-      numeroDoc: datos.cedula,
-      nombres: datos.nombre.trim(),
-      apellidos: datos.apellido.trim(),
-      correo: email,
-      correoVerificadoEn: verificacion.verificadoEn || ahora,
-    }, { transaction: t });
-
-    const nueva = await UsuarioCuenta.create({
-      personaId: persona.id,
-      rol: APIAROL[tipo],
-      claveHash,
-      terminosEn: ahora,
-      terminosVer,
-    }, { transaction: t });
-
-    await Telefono.create({ personaId: persona.id, numero: telefono, principal: true }, { transaction: t });
-
-    // El vendedor nace con su negocio (nombre y categoría; el resto lo completa en "Mi negocio")
-    if (tipo === 'vendedor' && datos.nombreNegocio?.trim()) {
-      await NegocioService.crearParaUsuario(nueva.id, { nombre: datos.nombreNegocio, categoria: datos.categoriaNegocio }, { transaction: t });
-    }
-    // El repartidor nace con su perfil de reparto (vehículo y placa; la placa se valida según el vehículo)
-    if (tipo === 'repartidor' && datos.vehiculo) {
-      await RepartidorService.crearPerfil(nueva.id, { vehiculo: datos.vehiculo, placa: datos.placa }, { transaction: t });
-    }
-
-    // 4) El código de verificación queda consumido (no sirve para registrar otra cuenta)
+    const nueva = await crearCuenta(tipo, datos, t, { correoVerificadoEn: verificacion.verificadoEn || new Date() });
+    // El código de verificación queda consumido (no sirve para registrar otra cuenta)
     await CodigoService.consumir(verificacion, { transaction: t });
     return nueva;
   });
@@ -213,14 +218,15 @@ async function obtenerPerfil(id, req) {
 }
 
 // La foto llega en base64, se optimiza (WebP, sin datos GPS) y queda en TPERSONAS con historial. Devuelve su URL.
-async function subirFoto(id, base64, req) {
+// "actor" es quien hace el cambio (el propio usuario o el administrador)
+async function subirFoto(id, base64, req, { actor = id } = {}) {
   const usuario = await cargarUsuario(id);
   const archivo = await withTransaction(async (t) => {
     const a = await ArchivoService.guardarBase64({ base64, categoria: 'PERFIL', propietario: id }, { transaction: t });
     await Persona.update({ fotoId: a.id }, { where: { id: usuario.personaId }, transaction: t });
     return a;
-  }, { usuarioId: id });
-  auditar({ usuarioId: id, accion: 'FOTOACTUALIZADA', entidad: 'USUARIOS', entidadId: id, req });
+  }, { usuarioId: actor });
+  auditar({ usuarioId: actor, accion: 'FOTOACTUALIZADA', entidad: 'USUARIOS', entidadId: id, req });
   return (await ArchivoService.urlDe(req, archivo.id))?.url || null;
 }
 
@@ -361,7 +367,7 @@ const existeEmail = async (email) => (await Persona.count({ where: { correo: nor
 
 module.exports = {
   ROLES,
-  registrar, login, refrescar, cerrarSesion, cerrarTodasLasSesiones,
+  registrar, crearCuenta, usuarioPerfil, login, refrescar, cerrarSesion, cerrarTodasLasSesiones,
   obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave,
   solicitarCodigoReset, verificarCodigoReset, restablecerClave,
   enviarCodigoEmail, verificarCodigoEmail,

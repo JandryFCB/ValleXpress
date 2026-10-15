@@ -58,6 +58,7 @@ const miNegocioRoutes = require('./modules/negocios/mi-negocio.routes');
 const pedidosRoutes = require('./modules/pedidos/pedido.routes');
 const notificacionesRoutes = require('./modules/notificaciones/notificacion.routes');
 const repartidorRoutes = require('./modules/repartidores/repartidor.routes');
+const adminRoutes = require('./modules/admin/admin.routes');
 const registrarUbicacionSocket = require('./modules/repartidores/ubicacion.socket');
 
 
@@ -168,6 +169,7 @@ app.use('/api/mi-negocio', miNegocioRoutes);
 app.use('/api/pedidos', pedidosRoutes);
 app.use('/api/notificaciones', notificacionesRoutes);
 app.use('/api/repartidor', repartidorRoutes);
+app.use('/api/admin', adminRoutes);
 
 
 
@@ -204,9 +206,9 @@ io.on('connection', (socket) => {
     const uid = socket.usuario?.id;
     if (uid) {
       socket.join(`user:${uid}`);
-      // Además, unir por rol para poder emitir a todos los repartidores
-      if (socket.usuario?.tipoUsuario === 'repartidor') {
-        socket.join('role:repartidor');
+      // Además, unir por rol: los repartidores reciben los pedidos libres y el administrador ve todos los cambios
+      if (['repartidor', 'administrador'].includes(socket.usuario?.tipoUsuario)) {
+        socket.join(`role:${socket.usuario.tipoUsuario}`);
       }
     }
   } catch (_) {}

@@ -9,7 +9,7 @@ const NegocioService = require('../negocios/negocio.service');
 const NotificacionService = require('../notificaciones/notificacion.service');
 const RepartidorService = require('../repartidores/repartidor.service');
 const { Repartidor, RepartidorEstado } = require('../repartidores/repartidor.model');
-const { ACTIVOS, TERMINADOS, validarTransicion } = require('./pedido_estado.service');
+const { ACTIVOS, TERMINADOS, validarTransicion, validarCancelacionAdmin } = require('./pedido_estado.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const ArchivoService = require('../../shared/services/archivo.service');
@@ -103,7 +103,7 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
         nombre: n.nombre,
         logo: urls[String(n.logoId)]?.miniatura || null,
         local: n.local ? { direccion: n.local.direccion, referencia: n.local.referencia, latitud: num(n.local.latitud), longitud: num(n.local.longitud) } : null,
-        ...(rol === 'repartidor' && { telefono: n.dueno?.telefono || null }),
+        ...((rol === 'repartidor' || rol === 'administrador') && { telefono: n.dueno?.telefono || null }),
       },
       // Distancia del negocio a la entrega (en línea recta): le sirve al repartidor para decidir
       distanciaKm: n?.local ? Number(distanciaKm({ lat: num(n.local.latitud), lng: num(n.local.longitud) }, { lat: num(p.latitud), lng: num(p.longitud) }).toFixed(2)) : null,
@@ -132,7 +132,7 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
       repartidor: repartidorApi(p),
       calificacion: calif('NEGOCIO') ? { puntuacion: calif('NEGOCIO').puntuacion, comentario: calif('NEGOCIO').comentario } : null,
       calificacionRepartidor: calif('REPARTIDOR') ? { puntuacion: calif('REPARTIDOR').puntuacion, comentario: calif('REPARTIDOR').comentario } : null,
-      ...((rol === 'vendedor' || rol === 'repartidor') && { cliente: persona(p.cliente) }),
+      ...(['vendedor', 'repartidor', 'administrador'].includes(rol) && { cliente: persona(p.cliente) }),
     };
     if (rol === 'candidato') delete item.calificacion;
     if (detalle) item.lineaTiempo = await lineaDeTiempo(p.id);
@@ -197,6 +197,7 @@ function avisarCambio(io, pedido, duenoId, { repartidores = false } = {}) {
   const evento = { pedidoId: Number(pedido.id), estado: ESTADOPEDIDOAAPI[pedido.estado] };
   for (const u of [pedido.clienteId, duenoId, pedido.repartidorId].filter(Boolean)) io.to(`user:${u}`).emit('pedido:actualizado', evento);
   if (repartidores) io.to('role:repartidor').emit('pedido:actualizado', evento);
+  io.to('role:administrador').emit('pedido:actualizado', evento);     // el panel del administrador se refresca solo
 }
 
 const AVISOCLIENTE = {
@@ -332,6 +333,7 @@ function rolEn(pedido, usuario) {
   if (pedido.clienteId === usuario.id) return 'cliente';
   if (pedido.negocio?.duenoId === usuario.id) return 'vendedor';
   if (pedido.repartidorId && pedido.repartidorId === usuario.id) return 'repartidor';
+  if (usuario.tipoUsuario === 'administrador') return 'administrador';     // el administrador ve todos
   return null;
 }
 
@@ -345,6 +347,37 @@ async function obtener(usuario, id, req) {
   }
   if (!rol) throw noEncontrado();
   return aApi(p, req, { rol, detalle: true });
+}
+
+// Administrador: todos los pedidos, con filtro por estado ('activos', 'historial' o uno puntual) y por negocio
+async function listarTodos(query, req) {
+  const where = {};
+  const estado = filtroEstado(query.estado) || APIAESTADOPEDIDO[query.estado];
+  if (estado) where.estado = estado;
+  if (query.negocioId) where.negocioId = query.negocioId;
+  return listar(where, query, req, 'administrador');
+}
+
+// Administrador: cancela un pedido en curso (disputa). Devuelve el stock y avisa al cliente, al negocio y al
+// repartidor (que queda libre para otra entrega).
+async function cancelarComoAdmin(admin, id, { motivo }, req) {
+  const pedido = await withTransaction(async (t) => {
+    const p = await Pedido.findOne({ where: { id }, transaction: t, lock: t.LOCK.UPDATE });
+    if (!p) throw noEncontrado();
+    validarCancelacionAdmin(p.estado);
+    await devolverStock(p.id, t);
+    await p.update({ estado: E.CANCELADO, motivoCancelacion: `Cancelado por ValleXpress: ${motivo.trim()}` }, { transaction: t });
+    return p;
+  }, { usuarioId: admin.id });
+
+  auditar({ usuarioId: admin.id, accion: 'PEDIDOCANCELADOADMIN', entidad: 'PEDIDOS', entidadId: id, detalle: { motivo }, req });
+  const negocio = await Negocio.findOne({ where: { id: pedido.negocioId }, attributes: ['id', 'duenoId'] });
+  const aviso = { io: req.io, tipo: 'pedido_cancelado', titulo: 'Pedido cancelado', pedidoId: pedido.id, datos: { estado: 'cancelado' } };
+  await NotificacionService.notificar({ ...aviso, usuarioId: pedido.clienteId, mensaje: `ValleXpress canceló tu pedido #${pedido.id}: ${motivo.trim()}` });
+  await NotificacionService.notificar({ ...aviso, usuarioId: negocio?.duenoId, mensaje: `ValleXpress canceló el pedido #${pedido.id}: ${motivo.trim()}` });
+  if (pedido.repartidorId) await NotificacionService.notificar({ ...aviso, usuarioId: pedido.repartidorId, mensaje: `El pedido #${pedido.id} fue cancelado. Ya puedes tomar otro` });
+  avisarCambio(req.io, pedido, negocio?.duenoId, { repartidores: true });
+  return aApi(await cargar(id), req, { rol: 'administrador', detalle: true });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -563,5 +596,6 @@ module.exports = {
   libresParaRepartidor, listarDelRepartidor, aceptar,
   recoger: (usuario, id, req) => pasoRepartidor(usuario, id, E.RECOGIDO, req),
   entregar: (usuario, id, req) => pasoRepartidor(usuario, id, E.ENTREGADO, req),
+  listarTodos, cancelarComoAdmin,
   aApi, cargar, distanciaKm,
 };

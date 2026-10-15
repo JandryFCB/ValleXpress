@@ -29,6 +29,10 @@ const QUIEN = Object.freeze({
 const ACTIVOS = Object.freeze([E.PENDIENTE, E.CONFIRMADO, E.PREPARANDO, E.LISTO, E.ENCAMINO, E.RECOGIDO, E.ENTREGADO]);
 const TERMINADOS = Object.freeze([E.RECIBIDO, E.RECHAZADO, E.CANCELADO]);
 
+// El administrador puede cancelar un pedido en curso para resolver un problema (el negocio no responde, el
+// repartidor no llega...) hasta que se entrega. Va aparte de TRANSICIONES: no es un paso normal del flujo.
+const CANCELABLESPORADMIN = Object.freeze([E.PENDIENTE, E.CONFIRMADO, E.PREPARANDO, E.LISTO, E.ENCAMINO, E.RECOGIDO]);
+
 const nombre = (codigo) => ESTADOPEDIDOAAPI[codigo] || codigo;
 
 // Lanza el error adecuado si la transición no existe o el rol no puede hacerla
@@ -41,4 +45,10 @@ function validarTransicion(actual, siguiente, rol) {
   }
 }
 
-module.exports = { TRANSICIONES, ACTIVOS, TERMINADOS, validarTransicion };
+function validarCancelacionAdmin(actual) {
+  if (!CANCELABLESPORADMIN.includes(actual)) {
+    throw AppError.conflict(`El pedido está "${nombre(actual)}": ya no se puede cancelar`, 'TRANSICIONINVALIDA');
+  }
+}
+
+module.exports = { TRANSICIONES, ACTIVOS, TERMINADOS, CANCELABLESPORADMIN, validarTransicion, validarCancelacionAdmin };

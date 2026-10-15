@@ -11,7 +11,9 @@ const obtener = asyncHandler(async (req, res) => res.json({ negocio: await Negoc
 const menu = asyncHandler(async (req, res) => res.json(await ProductoService.menu(Number(req.params.id), req.usuario, req)));
 
 // --- Mi negocio (vendedor) ---
-const u = (req) => req.usuario.id;
+// El dueño es quien inicia sesión; cuando el administrador gestiona un negocio, req.duenoId trae al dueño
+// (lo fija admin.routes después de verificar el rol).
+const u = (req) => req.duenoId || req.usuario.id;
 const miNegocio = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.miNegocio(u(req), req) }));
 const crear = asyncHandler(async (req, res) => res.status(201).json({ negocio: await NegocioService.crear(u(req), req.body, req) }));
 const actualizar = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.actualizar(u(req), req.body, req) }));

@@ -1,0 +1,366 @@
+const { Op, QueryTypes } = require('sequelize');
+const { sequelize } = require('../../config/database');
+const Usuario = require('../auth/usuario.model');
+const UsuarioCuenta = require('../auth/usuarioCuenta.model');
+const UsuarioAcceso = require('../auth/usuarioAcceso.model');
+const Persona = require('../auth/persona.model');
+const Telefono = require('../telefonos/telefono.model');
+const AuthService = require('../auth/auth.service');
+const ArchivoService = require('../../shared/services/archivo.service');
+const { hashClave } = require('../../shared/utils/clave');
+const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
+const { Negocio, NegocioEstado } = require('../negocios/negocio.model');
+const NegocioService = require('../negocios/negocio.service');
+const { Repartidor, RepartidorEstado } = require('../repartidores/repartidor.model');
+const RepartidorService = require('../repartidores/repartidor.service');
+const NotificacionService = require('../notificaciones/notificacion.service');
+const SesionService = require('../../shared/services/sesion.service');
+const ConfiguracionService = require('../../shared/services/configuracion.service');
+const AppError = require('../../shared/errors/AppError');
+const withTransaction = require('../../shared/helpers/withTransaction');
+const { auditar } = require('../../shared/services/log.service');
+const { APROBACION, APROBACIONAAPI, ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, ROLAAPI, APIAROL } = require('../../shared/constants/codigos');
+require('../pedidos/pedido.model');      // asegura la asociación Negocio -> dueño
+
+// Panel del ADMINISTRADOR: métricas, aprobación de negocios y repartidores, usuarios y configuración.
+// Cada cambio queda en la auditoría con quién lo hizo y, si aplica, el motivo.
+
+const VIGENTE = "'2999-12-31 00:00:00-05'";
+const ZONA = 'America/Guayaquil';
+const num = (v) => (v === null || v === undefined ? null : Number(v));
+const APIAAPROBACION = Object.freeze(Object.fromEntries(Object.entries(APROBACIONAAPI).map(([c, t]) => [t, c])));
+const VENDIDOS = [E.ENTREGADO, E.RECIBIDO];
+
+const consulta = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
+
+function paginar(query) {
+  const page = Math.max(1, parseInt(query.page, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(query.limit, 10) || 20));
+  return { page, limit, offset: (page - 1) * limit };
+}
+const paginacion = ({ page, limit }, total) => ({ page, limit, total, totalPages: Math.ceil(total / limit), hasNext: page * limit < total });
+const textoBusqueda = (q) => `%${String(q).trim().replace(/[%_]/g, '\\$&')}%`;
+const conteo = (filas, aTexto) => Object.fromEntries(filas.map((f) => [aTexto(f.clave), Number(f.total)]));
+
+// ---------------------------------------------------------------------------------------------
+// Resumen: lo que el administrador ve al entrar
+// ---------------------------------------------------------------------------------------------
+async function resumen() {
+  const vendidos = VENDIDOS.map((c) => `'${c}'`).join(',');
+  const [hoy] = await consulta(`
+    SELECT COUNT(*) AS pedidos,
+           COUNT(*) FILTER (WHERE cestatuspedido IN (${vendidos})) AS entregados,
+           COALESCE(SUM(total) FILTER (WHERE cestatuspedido IN (${vendidos})), 0) AS ventas,
+           COALESCE(SUM(costoenvio) FILTER (WHERE cestatuspedido IN (${vendidos})), 0) AS envios
+      FROM tpedidos
+     WHERE fhasta = ${VIGENTE} AND (fpedido AT TIME ZONE :zona)::date = (now() AT TIME ZONE :zona)::date`, { zona: ZONA });
+
+  // Ventas de los últimos 7 días (incluye los días sin ventas, para la gráfica)
+  const dias = await consulta(`
+    SELECT to_char(d.dia, 'YYYY-MM-DD') AS dia, COUNT(p.cpedido) AS pedidos, COALESCE(SUM(p.total), 0) AS ventas
+      FROM generate_series((now() AT TIME ZONE :zona)::date - 6, (now() AT TIME ZONE :zona)::date, interval '1 day') AS d(dia)
+      LEFT JOIN tpedidos p ON p.fhasta = ${VIGENTE} AND p.cestatuspedido IN (${vendidos}) AND (p.fpedido AT TIME ZONE :zona)::date = d.dia
+     GROUP BY d.dia ORDER BY d.dia`, { zona: ZONA });
+
+  const enCurso = await consulta(`SELECT cestatuspedido AS clave, COUNT(*) AS total FROM tpedidos
+     WHERE fhasta = ${VIGENTE} AND cestatuspedido IN ('${E.PENDIENTE}','${E.CONFIRMADO}','${E.PREPARANDO}','${E.LISTO}','${E.ENCAMINO}','${E.RECOGIDO}')
+     GROUP BY cestatuspedido`);
+
+  const mejores = await consulta(`
+    SELECT n.cnegocio AS id, n.nombre, COUNT(p.cpedido) AS pedidos, COALESCE(SUM(p.total), 0) AS ventas
+      FROM tpedidos p JOIN tnegocios n ON n.cnegocio = p.cnegocio AND n.fhasta = ${VIGENTE}
+     WHERE p.fhasta = ${VIGENTE} AND p.cestatuspedido IN (${vendidos}) AND p.fpedido >= now() - interval '30 days'
+     GROUP BY n.cnegocio, n.nombre ORDER BY ventas DESC LIMIT 5`);
+
+  const usuarios = await consulta('SELECT rol AS clave, COUNT(*) AS total FROM vusuarios GROUP BY rol');
+  const negocios = await consulta(`SELECT cestatusaprobacion AS clave, COUNT(*) AS total FROM tnegocios WHERE fhasta = ${VIGENTE} GROUP BY cestatusaprobacion`);
+  const repartidores = await consulta(`SELECT cestatusaprobacion AS clave, COUNT(*) AS total FROM trepartidores WHERE fhasta = ${VIGENTE} GROUP BY cestatusaprobacion`);
+  const [enLinea] = await consulta('SELECT COUNT(*) AS total FROM trepartidoresestado WHERE estadisponible');
+
+  const negociosPor = conteo(negocios, (c) => APROBACIONAAPI[c]);
+  const repartidoresPor = conteo(repartidores, (c) => APROBACIONAAPI[c]);
+  return {
+    hoy: { pedidos: Number(hoy.pedidos), entregados: Number(hoy.entregados), ventas: num(hoy.ventas), envios: num(hoy.envios) },
+    ultimos7Dias: dias.map((d) => ({ dia: d.dia, pedidos: Number(d.pedidos), ventas: num(d.ventas) })),
+    pedidosEnCurso: conteo(enCurso, (c) => ESTADOPEDIDOAAPI[c]),
+    mejoresNegocios: mejores.map((m) => ({ id: Number(m.id), nombre: m.nombre, pedidos: Number(m.pedidos), ventas: num(m.ventas) })),
+    usuarios: conteo(usuarios, (c) => ROLAAPI[c]),
+    negocios: negociosPor,
+    repartidores: { ...repartidoresPor, enLinea: Number(enLinea.total) },
+    pendientes: (negociosPor.pendiente || 0) + (repartidoresPor.pendiente || 0),
+    aprobacionAutomatica: (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Negocios
+// ---------------------------------------------------------------------------------------------
+const contacto = (u) => u && { usuario: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, telefono: u.telefono, activo: u.activo };
+
+const INCLUIRNEGOCIO = [{ model: NegocioEstado, as: 'estado' }, { model: Usuario, as: 'dueno', attributes: ['id', 'nombre', 'apellido', 'email', 'telefono', 'activo'] }];
+
+async function negociosApi(filas, req) {
+  const lista = await NegocioService.aApi(filas, req, { privado: true });
+  return lista.map((n, i) => ({ ...n, aprobadoEn: filas[i].aprobadoEn, dueno: contacto(filas[i].dueno) }));
+}
+
+async function negocios(query, req) {
+  const pag = paginar(query);
+  const where = {};
+  if (APIAAPROBACION[query.aprobacion]) where.aprobacion = APIAAPROBACION[query.aprobacion];
+  if (query.q) where.nombre = { [Op.iLike]: textoBusqueda(query.q) };
+  const { count, rows } = await Negocio.findAndCountAll({
+    where,
+    include: INCLUIRNEGOCIO,
+    order: [['aprobacion', 'ASC'], ['nombre', 'ASC']],          // los pendientes ('001') primero
+    limit: pag.limit,
+    offset: pag.offset,
+  });
+  return { negocios: await negociosApi(rows, req), pagination: paginacion(pag, count) };
+}
+
+// Aviso al dueño o al repartidor según la decisión
+const AVISOAPROBACION = {
+  aprobado: ['¡Tu cuenta fue aprobada! 🎉', (que) => `${que} ya está activo en ValleXpress`],
+  rechazado: ['Solicitud no aprobada', (que, motivo) => `${que} no fue aprobado${motivo ? `: ${motivo}` : ''}`],
+  suspendido: ['Cuenta suspendida', (que, motivo) => `${que} fue suspendido${motivo ? `: ${motivo}` : ''}. Escríbenos si crees que es un error`],
+  pendiente: ['Tu cuenta está en revisión', (que) => `${que} volvió a revisión`],
+};
+
+function exigirMotivo(estado, motivo) {
+  if (['rechazado', 'suspendido'].includes(estado) && !motivo?.trim()) {
+    throw AppError.badRequest('Escribe el motivo: se le enviará al usuario', 'MOTIVOREQUERIDO');
+  }
+}
+
+async function cambiarAprobacionNegocio(admin, id, { estado, motivo }, req) {
+  exigirMotivo(estado, motivo);
+  const codigo = APIAAPROBACION[estado];
+  const n = await withTransaction(async (t) => {
+    const negocio = await Negocio.findOne({ where: { id }, transaction: t, lock: t.LOCK.UPDATE });
+    if (!negocio) throw AppError.notFound('Negocio no encontrado', 'NEGOCIONOENCONTRADO');
+    if (negocio.aprobacion === codigo) throw AppError.conflict(`El negocio ya está ${estado}`, 'SINCAMBIOS');
+    await negocio.update({ aprobacion: codigo, aprobadoEn: codigo === APROBACION.APROBADO ? new Date() : negocio.aprobadoEn }, { transaction: t });
+    // Un negocio que deja de estar aprobado se cierra: no puede recibir pedidos
+    if (codigo !== APROBACION.APROBADO) await NegocioEstado.update({ abierto: false }, { where: { negocioId: id }, transaction: t });
+    return negocio;
+  }, { usuarioId: admin.id });
+
+  auditar({ usuarioId: admin.id, accion: 'NEGOCIOAPROBACION', entidad: 'NEGOCIOS', entidadId: id, detalle: { estado, motivo: motivo || null }, req });
+  const [titulo, mensaje] = AVISOAPROBACION[estado];
+  await NotificacionService.notificar({ io: req.io, usuarioId: n.duenoId, tipo: `negocio_${estado}`, titulo, mensaje: mensaje(`Tu negocio "${n.nombre}"`, motivo?.trim()), datos: { negocioId: Number(id) } });
+  const [actualizado] = await negociosApi([await Negocio.findOne({ where: { id }, include: INCLUIRNEGOCIO })], req);
+  return actualizado;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Repartidores
+// ---------------------------------------------------------------------------------------------
+const INCLUIRREPARTIDOR = [{ model: RepartidorEstado, as: 'estado' }, { association: 'usuario', attributes: ['id', 'nombre', 'apellido', 'email', 'telefono', 'activo'] }];
+const repartidorApi = (r) => ({ ...RepartidorService.aApi(r), aprobadoEn: r.aprobadoEn, contacto: contacto(r.usuario) });
+
+async function repartidores(query) {
+  const pag = paginar(query);
+  const where = {};
+  if (APIAAPROBACION[query.aprobacion]) where.aprobacion = APIAAPROBACION[query.aprobacion];
+  if (query.q) where[Op.or] = [{ usuarioId: { [Op.iLike]: textoBusqueda(query.q) } }, { placa: { [Op.iLike]: textoBusqueda(query.q) } }];
+  const { count, rows } = await Repartidor.findAndCountAll({ where, include: INCLUIRREPARTIDOR, order: [['aprobacion', 'ASC'], ['usuarioId', 'ASC']], limit: pag.limit, offset: pag.offset });
+  return { repartidores: rows.map(repartidorApi), pagination: paginacion(pag, count) };
+}
+
+async function cambiarAprobacionRepartidor(admin, usuarioId, { estado, motivo }, req) {
+  exigirMotivo(estado, motivo);
+  const codigo = APIAAPROBACION[estado];
+  await withTransaction(async (t) => {
+    const r = await Repartidor.findOne({ where: { usuarioId }, transaction: t, lock: t.LOCK.UPDATE });
+    if (!r) throw AppError.notFound('Repartidor no encontrado', 'REPARTIDORNOENCONTRADO');
+    if (r.aprobacion === codigo) throw AppError.conflict(`El repartidor ya está ${estado}`, 'SINCAMBIOS');
+    await r.update({ aprobacion: codigo, aprobadoEn: codigo === APROBACION.APROBADO ? new Date() : r.aprobadoEn }, { transaction: t });
+    // Si deja de estar aprobado, se desconecta: ya no recibe pedidos
+    if (codigo !== APROBACION.APROBADO) await RepartidorEstado.update({ disponible: false, ultimoCambio: new Date() }, { where: { usuarioId }, transaction: t });
+  }, { usuarioId: admin.id });
+
+  auditar({ usuarioId: admin.id, accion: 'REPARTIDORAPROBACION', entidad: 'REPARTIDORES', entidadId: usuarioId, detalle: { estado, motivo: motivo || null }, req });
+  const [titulo, mensaje] = AVISOAPROBACION[estado];
+  await NotificacionService.notificar({ io: req.io, usuarioId, tipo: `repartidor_${estado}`, titulo, mensaje: mensaje('Tu perfil de repartidor', motivo?.trim()) });
+  return repartidorApi(await Repartidor.findOne({ where: { usuarioId }, include: INCLUIRREPARTIDOR }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Usuarios: buscar, ver, crear, editar, cambiar la clave o la foto, bloquear, dar de baja y reactivar
+// ---------------------------------------------------------------------------------------------
+// Estatus de la cuenta (TESTATUSUSUARIO). "Dar de baja" no borra nada: la cuenta queda inactiva con todo su
+// historial (pedidos, calificaciones) y se puede reactivar.
+const ESTATUS = Object.freeze({ activo: '001', inactivo: '002', bloqueado: '003' });
+const ESTATUSAAPI = Object.freeze(Object.fromEntries(Object.entries(ESTATUS).map(([k, v]) => [v, k])));
+const TIPODOCCEDULA = '001';
+
+async function usuariosApi(filas, req) {
+  const urls = await ArchivoService.mapaUrls(req, filas.map((u) => u.fotoId));
+  return filas.map((u) => ({
+    usuario: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, telefono: u.telefono, cedula: u.cedula,
+    rol: u.tipoUsuario, activo: u.activo, estatus: ESTATUSAAPI[u.estatus] || 'activo', verificado: u.verificado,
+    foto: urls[String(u.fotoId)]?.miniatura || urls[String(u.fotoId)]?.url || null,
+    ultimaConexion: u.ultimaConexion, creadoEn: u.creadoEn,
+  }));
+}
+const usuarioApi = async (u, req) => (await usuariosApi([u], req))[0];
+
+async function exigirUsuario(usuarioId) {
+  const u = await Usuario.findByPk(usuarioId);
+  if (!u) throw AppError.notFound('Usuario no encontrado', 'USUARIONOENCONTRADO');
+  return u;
+}
+
+// El administrador principal ("admin") y uno mismo no se pueden bloquear ni dar de baja (nadie quedaría a cargo)
+function exigirNoProtegido(admin, usuarioId) {
+  if (usuarioId === 'admin' || usuarioId === admin.id) {
+    throw AppError.forbidden('Esta cuenta de administrador no se puede bloquear ni dar de baja', 'ADMINPROTEGIDO');
+  }
+}
+
+async function usuarios(query, req) {
+  const pag = paginar(query);
+  const where = {};
+  if (APIAROL[query.rol]) where.rol = APIAROL[query.rol];
+  if (query.activo === 'true' || query.activo === 'false') where.activo = query.activo === 'true';
+  if (query.q) {
+    const t = textoBusqueda(query.q);
+    where[Op.or] = [{ id: { [Op.iLike]: t } }, { nombre: { [Op.iLike]: t } }, { apellido: { [Op.iLike]: t } }, { email: { [Op.iLike]: t } }, { cedula: { [Op.iLike]: t } }];
+  }
+  const { count, rows } = await Usuario.findAndCountAll({ where, order: [['creadoEn', 'DESC']], limit: pag.limit, offset: pag.offset });
+  return { usuarios: await usuariosApi(rows, req), pagination: paginacion(pag, count) };
+}
+
+const obtenerUsuario = async (usuarioId, req) => usuarioApi(await exigirUsuario(usuarioId), req);
+
+// Crea una cuenta de cualquier rol (también otro administrador) sin pasar por la verificación del correo.
+// El negocio o el perfil de reparto nacen ya aprobados: los crea el propio administrador.
+async function crearUsuario(admin, datos, req) {
+  const cuenta = await withTransaction((t) => AuthService.crearCuenta(datos.rol, datos, t, { aprobado: true }), { usuarioId: admin.id });
+  auditar({ usuarioId: admin.id, accion: 'USUARIOCREADOADMIN', entidad: 'USUARIOS', entidadId: cuenta.id, detalle: { rol: datos.rol }, req });
+  return usuarioApi(await exigirUsuario(cuenta.id), req);
+}
+
+// Corrige los datos personales: nombre, apellido, correo, cédula y teléfono principal (sin repetir los de otros)
+async function editarUsuario(admin, usuarioId, datos, req) {
+  const u = await exigirUsuario(usuarioId);
+  const email = datos.email !== undefined ? normalizarEmail(datos.email) : undefined;
+  const telefono = datos.telefono !== undefined ? normalizarTelefono(datos.telefono) : undefined;
+  const otraPersona = { [Op.ne]: u.personaId };
+  if (email && email !== u.email && await Persona.findOne({ where: { correo: email, id: otraPersona } })) throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
+  if (datos.cedula && datos.cedula !== u.cedula && await Persona.findOne({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: datos.cedula, id: otraPersona } })) {
+    throw AppError.conflict('La cédula ya está registrada', 'CEDULADUPLICADA');
+  }
+  if (telefono && telefono !== u.telefono && await Telefono.findOne({ where: { numero: telefono, personaId: otraPersona } })) throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
+
+  await withTransaction(async (t) => {
+    const cambios = {
+      ...(datos.nombre && { nombres: datos.nombre.trim() }),
+      ...(datos.apellido && { apellidos: datos.apellido.trim() }),
+      ...(email && email !== u.email && { correo: email }),
+      ...(datos.cedula && datos.cedula !== u.cedula && { numeroDoc: datos.cedula }),
+    };
+    if (Object.keys(cambios).length) await Persona.update(cambios, { where: { id: u.personaId }, transaction: t });
+    if (telefono && telefono !== u.telefono) {
+      const principal = await Telefono.findOne({ where: { personaId: u.personaId, principal: true }, transaction: t });
+      if (principal) await Telefono.update({ numero: telefono }, { where: { personaId: u.personaId, secuencia: principal.secuencia }, transaction: t });
+      else await Telefono.create({ personaId: u.personaId, numero: telefono, principal: true }, { transaction: t });
+    }
+  }, { usuarioId: admin.id });
+
+  auditar({ usuarioId: admin.id, accion: 'USUARIOEDITADOADMIN', entidad: 'USUARIOS', entidadId: usuarioId, detalle: { campos: Object.keys(datos) }, req });
+  return usuarioApi(await exigirUsuario(usuarioId), req);
+}
+
+// Clave nueva (por ejemplo, si el usuario la olvidó y no tiene su correo): se cierran todas sus sesiones
+async function ponerClave(admin, usuarioId, clave, req) {
+  await exigirUsuario(usuarioId);
+  const claveHash = await hashClave(clave);
+  await withTransaction(async (t) => {
+    await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id: usuarioId }, transaction: t });
+    await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null }, { where: { id: usuarioId }, transaction: t });
+    await SesionService.cerrarTodas(usuarioId, 'CLAVE', { transaction: t });
+  }, { usuarioId: admin.id });
+  if (req.io) req.io.in(`user:${usuarioId}`).disconnectSockets(true);
+  auditar({ usuarioId: admin.id, accion: 'CLAVEPUESTAADMIN', entidad: 'USUARIOS', entidadId: usuarioId, req });
+  return usuarioApi(await exigirUsuario(usuarioId), req);
+}
+
+async function fotoUsuario(admin, usuarioId, base64, req) {
+  await AuthService.subirFoto(usuarioId, base64, req, { actor: admin.id });
+  return usuarioApi(await exigirUsuario(usuarioId), req);
+}
+
+// Cambia el estatus de la cuenta. Fuera de "activo" no puede entrar: se cierran sus sesiones, se corta su
+// conexión en vivo y, si es repartidor, queda fuera de línea.
+async function cambiarEstatus(admin, usuarioId, estatus, motivo, req) {
+  const u = await exigirUsuario(usuarioId);
+  if (estatus !== 'activo') exigirNoProtegido(admin, usuarioId);
+  if (ESTATUSAAPI[u.estatus] === estatus) {
+    const textos = { activo: 'La cuenta ya está activa', bloqueado: 'La cuenta ya está bloqueada', inactivo: 'La cuenta ya está dada de baja' };
+    throw AppError.conflict(textos[estatus], 'SINCAMBIOS');
+  }
+  if (estatus !== 'activo' && !motivo?.trim()) throw AppError.badRequest('Escribe el motivo', 'MOTIVOREQUERIDO');
+
+  await withTransaction(async (t) => {
+    await UsuarioCuenta.update({ estatus: ESTATUS[estatus] }, { where: { id: usuarioId }, transaction: t });
+    if (estatus !== 'activo') {
+      await SesionService.cerrarTodas(usuarioId, estatus === 'bloqueado' ? 'BLOQUEO' : 'BAJA', { transaction: t });
+      await RepartidorEstado.update({ disponible: false, ultimoCambio: new Date() }, { where: { usuarioId }, transaction: t });
+    }
+  }, { usuarioId: admin.id });
+
+  if (estatus !== 'activo' && req.io) req.io.in(`user:${usuarioId}`).disconnectSockets(true);
+  const accion = { activo: 'USUARIOREACTIVADO', bloqueado: 'USUARIOBLOQUEADO', inactivo: 'USUARIODADODEBAJA' }[estatus];
+  auditar({ usuarioId: admin.id, accion, entidad: 'USUARIOS', entidadId: usuarioId, detalle: { motivo: motivo || null }, req });
+  return usuarioApi(await exigirUsuario(usuarioId), req);
+}
+
+// Compatibilidad con PATCH /usuarios/:usuario/estado { activo }: activo = true reactiva, false bloquea
+const cambiarEstadoUsuario = (admin, usuarioId, { activo, motivo }, req) =>
+  cambiarEstatus(admin, usuarioId, activo ? 'activo' : 'bloqueado', motivo, req);
+
+const darDeBaja = (admin, usuarioId, { motivo }, req) => cambiarEstatus(admin, usuarioId, 'inactivo', motivo, req);
+
+// ---------------------------------------------------------------------------------------------
+// Gestión de un negocio "como su dueño": el administrador usa las mismas rutas que el vendedor
+// (datos, local, horario, abrir/cerrar, imágenes y productos). Cada cambio queda auditado a su nombre.
+// ---------------------------------------------------------------------------------------------
+async function resolverDueno(req) {
+  const negocio = await Negocio.findOne({ where: { id: req.params.negocioId }, attributes: ['id', 'duenoId'] });
+  if (!negocio) throw AppError.notFound('Negocio no encontrado', 'NEGOCIONOENCONTRADO');
+  req.duenoId = negocio.duenoId;
+  if (req.method !== 'GET') {
+    auditar({ usuarioId: req.usuario.id, accion: 'NEGOCIOGESTIONADMIN', entidad: 'NEGOCIOS', entidadId: negocio.id, detalle: { metodo: req.method, ruta: req.path }, req });
+  }
+}
+
+// Vehículo, placa y color de un repartidor
+async function editarRepartidor(admin, usuarioId, datos, req) {
+  await RepartidorService.exigirPerfil(usuarioId);
+  await RepartidorService.actualizar(usuarioId, datos, req);
+  auditar({ usuarioId: admin.id, accion: 'REPARTIDOREDITADOADMIN', entidad: 'REPARTIDORES', entidadId: usuarioId, detalle: datos, req });
+  return repartidorApi(await Repartidor.findOne({ where: { usuarioId }, include: INCLUIRREPARTIDOR }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Configuración
+// ---------------------------------------------------------------------------------------------
+// Aprobación automática: con ella, los negocios y repartidores nuevos nacen aprobados (útil para demos);
+// sin ella, esperan a que el administrador los revise.
+async function cambiarAprobacionAutomatica(admin, activa, req) {
+  await withTransaction((t) => sequelize.query(
+    `UPDATE tconfiguraciones SET valor = CAST(:valor AS jsonb) WHERE cconfiguracion = 'APROBACIONAUTOMATICA' AND fhasta = ${VIGENTE}`,
+    { replacements: { valor: JSON.stringify(activa) }, transaction: t },
+  ), { usuarioId: admin.id });
+  ConfiguracionService.limpiarCache();
+  auditar({ usuarioId: admin.id, accion: 'CONFIGURACIONCAMBIADA', entidad: 'CONFIGURACIONES', entidadId: 'APROBACIONAUTOMATICA', detalle: { valor: activa }, req });
+  return { aprobacionAutomatica: (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true };
+}
+
+module.exports = {
+  resumen, negocios, cambiarAprobacionNegocio, repartidores, cambiarAprobacionRepartidor,
+  usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
+  resolverDueno, editarRepartidor, cambiarAprobacionAutomatica,
+};

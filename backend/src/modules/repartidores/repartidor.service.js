@@ -81,7 +81,7 @@ async function crearPerfil(usuarioId, datos, opciones = {}) {
   const vehiculo = vehiculoDe(datos.vehiculo) || (datos.placa ? TIPOVEHICULO.MOTOCICLETA : TIPOVEHICULO.APIE);
   const placa = placaPara(vehiculo, datos.placa);
   await exigirPlacaLibre(placa, usuarioId, opciones);
-  const automatica = (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true;
+  const automatica = datos.aprobado ?? (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true;
   return Repartidor.create({
     usuarioId,
     vehiculo,

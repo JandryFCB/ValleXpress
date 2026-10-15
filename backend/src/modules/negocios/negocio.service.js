@@ -154,7 +154,8 @@ const categoriaValida = (c) => Object.values(CATEGORIA).includes(c);
 // Crea el negocio de un vendedor (también se usa en el registro, dentro de su transacción).
 // Mientras no exista el panel de administración, nace aprobado si APROBACIONAUTOMATICA está activa.
 async function crearParaUsuario(usuarioId, datos, opciones = {}) {
-  const automatica = (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true;
+  // El administrador puede crearlo ya aprobado (datos.aprobado); si no, manda APROBACIONAUTOMATICA
+  const automatica = datos.aprobado ?? (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true;
   return Negocio.create({
     duenoId: usuarioId,
     nombre: String(datos.nombre).trim(),
