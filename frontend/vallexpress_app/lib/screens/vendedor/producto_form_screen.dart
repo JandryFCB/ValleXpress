@@ -191,22 +191,32 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
           const SizedBox(height: 14),
           CampoValle(controller: _descripcion, etiqueta: 'Descripción (opcional)', icono: Icons.notes_rounded, mayusculas: TextCapitalization.sentences, maxLongitud: 500, maxLineas: 3),
           const SizedBox(height: 14),
-          // Sección con sugerencias de las que ya existen en el menú
-          Autocomplete<String>(
-            initialValue: TextEditingValue(text: _seccion.text),
-            optionsBuilder: (v) => widget.secciones.where((s) => s.toLowerCase().contains(v.text.toLowerCase()) && s != v.text),
-            onSelected: (s) => _seccion.text = s,
-            fieldViewBuilder: (ctx, controlador, foco, alEnviar) {
-              return TextField(
-                controller: controlador,
-                focusNode: foco,
-                onChanged: (v) => _seccion.text = v,
-                textCapitalization: TextCapitalization.sentences,
-                inputFormatters: [LengthLimitingTextInputFormatter(60)],
-                decoration: const InputDecoration(labelText: 'Sección del menú (opcional)', prefixIcon: Icon(Icons.view_list_outlined), helperText: 'Ej: Pizzas, Bebidas, Postres'),
-              );
-            },
+          // Sección: se escribe o se toca una de las que ya existen (chips, porque una lista
+          // desplegable debajo del campo queda tapada por el teclado en el móvil)
+          CampoValle(
+            controller: _seccion,
+            etiqueta: 'Sección del menú (opcional)',
+            icono: Icons.view_list_outlined,
+            mayusculas: TextCapitalization.sentences,
+            maxLongitud: 60,
+            ayuda: widget.secciones.isEmpty ? 'Ej: Pizzas, Bebidas, Postres' : null,
+            onChanged: (_) => setState(() {}),
           ),
+          if (widget.secciones.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final s in widget.secciones)
+                  ChoiceChip(
+                    label: Text(s),
+                    selected: _seccion.text.trim().toLowerCase() == s.toLowerCase(),
+                    onSelected: (_) => setState(() => _seccion.text = s),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 24),
           Text('Estado', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
@@ -214,7 +224,8 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
             width: double.infinity,
             child: SegmentedButton<EstadoProducto>(
               showSelectedIcon: false,
-              segments: [for (final e in EstadoProducto.values) ButtonSegment(value: e, icon: Icon(e.icono, size: 18), label: Text(e.etiqueta))],
+              // Sin íconos: con ellos "Disponible" no cabe en pantallas angostas y se parte en dos líneas
+              segments: [for (final e in EstadoProducto.values) ButtonSegment(value: e, label: Text(e.etiqueta, maxLines: 1))],
               selected: {_estado},
               onSelectionChanged: (s) => setState(() => _estado = s.first),
             ),
