@@ -7,7 +7,7 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 
 ## Estado actual
 
-**Reconstrucción desde cero por flujos** · Flujos 1 (Cuenta), 2 (Catálogo) y 3 (Pedidos del cliente) **hechos** · Siguiente: Flujo 4 (Vendedor y repartidor) · Última actualización: 2026-10-14
+**Reconstrucción desde cero por flujos** · Los 4 flujos **hechos** (Cuenta, Catálogo, Pedidos del cliente, Vendedor y repartidor) · Siguiente: pulir, producción y reglas de negocio · Última actualización: 2026-10-14
 
 > El 2026-10-12 se borró el esquema anterior (v2/V3) y la BD se rehízo con el patrón T de `PATRON_TABLAS_FITBANK.md`,
 > por bloques (`database/migraciones`). Los bloques 1 a 13 de abajo describen el esquema ANTERIOR: quedan como historial.
@@ -16,7 +16,7 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 | Área | Estado |
 |---|---|
 | Ramas: `main` (estable), `desarrollo`, `feat/bd-desde-cero`, `feat/app-sesion`, `feat/flujo-cuenta`, `feat/flujo-catalogo`, `feat/flujo-pedidos` | Hecho, todo subido a GitHub |
-| BD nueva: migraciones 000 a 007 (50 tablas + vista `VUSUARIOS`), PostgreSQL 17 en Docker | **Hecha y probada** |
+| BD nueva: migraciones 000 a 008 (55 tablas + vista `VUSUARIOS`), PostgreSQL 17 en Docker | **Hecha y probada** |
 | Sesión persistente (token 15 min + refresh token 90 días con rotación) | **Hecha y probada** (backend y app, también en el móvil) |
 | Backend **auth** | **Hecho: 104 pruebas** |
 | Backend **direcciones y teléfonos** | **Hecho: 71 pruebas** |
@@ -26,8 +26,17 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 | App: explorar negocios y su menú (cliente); mi negocio, horario y productos (vendedor) | **Hecho**, verificado en el móvil |
 | Backend **pedidos, calificaciones y notificaciones** (+ avisos en vivo por socket) | **Hecho: 79 pruebas** (total 326) |
 | App: inicio nuevo del cliente, carrito, pedido, seguimiento en vivo, recibir, calificar, avisos | **Hecho: 7 pruebas nuevas**, verificado en el móvil |
-| Flujo 4 · Vendedor y repartidor: gestión de pedidos, repartidores, rutas | Pendiente |
+| Backend **repartidores** (perfil, en línea, aceptar, recoger, entregar) + ubicación en vivo por socket | **Hecho: 51 pruebas** (total 377) |
+| App: inicio del vendedor (pedidos) y del repartidor (entregas), mapa en vivo para cliente, negocio y repartidor | **Hecho**, compila y probado con el simulador (falta probar en el móvil) |
 | Antes de producción (claves, HTTPS, almacenamiento de imágenes) y reglas de negocio (IVA, comisión, envío) | Pendiente |
+
+### Bloque 17 (2026-10-14): flujo Vendedor y repartidor
+- Migración 008: tipos de vehículo (con si llevan placa), `TREPARTIDORES` histórica, `TREPARTIDORESESTADO` (en línea, última ubicación, calificación, entregas) y `TREPARTIDORUBICACIONES` (recorrido de cada entrega, un punto cada 15 s; se purga a los 60 días).
+- El repartidor se registra con su vehículo y placa. En línea ve los pedidos listos (y los que se están preparando) sin datos del cliente, con la distancia y lo que gana. Una entrega a la vez; si dos aceptan el mismo pedido, gana uno (bloqueo de fila).
+- Ubicación en vivo: el celular del repartidor la envía por socket y el servidor la reenvía solo al cliente y al negocio de su entrega en curso. Al entregar, deja de compartirse.
+- App: inicio del vendedor (aceptar con tiempo estimado, rechazar con motivo, preparando, listo) y del repartidor (en línea, aceptar, mapa, cómo llegar, llamar, cobrar, recogí/entregué, historial). El cliente ve la moto moviéndose en el mapa, quién lo lleva y cuánto falta, y puede calificar al repartidor.
+- Se borró todo lo viejo: inicio anterior, pantallas y servicios de pedidos, rastreo, avisos, vendedor y repartidor, y el módulo `vendedores` del backend. El analizador de Flutter queda sin avisos.
+- Simulador para desarrollo (`npm run simular:entrega`): hace de negocio y de repartidor para ver una entrega completa con un solo celular.
 
 ### Bloque 16 (2026-10-14): flujo Pedidos del cliente
 - Migración 007: estatus de pedido y métodos de pago (con cuáles están activos), `TPEDIDOS` histórica (cada cambio de estado deja su versión: de ahí sale la hora de cada paso del seguimiento), detalle con el precio de ese momento, calificaciones y notificaciones.
