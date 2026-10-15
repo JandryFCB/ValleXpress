@@ -7,7 +7,7 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 
 ## Estado actual
 
-**Reconstrucción desde cero por flujos** · Flujo 1 (Cuenta) **hecho** · Siguiente: Flujo 2 (Catálogo) · Última actualización: 2026-10-14
+**Reconstrucción desde cero por flujos** · Flujos 1 (Cuenta) y 2 (Catálogo) **hechos** · Siguiente: Flujo 3 (Pedidos del cliente) · Última actualización: 2026-10-14
 
 > El 2026-10-12 se borró el esquema anterior (v2/V3) y la BD se rehízo con el patrón T de `PATRON_TABLAS_FITBANK.md`,
 > por bloques (`database/migraciones`). Los bloques 1 a 13 de abajo describen el esquema ANTERIOR: quedan como historial.
@@ -15,17 +15,24 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 
 | Área | Estado |
 |---|---|
-| Ramas: `main` (estable), `desarrollo`, `feat/bd-desde-cero`, `feat/app-sesion`, `feat/flujo-cuenta` | Hecho, todo subido a GitHub |
-| BD nueva: migraciones 000 a 005 (27 tablas + vista `VUSUARIOS`), PostgreSQL 17 en Docker | **Hecha y probada** |
+| Ramas: `main` (estable), `desarrollo`, `feat/bd-desde-cero`, `feat/app-sesion`, `feat/flujo-cuenta`, `feat/flujo-catalogo` | Hecho, todo subido a GitHub |
+| BD nueva: migraciones 000 a 006 (41 tablas + vista `VUSUARIOS`), PostgreSQL 17 en Docker | **Hecha y probada** |
 | Sesión persistente (token 15 min + refresh token 90 días con rotación) | **Hecha y probada** (backend y app, también en el móvil) |
 | Backend **auth** | **Hecho: 104 pruebas** |
 | Backend **direcciones y teléfonos** | **Hecho: 71 pruebas** |
 | App: sistema de diseño + tema claro/oscuro/sistema con la paleta del logo | **Hecho** |
 | App rediseñada: login, registro (4 pasos), recuperar clave, perfil, direcciones con mapa, teléfonos, configuración | **Hecho: 24 pruebas**, verificado en el móvil |
-| Flujo 2 · Catálogo: negocios, categorías, productos, imágenes | Pendiente |
+| Backend **negocios, horarios, productos, inventario e imágenes** (+ foto de perfil real) | **Hecho: 72 pruebas** (total 247) |
+| App: explorar negocios y su menú (cliente); mi negocio, horario y productos (vendedor) | **Hecho**, verificado en el móvil |
 | Flujo 3 · Pedidos del cliente: carrito, pedido, seguimiento en vivo, calificaciones, notificaciones | Pendiente |
 | Flujo 4 · Vendedor y repartidor: gestión de pedidos, repartidores, rutas | Pendiente |
 | Antes de producción (claves, HTTPS, almacenamiento de imágenes) y reglas de negocio (IVA, comisión, envío) | Pendiente |
+
+### Bloque 15 (2026-10-14): flujo Catálogo
+- Migración 006: archivos (imágenes), categorías de negocio, negocios con código propio y dueño, estado abierto/acepta pedidos, horario semanal (cruza medianoche), productos con historial e inventario aparte.
+- Backend: `/api/negocios` (público: lista con filtros y menú) y `/api/mi-negocio` (vendedor: datos, logo, portada, local, horario, productos, stock). El vendedor puede registrar su negocio en el mismo paso del registro.
+- App: Explorar negocios y detalle con el menú por secciones (lo oculto no sale y lo agotado se ve atenuado); Mi negocio, Horario, Mis productos y formulario de producto. Home y Perfil enlazan a las pantallas nuevas.
+- Probado en el móvil con un vendedor y un cliente reales. Se corrigieron dos detalles: "Disponible" se partía en dos líneas y las sugerencias de sección quedaban tapadas por el teclado (ahora son chips).
 
 ### Bloque 14 (2026-10-12/13): reconstrucción, sesión persistente y flujo Cuenta
 - BD desde cero con tablas `T…ID` + históricas (`FDESDE/FHASTA/VERSIONCONTROL`); códigos numéricos desde el 2 (el 1 es el administrador).
