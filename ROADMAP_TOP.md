@@ -13,7 +13,10 @@ Documento de seguimiento. Marca con `[x]` lo que vayas completando.
 - [x] **Flujo 2 · Catálogo:** negocios (perfil, local, horarios), categorías, productos, imágenes
 - [x] **Flujo 3 · Pedidos del cliente:** carrito, crear pedido, seguimiento en vivo, calificaciones, notificaciones; Home nuevo
 - [x] **Flujo 4 · Vendedor y repartidor:** pedidos del negocio, perfil del repartidor, aceptar y entregar, rutas
-- [ ] Detalles: ícono de la app (sale recortado), clave del administrador
+- [x] **Flujo 5 · Administrador:** resumen, aprobaciones, gestión de negocios y productos, pedidos, usuarios (crear, editar, bloquear, dar de baja)
+- [x] Tiempo real: geocerca, GPS que ahorra batería, reconexión al volver; diseño interactivo; foto de perfil
+- [ ] Servicio en primer plano para que el GPS del repartidor siga con la app minimizada
+- [ ] Detalles: ícono de la app (sale recortado)
 - [ ] Antes de producción: rotar claves, HTTPS y `trust proxy`, imágenes en S3/R2, programar limpiezas
 - [ ] Reglas de negocio: IVA, comisión, costo de envío, propina, cupones, pagos en línea
 - [ ] Fusionar a `desarrollo` y luego a `main`

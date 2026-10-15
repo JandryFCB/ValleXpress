@@ -7,7 +7,7 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 
 ## Estado actual
 
-**Reconstrucción desde cero por flujos** · Los 4 flujos **hechos** (Cuenta, Catálogo, Pedidos del cliente, Vendedor y repartidor) · Siguiente: pulir, producción y reglas de negocio · Última actualización: 2026-10-14
+**Reconstrucción desde cero por flujos** · Los 5 flujos **hechos** (Cuenta, Catálogo, Pedidos del cliente, Vendedor y repartidor, Administrador) · Siguiente: probar el panel en el móvil, producción y reglas de negocio · Última actualización: 2026-10-15
 
 > El 2026-10-12 se borró el esquema anterior (v2/V3) y la BD se rehízo con el patrón T de `PATRON_TABLAS_FITBANK.md`,
 > por bloques (`database/migraciones`). Los bloques 1 a 13 de abajo describen el esquema ANTERIOR: quedan como historial.
@@ -27,8 +27,19 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 | Backend **pedidos, calificaciones y notificaciones** (+ avisos en vivo por socket) | **Hecho: 79 pruebas** (total 326) |
 | App: inicio nuevo del cliente, carrito, pedido, seguimiento en vivo, recibir, calificar, avisos | **Hecho: 7 pruebas nuevas**, verificado en el móvil |
 | Backend **repartidores** (perfil, en línea, aceptar, recoger, entregar) + ubicación en vivo por socket | **Hecho: 51 pruebas** (total 377) |
-| App: inicio del vendedor (pedidos) y del repartidor (entregas), mapa en vivo para cliente, negocio y repartidor | **Hecho**, compila y probado con el simulador (falta probar en el móvil) |
+| App: inicio del vendedor (pedidos) y del repartidor (entregas), mapa en vivo para cliente, negocio y repartidor | **Hecho**, verificado en el móvil con el simulador |
+| Tiempo real: geocerca "tu repartidor está cerca", GPS que ahorra batería, reconexión al volver a la app | **Hecho: 3 pruebas nuevas**, verificado en el móvil |
+| App: diseño interactivo (animaciones, esqueletos de carga, confeti, transiciones) | **Hecho: 7 pruebas** |
+| Backend **administrador** (resumen, aprobaciones, gestión de negocios y productos, pedidos, usuarios) | **Hecho: 81 pruebas** (total 461) |
+| App: panel del administrador (5 pestañas) y foto de perfil para todos los roles | **Hecho**, compila (falta probar en el móvil) |
 | Antes de producción (claves, HTTPS, almacenamiento de imágenes) y reglas de negocio (IVA, comisión, envío) | Pendiente |
+
+### Bloque 18 (2026-10-15): flujo Administrador, tiempo real y diseño
+- **Tiempo real** (consejos del usuario): geocerca en el servidor (a menos de 150 m de la entrega el cliente recibe "¡Tu repartidor está cerca!", una sola vez); el GPS del repartidor no envía nada detenido (latido cada 30 s) e ignora los saltos con mala señal; al volver la app del segundo plano se reconecta y las pantallas se recargan; la moto se desliza durante el intervalo real entre posiciones.
+- **Diseño interactivo**: tarjetas y botones que se hunden y vibran, esqueletos de carga, listas escalonadas, la portada del negocio "vuela" a su pantalla, carrito que rebota y cuenta el total, confeti al pedir y al recibir, transiciones al estilo Android moderno.
+- **Administrador** (`/api/admin`): resumen con ventas del día y de la semana; aprobar, rechazar, suspender y reactivar negocios y repartidores con motivo (avisa al interesado); gestionar cualquier negocio con las mismas rutas del vendedor (`/api/admin/negocios/:id/gestion`: datos, local, horario, abrir/cerrar, imágenes y productos); editar el vehículo de un repartidor; ver todos los pedidos y cancelar una disputa; crear cuentas de cualquier rol, editarlas, ponerles clave o foto, bloquearlas, darlas de baja (inactivas, sin borrar el historial) y reactivarlas. Todo queda en la auditoría.
+- La clave inicial del administrador se pone con `CLAVE=... npm run admin:clave` (la migración lo crea sin clave válida).
+- **Foto de perfil**: el perfil rediseñado (banner del color del rol) permite subirla en todos los roles; el endpoint ya existía y la app no lo usaba.
 
 ### Bloque 17 (2026-10-14): flujo Vendedor y repartidor
 - Migración 008: tipos de vehículo (con si llevan placa), `TREPARTIDORES` histórica, `TREPARTIDORESESTADO` (en línea, última ubicación, calificación, entregas) y `TREPARTIDORUBICACIONES` (recorrido de cada entrega, un punto cada 15 s; se purga a los 60 días).
