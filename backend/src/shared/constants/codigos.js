@@ -112,7 +112,7 @@ const ESTADOPEDIDOAAPI = Object.freeze({
   [ESTADOPEDIDO.ENCAMINO]: 'en_camino',
   [ESTADOPEDIDO.RECOGIDO]: 'recogido',
   [ESTADOPEDIDO.ENTREGADO]: 'entregado',
-  [ESTADOPEDIDO.RECIBIDO]: 'recibido_cliente',
+  [ESTADOPEDIDO.RECIBIDO]: 'recibido',
   [ESTADOPEDIDO.RECHAZADO]: 'rechazado',
   [ESTADOPEDIDO.CANCELADO]: 'cancelado',
 });

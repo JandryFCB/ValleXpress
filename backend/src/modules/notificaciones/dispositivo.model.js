@@ -1,18 +1,19 @@
-const { DataTypes, Sequelize } = require('sequelize');
+const { DataTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const { columnasComunes, opcionesVersionada } = require('../../shared/models/columnasComunes');
+const { opcionesSimple } = require('../../shared/models/columnasComunes');
 
-// Tabla TDISPOSITIVOS (historial en la misma tabla; la clave CDISPOSITIVO la asigna la BD): tokens de Firebase (FCM) de los celulares de cada usuario, para enviarle notificaciones push.
+// Tabla TDISPOSITIVOS (simple): token de Firebase (FCM) de cada celular, para enviarle notificaciones push.
+// Un token pertenece a un solo usuario a la vez (si otro inicia sesión en el mismo celular, se reasigna).
 const Dispositivo = sequelize.define('Dispositivo', {
-  id: { type: DataTypes.INTEGER, primaryKey: true, field: 'cdispositivo', defaultValue: Sequelize.literal('DEFAULT') },
-  usuarioId: { type: DataTypes.STRING(30), allowNull: false, field: 'usuario' },
-  tokenFcm: { type: DataTypes.TEXT, allowNull: false, field: 'tokenfcm' },
-  plataforma: { type: DataTypes.STRING(10), allowNull: false, field: 'plataforma' },       // ANDROID | IOS | WEB
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true, field: 'sdispositivo' },
+  usuarioId: { type: DataTypes.STRING(30), allowNull: false, field: 'cusuario' },
+  tokenFcm: { type: DataTypes.STRING(255), allowNull: false, field: 'tokenfcm' },
+  plataforma: { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'ANDROID', field: 'plataforma' },
   modelo: { type: DataTypes.STRING(100), field: 'modelo' },
-  sistemaVer: { type: DataTypes.STRING(30), field: 'sistemaver' },
-  appVer: { type: DataTypes.STRING(20), field: 'appver' },
-  ultimoUsoEn: { type: DataTypes.DATE, field: 'ultimousoen' },
-  ...columnasComunes,
-}, opcionesVersionada('TDISPOSITIVOS'));
+  versionApp: { type: DataTypes.STRING(20), field: 'versionapp' },
+  activo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'esactivo' },
+  creadoEn: { type: DataTypes.DATE, field: 'fcreacion' },
+  ultimoUso: { type: DataTypes.DATE, field: 'fultimouso' },
+}, opcionesSimple('TDISPOSITIVOS'));
 
 module.exports = Dispositivo;

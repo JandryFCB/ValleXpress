@@ -55,7 +55,9 @@ const direccionesRoutes = require('./modules/direcciones/direcciones.routes');
 const telefonosRoutes = require('./modules/telefonos/telefonos.routes');
 const negociosRoutes = require('./modules/negocios/negocios.routes');
 const miNegocioRoutes = require('./modules/negocios/mi-negocio.routes');
-// Pendientes de migrar: pedidos, repartidores, notificaciones
+const pedidosRoutes = require('./modules/pedidos/pedido.routes');
+const notificacionesRoutes = require('./modules/notificaciones/notificacion.routes');
+// Pendiente de migrar: repartidores (flujo 4)
 
 
 
@@ -162,6 +164,8 @@ app.use('/api/direcciones', direccionesRoutes);
 app.use('/api/telefonos', telefonosRoutes);
 app.use('/api/negocios', negociosRoutes);
 app.use('/api/mi-negocio', miNegocioRoutes);
+app.use('/api/pedidos', pedidosRoutes);
+app.use('/api/notificaciones', notificacionesRoutes);
 
 
 
@@ -179,7 +183,8 @@ app.get('/api/health', (req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// El seguimiento del pedido en tiempo real (modules/pedidos/pedidos.socket.js) se reactiva al migrar los pedidos.
+// Cambios de estado de un pedido: el servidor emite 'pedido:actualizado' y 'notificacion' a la sala "user:<usuario>"
+// de cada participante. El seguimiento del repartidor en el mapa llega con el flujo 4.
 
 
 

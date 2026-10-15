@@ -1,428 +1,423 @@
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const Pedido = require('./pedido.model');
-const Calificacion = require('./calificacion.model');
-const DetallePedido = require('../shared/detallePedido.model');
-const Producto = require('../productos/producto.model');
-const Vendedor = require('../vendedores/vendedor.model');
-const Repartidor = require('../repartidores/repartidor.model');
-const Usuario = require('../auth/usuario.model');
+const { Pedido, Detalle, Calificacion } = require('./pedido.model');
+const { Negocio, NegocioEstado, Horario } = require('../negocios/negocio.model');
+const { Producto } = require('../productos/producto.model');
 const Direccion = require('../direcciones/direccion.model');
+const Usuario = require('../auth/usuario.model');
+const NegocioService = require('../negocios/negocio.service');
 const NotificacionService = require('../notificaciones/notificacion.service');
-const { validarTransicion, cambiosDe } = require('./pedido_estado.service');
+const { ACTIVOS, TERMINADOS, validarTransicion } = require('./pedido_estado.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const ArchivoService = require('../../shared/services/archivo.service');
-const CatalogoService = require('../../shared/services/catalogo.service');
 const { auditar } = require('../../shared/services/log.service');
 const {
-  ESTADOPEDIDO: E, ESTADOPRODUCTO, APROBACION, ESTADOPEDIDOAAPI, METODOPAGOAAPI, APIAMETODOPAGO, APIAESTADOPEDIDO,
+  ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO,
 } = require('../../shared/constants/codigos');
 
-// Lógica de negocio de los pedidos. El controller solo llama a estos métodos.
-//   * Los precios y totales SIEMPRE salen de la BD (el cliente no puede fijarlos).
-//   * El vendedor se deduce de los productos; todos deben ser del mismo negocio.
-//   * Cada cambio de estado pasa por la máquina de estados (pedido_estado.service.js).
-//   * El stock se descuenta al pedir y se devuelve si se cancela o se rechaza (con bloqueo de filas: sin carreras).
+// Lógica de los PEDIDOS.
+//   * Precios, costo de envío y totales SIEMPRE salen de la BD (la app no puede fijarlos).
+//   * Un pedido es de UN negocio; el negocio debe estar abierto (interruptor + horario) y aceptando pedidos.
+//   * El stock se descuenta al pedir (con un UPDATE atómico: dos clientes no pueden llevarse la última unidad)
+//     y se devuelve si el pedido se cancela o se rechaza.
+//   * Cada cambio de estado pasa por la máquina de estados y deja su versión en el historial de TPEDIDOS.
+//   * Solo ven un pedido su cliente, el dueño del negocio y el repartidor asignado. A cualquier otro: 404.
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const centavos = (v) => Math.round(Number(v) * 100);
 const dinero = (c) => c / 100;
-const DATOSPERSONA = ['id', 'nombre', 'apellido', 'telefono'];                    // nunca el correo
+const noEncontrado = () => AppError.notFound('Pedido no encontrado', 'PEDIDONOENCONTRADO');
+const MINUTOSENTREGA = 15;     // se suman al tiempo de preparación del negocio para estimar la entrega
 
-const INCLUIR = [
-  { model: Usuario, as: 'cliente', attributes: DATOSPERSONA },
-  { model: Vendedor, as: 'vendedor', include: [{ model: Usuario, as: 'usuario', attributes: DATOSPERSONA }, { model: Direccion, as: 'local', required: false }] },
-  { model: Repartidor, as: 'repartidor', required: false, include: [{ model: Usuario, as: 'usuario', attributes: DATOSPERSONA }] },
-  { model: DetallePedido, as: 'detalles', required: false, include: [{ model: Producto, as: 'producto' }] },
-];
-const ORDEN = [['creadoEn', 'DESC'], [{ model: DetallePedido, as: 'detalles' }, 'id', 'ASC']];
-
-// ---------------------------------------------------------------------------------------------
-// Formato que consume la app (mismas claves que antes; sin correos de otras personas)
-// ---------------------------------------------------------------------------------------------
-const persona = (u, ocultarTelefono = false) => u && { id: u.id, nombre: u.nombre, apellido: u.apellido, ...(!ocultarTelefono && { telefono: u.telefono }) };
-
-async function aApi(entrada, req, { ocultarCliente = false } = {}) {
-  const lista = Array.isArray(entrada) ? entrada : [entrada];
-  const imagenes = lista.flatMap((p) => [p.vendedor?.logoId, ...(p.detalles || []).map((d) => d.producto?.imagenId)]);
-  const urls = await ArchivoService.mapaUrls(req, imagenes);
-  const salida = lista.map((p) => ({
-    id: p.id,
-    numeroPedido: p.id,
-    clienteId: p.clienteId,
-    vendedorId: p.vendedorId,
-    repartidorId: p.repartidorId,
-    direccionEntregaId: p.direccionEntregaId,
-    estado: ESTADOPEDIDOAAPI[p.estado],
-    estadoCodigo: p.estado,
-    subtotal: num(p.subtotal),
-    costoDelivery: num(p.costoDelivery),
-    total: num(p.total),
-    metodoPago: METODOPAGOAAPI[p.metodoPago],
-    pagado: p.pagado,
-    notasCliente: p.notasCliente,
-    tiempoEstimado: p.tiempoEstimado,
-    motivoCancelacion: p.motivoCancel,
-    fechaPedido: p.fechaPedido,
-    fechaConfirmacion: p.fechaConfirmacion,
-    fechaPreparacion: p.fechaPreparacion,
-    fechaListo: p.fechaListo,
-    fechaAsignacion: p.fechaAsignacion,
-    fechaRecogida: p.fechaRecogida,
-    fechaEntrega: p.fechaEntrega,
-    fechaRecibido: p.fechaRecibido,
-    createdAt: p.creadoEn,
-    cliente: persona(p.cliente, ocultarCliente),
-    vendedor: p.vendedor && {
-      id: p.vendedor.id, nombreNegocio: p.vendedor.nombreNegocio, latitud: num(p.vendedor.local?.latitud), longitud: num(p.vendedor.local?.longitud),
-      logo: urls[p.vendedor.logoId]?.url || null, usuario: persona(p.vendedor.usuario),
-    },
-    repartidor: p.repartidor && { id: p.repartidor.id, placa: p.repartidor.placa, usuario: persona(p.repartidor.usuario) },
-    direccionEntrega: p.domicilio ? { id: p.direccionEntregaId, direccion: p.domicilio, latitud: num(p.latitudEntrega), longitud: num(p.longitudEntrega) } : null,
-    detalles: (p.detalles || []).map((d) => ({
-      id: Number(d.id), pedidoId: d.pedidoId, productoId: d.productoId, nombre: d.nombre, cantidad: d.cantidad,
-      precioUnitario: num(d.precioUnitario), subtotal: num(d.subtotal), notas: d.notas,
-      producto: d.producto && { id: d.producto.id, nombre: d.producto.nombre, precio: num(d.producto.precio), imagen: urls[d.producto.imagenId]?.url || null },
-    })),
-  }));
-  return Array.isArray(entrada) ? salida : salida[0];
+// Distancia en km entre dos puntos (fórmula del haversine)
+function distanciaKm(a, b) {
+  const rad = (g) => (g * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
 
+const INCLUIR = [
+  { model: Detalle, as: 'detalles', required: false },
+  { model: Calificacion, as: 'calificaciones', required: false },
+  { model: Negocio, as: 'negocio', include: [{ model: Direccion, as: 'local', required: false }] },
+  { model: Usuario, as: 'cliente', attributes: ['id', 'nombre', 'apellido', 'telefono'] },
+  { model: Usuario, as: 'repartidor', attributes: ['id', 'nombre', 'apellido', 'telefono'], required: false },
+];
+const ORDEN = [['fechaPedido', 'DESC'], [{ model: Detalle, as: 'detalles' }, 'linea', 'ASC']];
 const cargar = (id) => Pedido.findOne({ where: { id }, include: INCLUIR, order: ORDEN });
+
+// Línea de tiempo: cuándo entró el pedido a cada estado (sale del historial de TPEDIDOS)
+async function lineaDeTiempo(pedidoId) {
+  const filas = await sequelize.query(
+    'SELECT cestatuspedido AS estado, MIN(fdesde) AS fecha FROM tpedidos WHERE cpedido = :id GROUP BY cestatuspedido ORDER BY fecha',
+    { replacements: { id: pedidoId }, type: QueryTypes.SELECT },
+  );
+  return filas.map((f) => ({ estado: ESTADOPEDIDOAAPI[f.estado], fecha: f.fecha }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Formato que recibe la app. rol = quién mira: el cliente no necesita su propio teléfono; el negocio sí el del cliente.
+// ---------------------------------------------------------------------------------------------
+const persona = (u) => u && { usuario: u.id, nombre: u.nombre, apellido: u.apellido, telefono: u.telefono };
+
+async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
+  const lista = Array.isArray(entrada) ? entrada : [entrada];
+  // Imágenes: logo del negocio y la imagen actual de cada producto (si el producto se borró, ya no tiene)
+  const idsProductos = [...new Set(lista.flatMap((p) => (p.detalles || []).map((d) => String(d.productoId))))];
+  const productos = idsProductos.length ? await Producto.findAll({ where: { id: idsProductos }, attributes: ['id', 'imagenId'] }) : [];
+  const imagenDe = Object.fromEntries(productos.map((p) => [String(p.id), p.imagenId]));
+  const urls = await ArchivoService.mapaUrls(req, [...lista.map((p) => p.negocio?.logoId), ...Object.values(imagenDe)]);
+
+  const salida = [];
+  for (const p of lista) {
+    const n = p.negocio;
+    const calif = (destino) => (p.calificaciones || []).find((c) => c.destino === destino);
+    const item = {
+      id: Number(p.id),
+      estado: ESTADOPEDIDOAAPI[p.estado],
+      fecha: p.fechaPedido,
+      actualizado: p.fDesde,
+      negocio: n && {
+        id: Number(n.id),
+        nombre: n.nombre,
+        logo: urls[String(n.logoId)]?.miniatura || null,
+        local: n.local ? { direccion: n.local.direccion, latitud: num(n.local.latitud), longitud: num(n.local.longitud) } : null,
+      },
+      entrega: { direccion: p.direccionEntrega, referencia: p.referenciaEntrega, latitud: num(p.latitud), longitud: num(p.longitud) },
+      metodoPago: METODOPAGOAAPI[p.metodoPago],
+      pagado: p.pagado,
+      subtotal: num(p.subtotal),
+      costoEnvio: num(p.costoEnvio),
+      descuento: num(p.descuento),
+      propina: num(p.propina),
+      total: num(p.total),
+      notas: p.notas,
+      tiempoEstimado: p.tiempoEstimado,
+      motivoCancelacion: p.motivoCancelacion,
+      productos: (p.detalles || []).map((d) => ({
+        linea: d.linea,
+        productoId: Number(d.productoId),
+        nombre: d.nombre,
+        precioUnitario: num(d.precioUnitario),
+        cantidad: d.cantidad,
+        subtotal: num(d.subtotal),
+        notas: d.notas,
+        imagen: urls[String(imagenDe[String(d.productoId)])]?.miniatura || null,
+      })),
+      cantidadProductos: (p.detalles || []).reduce((s, d) => s + d.cantidad, 0),
+      repartidor: persona(p.repartidor),
+      calificacion: calif('NEGOCIO') ? { puntuacion: calif('NEGOCIO').puntuacion, comentario: calif('NEGOCIO').comentario } : null,
+      calificacionRepartidor: calif('REPARTIDOR') ? { puntuacion: calif('REPARTIDOR').puntuacion } : null,
+      ...(rol !== 'cliente' && { cliente: persona(p.cliente) }),
+    };
+    if (detalle) item.lineaTiempo = await lineaDeTiempo(p.id);
+    salida.push(item);
+  }
+  return Array.isArray(entrada) ? salida : salida[0];
+}
 
 function paginar(query) {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(query.limit, 10) || 20));
   return { page, limit, offset: (page - 1) * limit };
 }
-const paginacion = ({ page, limit }, total) => ({ page, limit, total, totalPages: Math.ceil(total / limit), hasNext: page * limit < total, hasPrev: page > 1 });
+const paginacion = ({ page, limit }, total) => ({ page, limit, total, totalPages: Math.ceil(total / limit), hasNext: page * limit < total });
+const filtroEstado = (estado) => (estado === 'historial' ? { [Op.in]: TERMINADOS } : estado === 'activos' ? { [Op.in]: ACTIVOS } : undefined);
+
+// Lista de pedidos: primero se pagina por códigos (el JOIN con el detalle multiplicaría las filas) y luego se cargan completos
+async function listar(where, query, req, rol) {
+  const pag = paginar(query);
+  const { count, rows } = await Pedido.findAndCountAll({ where, attributes: ['id'], order: [['fechaPedido', 'DESC']], limit: pag.limit, offset: pag.offset });
+  const pedidos = rows.length ? await Pedido.findAll({ where: { id: rows.map((r) => r.id) }, include: INCLUIR, order: ORDEN }) : [];
+  return { pedidos: await aApi(pedidos, req, { rol }), pagination: paginacion(pag, count) };
+}
 
 // ---------------------------------------------------------------------------------------------
-// Utilidades internas
+// Stock
 // ---------------------------------------------------------------------------------------------
-const bloquear = (id, where, t) => Pedido.findOne({ where: { id, ...where }, transaction: t, lock: t.LOCK.UPDATE });
-
-async function vendedorDe(usuarioId, t) {
-  const v = await Vendedor.findOne({ where: { id: usuarioId }, attributes: ['id'], transaction: t });
-  if (!v) throw AppError.notFound('Vendedor no encontrado', 'VENDEDORNOENCONTRADO');
-  return v;
+// Descuenta unidades solo si alcanzan (UPDATE atómico). Si llega a 0, el producto pasa a "agotado".
+async function descontarStock(producto, cantidad, t) {
+  const [filas] = await sequelize.query(
+    `UPDATE tproductosinventario SET stock = stock - :cantidad, fultimomovimiento = clock_timestamp()
+      WHERE cproducto = :id AND stock >= :cantidad RETURNING stock`,
+    { replacements: { id: producto.id, cantidad }, transaction: t },
+  );
+  if (!filas.length) {
+    const [[actual]] = await sequelize.query('SELECT stock FROM tproductosinventario WHERE cproducto = :id', { replacements: { id: producto.id }, transaction: t });
+    throw AppError.conflict(`No hay suficientes unidades de ${producto.nombre}`, 'STOCKINSUFICIENTE', { productoId: Number(producto.id), disponible: actual?.stock ?? 0 });
+  }
+  if (filas[0].stock === 0 && producto.estado === ESTADOPRODUCTO.DISPONIBLE) await producto.update({ estado: ESTADOPRODUCTO.AGOTADO }, { transaction: t });
 }
-async function repartidorDe(usuarioId, t) {
-  const r = await Repartidor.findOne({ where: { id: usuarioId }, attributes: ['id', 'aprobacion'], transaction: t });
-  if (!r) throw AppError.notFound('Repartidor no encontrado', 'REPARTIDORNOENCONTRADO');
-  return r;
-}
-const noEncontrado = () => AppError.notFound('Pedido no encontrado', 'PEDIDONOENCONTRADO');
 
-// Devuelve las unidades al stock (cancelación o rechazo). Bloquea los productos en orden para evitar bloqueos cruzados.
-async function devolverStock(pedido, t) {
-  const detalles = await DetallePedido.findAll({ where: { pedidoId: pedido.id }, transaction: t });
-  const ids = detalles.map((d) => d.productoId);
-  const productos = await Producto.findAll({ where: { id: ids }, order: [['id', 'ASC']], paranoid: false, transaction: t, lock: t.LOCK.UPDATE });
-  for (const p of productos) {
-    if (!p.controlaStock) continue;
-    const devuelto = detalles.filter((d) => d.productoId === p.id).reduce((s, d) => s + d.cantidad, 0);
-    const stock = p.stock + devuelto;
-    await p.update({ stock, estado: p.estado === ESTADOPRODUCTO.AGOTADO && stock > 0 ? ESTADOPRODUCTO.DISPONIBLE : p.estado }, { transaction: t });
+// Devuelve las unidades (cancelación o rechazo). Si el producto estaba agotado y vuelve a tener, pasa a "disponible".
+async function devolverStock(pedidoId, t) {
+  const detalles = await Detalle.findAll({ where: { pedidoId }, order: [['productoId', 'ASC']], transaction: t });
+  const productos = await Producto.findAll({ where: { id: detalles.map((d) => d.productoId), controlaStock: true }, transaction: t });
+  for (const prod of productos) {
+    const unidades = detalles.filter((d) => String(d.productoId) === String(prod.id)).reduce((s, d) => s + d.cantidad, 0);
+    await sequelize.query(
+      'UPDATE tproductosinventario SET stock = stock + :unidades, fultimomovimiento = clock_timestamp() WHERE cproducto = :id',
+      { replacements: { id: prod.id, unidades }, transaction: t },
+    );
+    if (prod.estado === ESTADOPRODUCTO.AGOTADO) await prod.update({ estado: ESTADOPRODUCTO.DISPONIBLE }, { transaction: t });
   }
 }
 
-// ¿Hay otro pedido activo del repartidor? (para liberar su marca "en servicio")
-const tieneActivos = (repartidorId, excepto, t) => Pedido.count({ where: { repartidorId, id: { [Op.ne]: excepto }, estado: { [Op.in]: [E.ENCAMINO, E.RECOGIDO] } }, transaction: t });
+// ---------------------------------------------------------------------------------------------
+// Avisos: notificación guardada + evento en vivo para refrescar las pantallas abiertas
+// ---------------------------------------------------------------------------------------------
+function avisarCambio(io, pedido, duenoId) {
+  if (!io) return;
+  const evento = { pedidoId: Number(pedido.id), estado: ESTADOPEDIDOAAPI[pedido.estado] };
+  for (const u of [pedido.clienteId, duenoId, pedido.repartidorId].filter(Boolean)) io.to(`user:${u}`).emit('pedido:actualizado', evento);
+}
+
+const AVISOCLIENTE = {
+  [E.CONFIRMADO]: ['pedido_confirmado', '¡Pedido confirmado! ✅', (p, n) => `${n} confirmó tu pedido #${p.id}${p.tiempoEstimado ? `. Llega en unos ${p.tiempoEstimado} min` : ''}`],
+  [E.PREPARANDO]: ['pedido_preparando', 'Preparando tu pedido 👨‍🍳', (p, n) => `${n} está preparando tu pedido #${p.id}`],
+  [E.LISTO]: ['pedido_listo', '¡Tu pedido está listo! 🍽️', (p) => `Tu pedido #${p.id} está listo; pronto saldrá hacia ti`],
+  [E.RECHAZADO]: ['pedido_rechazado', 'Pedido rechazado', (p, n) => `${n} no pudo atender tu pedido #${p.id}${p.motivoCancelacion ? `: ${p.motivoCancelacion}` : ''}`],
+};
 
 // ---------------------------------------------------------------------------------------------
-// Crear pedido
+// Cliente: crear
 // ---------------------------------------------------------------------------------------------
+async function metodoActivo(codigo) {
+  const [fila] = await sequelize.query(
+    "SELECT esactivo FROM tmetodospago WHERE cmetodopago = :c AND cidioma = 'es' AND fhasta = '2999-12-31 00:00:00-05'",
+    { replacements: { c: codigo }, type: QueryTypes.SELECT },
+  );
+  return fila?.esactivo === true;
+}
+
 async function crear(cliente, datos, req) {
-  const metodoPago = APIAMETODOPAGO[String(datos.metodoPago).toLowerCase()] || (METODOPAGOAAPI[datos.metodoPago] ? datos.metodoPago : null);
-  if (!metodoPago || !(await CatalogoService.mapa('metodopago'))[metodoPago]) {
-    throw AppError.badRequest('Método de pago inválido', 'METODOPAGOINVALIDO');
-  }
+  const metodoPago = APIAMETODOPAGO[String(datos.metodoPago || '').toLowerCase()];
+  if (!metodoPago || !(await metodoActivo(metodoPago))) throw AppError.badRequest('Ese método de pago no está disponible', 'METODOPAGOINVALIDO');
 
-  // Un mismo producto repetido se suma en una sola línea
+  // El mismo producto repetido se suma en una sola línea
   const lineas = new Map();
   for (const it of datos.productos) {
-    const previo = lineas.get(it.productoId);
-    lineas.set(it.productoId, { productoId: it.productoId, cantidad: (previo?.cantidad || 0) + Number(it.cantidad), notas: it.notas ?? previo?.notas ?? null });
+    const clave = String(it.productoId);
+    const previo = lineas.get(clave);
+    lineas.set(clave, { productoId: clave, cantidad: (previo?.cantidad || 0) + Number(it.cantidad), notas: it.notas?.trim() || previo?.notas || null });
   }
-  const items = [...lineas.values()];
+  const items = [...lineas.values()].sort((a, b) => Number(a.productoId) - Number(b.productoId));   // orden fijo: sin bloqueos cruzados
+  if (items.some((i) => i.cantidad > 99)) throw AppError.badRequest('Máximo 99 unidades por producto', 'CANTIDADINVALIDA');
 
-  const pedido = await withTransaction(async (t) => {
-    const ids = items.map((i) => i.productoId).sort();
-    const productos = await Producto.findAll({ where: { id: ids }, order: [['id', 'ASC']], transaction: t, lock: t.LOCK.UPDATE });
-    const porId = new Map(productos.map((p) => [p.id, p]));
-    const faltante = ids.find((id) => !porId.has(id));
-    if (faltante) throw AppError.notFound(`Producto ${faltante} no encontrado`, 'PRODUCTONOENCONTRADO');
+  const { pedido, negocio } = await withTransaction(async (t) => {
+    const negocio = await Negocio.findOne({
+      where: { id: datos.negocioId },
+      include: [{ model: NegocioEstado, as: 'estado' }, { model: Horario, as: 'horarios', required: false }, { model: Direccion, as: 'local', required: false }],
+      transaction: t,
+    });
+    if (!negocio || negocio.aprobacion !== APROBACION.APROBADO) throw AppError.notFound('Negocio no encontrado', 'NEGOCIONOENCONTRADO');
+    if (!negocio.estado?.abierto || !NegocioService.dentroDeHorario(negocio.horarios)) throw AppError.conflict('El negocio está cerrado en este momento', 'NEGOCIOCERRADO');
+    if (negocio.estado?.aceptaPedidos === false) throw AppError.conflict('El negocio no está recibiendo pedidos ahora', 'NEGOCIONOACEPTA');
 
-    // El vendedor se deduce de los productos (nunca del cuerpo de la petición)
-    const vendedores = new Set(productos.map((p) => p.vendedorId));
-    if (vendedores.size !== 1) throw AppError.badRequest('Todos los productos del pedido deben ser del mismo negocio', 'NEGOCIOSMEZCLADOS');
-    const [vendedorId] = vendedores;
-    if (datos.vendedorId && datos.vendedorId !== vendedorId) throw AppError.badRequest('Los productos no pertenecen al negocio indicado', 'NEGOCIOINCORRECTO');
-
-    const vendedor = await Vendedor.findOne({ where: { id: vendedorId }, transaction: t });
-    if (!vendedor || vendedor.aprobacion !== APROBACION.APROBADO || !vendedor.activo || vendedor.aceptaPedidos === false) {
-      throw AppError.conflict('Este negocio no está recibiendo pedidos en este momento', 'NEGOCIONODISPONIBLE');
+    // La dirección debe ser del propio cliente; se COPIA en el pedido
+    const direccion = await Direccion.findOne({ where: { id: datos.direccionId, personaId: cliente.personaId }, transaction: t });
+    if (!direccion) throw AppError.notFound('Dirección no encontrada', 'DIRECCIONNOENCONTRADA');
+    if (negocio.local) {
+      const km = distanciaKm({ lat: num(negocio.local.latitud), lng: num(negocio.local.longitud) }, { lat: num(direccion.latitud), lng: num(direccion.longitud) });
+      if (km > num(negocio.radioKm)) {
+        throw AppError.conflict(`Tu dirección está a ${km.toFixed(1)} km y este negocio entrega hasta ${num(negocio.radioKm)} km`, 'FUERADECOBERTURA', { distanciaKm: Number(km.toFixed(2)) });
+      }
     }
 
-    // La dirección debe ser del propio cliente; se guarda una COPIA (si la edita luego, el pedido no cambia)
-    let direccion = null;
-    if (datos.direccionEntregaId) {
-      direccion = await Direccion.findOne({ where: { id: datos.direccionEntregaId, personaId: cliente.personaId }, transaction: t });
-      if (!direccion) throw AppError.notFound('Dirección no encontrada', 'DIRECCIONNOENCONTRADA');
-    }
-
+    const productos = await Producto.findAll({ where: { id: items.map((i) => i.productoId), negocioId: negocio.id }, transaction: t });
+    const porId = new Map(productos.map((p) => [String(p.id), p]));
     let subtotal = 0;
     for (const it of items) {
       const p = porId.get(it.productoId);
-      if (p.estado !== ESTADOPRODUCTO.DISPONIBLE && !(p.estado === ESTADOPRODUCTO.AGOTADO && p.controlaStock && p.stock >= it.cantidad)) {
-        throw AppError.conflict(`El producto ${p.nombre} no está disponible`, 'PRODUCTONODISPONIBLE', { productoId: p.id });
-      }
-      if (p.controlaStock && p.stock < it.cantidad) {
-        throw new AppError(`Stock insuficiente para ${p.nombre}`, 400, 'STOCK_INSUFICIENTE', { disponible: p.stock, solicitado: it.cantidad, productoId: p.id });
-      }
+      if (!p) throw AppError.notFound('Uno de los productos ya no existe en este negocio', 'PRODUCTONOENCONTRADO', { productoId: Number(it.productoId) });
+      if (p.estado !== ESTADOPRODUCTO.DISPONIBLE) throw AppError.conflict(`${p.nombre} no está disponible ahora`, 'PRODUCTONODISPONIBLE', { productoId: Number(p.id) });
       subtotal += centavos(p.precio) * it.cantidad;
     }
+    if (subtotal < centavos(negocio.pedidoMinimo)) {
+      throw AppError.badRequest(`El pedido mínimo de este negocio es $${num(negocio.pedidoMinimo).toFixed(2)}`, 'PEDIDOMINIMO', { pedidoMinimo: num(negocio.pedidoMinimo) });
+    }
+    for (const it of items) {
+      const p = porId.get(it.productoId);
+      if (p.controlaStock) await descontarStock(p, it.cantidad, t);
+    }
 
+    const envio = centavos(negocio.costoEnvio);
     const nuevo = await Pedido.create({
       clienteId: cliente.id,
-      vendedorId,
-      direccionEntregaId: direccion?.id || null,
-      domicilio: direccion?.direccion || null,
-      latitudEntrega: direccion?.latitud ?? null,
-      longitudEntrega: direccion?.longitud ?? null,
-      subtotal: dinero(subtotal),
-      costoDelivery: 0,                       // lo fija el repartidor al aceptar
-      total: dinero(subtotal),
+      negocioId: negocio.id,
       metodoPago,
-      notasCliente: datos.notasCliente || null,
-      creadoPor: cliente.id,
+      direccionId: direccion.id,
+      direccionEntrega: direccion.direccion,
+      referenciaEntrega: direccion.referencia,
+      latitud: direccion.latitud,
+      longitud: direccion.longitud,
+      subtotal: dinero(subtotal),
+      costoEnvio: dinero(envio),
+      total: dinero(subtotal + envio),
+      notas: datos.notas?.trim() || null,
+      tiempoEstimado: negocio.tiempoPreparacion + MINUTOSENTREGA,
     }, { transaction: t });
-
-    await DetallePedido.bulkCreate(items.map((it) => {
+    await Detalle.bulkCreate(items.map((it, i) => {
       const p = porId.get(it.productoId);
-      return { pedidoId: nuevo.id, productoId: p.id, nombre: p.nombre, cantidad: it.cantidad, precioUnitario: p.precio, subtotal: dinero(centavos(p.precio) * it.cantidad), notas: it.notas, creadoPor: cliente.id };
+      return { pedidoId: nuevo.id, linea: i + 1, productoId: p.id, nombre: p.nombre, precioUnitario: p.precio, cantidad: it.cantidad, subtotal: dinero(centavos(p.precio) * it.cantidad), notas: it.notas };
     }), { transaction: t });
-
-    for (const it of items) {                  // descuenta el stock de los productos que lo controlan
-      const p = porId.get(it.productoId);
-      if (!p.controlaStock) continue;
-      const stock = p.stock - it.cantidad;
-      await p.update({ stock, estado: stock === 0 && p.estado === ESTADOPRODUCTO.DISPONIBLE ? ESTADOPRODUCTO.AGOTADO : p.estado, actualizadoPor: cliente.id }, { transaction: t });
-    }
-    nuevo.vendedorUsuarioId = vendedor.usuarioId;
-    return nuevo;
+    return { pedido: nuevo, negocio };
   }, { usuarioId: cliente.id });
 
-  auditar({ usuarioId: cliente.id, accion: 'PEDIDOCREADO', entidad: 'PEDIDOS', entidadId: pedido.id, req });
-  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.vendedorUsuarioId, tipo: 'pedido_nuevo', titulo: '¡Nuevo pedido recibido! 🛒', mensaje: `Tienes un nuevo pedido #${pedido.id}`, pedidoId: pedido.id });
-  await NotificacionService.notificar({ io: req.io, usuarioId: cliente.id, tipo: 'pedido_creado', titulo: 'Pedido creado', mensaje: 'Tu pedido fue creado exitosamente', pedidoId: pedido.id, estado: 'pendiente', guardar: false });
-  return { pedido: await aApi(await cargar(pedido.id), req) };
+  auditar({ usuarioId: cliente.id, accion: 'PEDIDOCREADO', entidad: 'PEDIDOS', entidadId: pedido.id, detalle: { total: num(pedido.total) }, req });
+  await NotificacionService.notificar({
+    io: req.io, usuarioId: negocio.duenoId, tipo: 'pedido_nuevo', titulo: '¡Nuevo pedido! 🛒',
+    mensaje: `Pedido #${pedido.id} por $${num(pedido.total).toFixed(2)}`, pedidoId: pedido.id, datos: { estado: 'pendiente' },
+  });
+  avisarCambio(req.io, pedido, negocio.duenoId);
+  return aApi(await cargar(pedido.id), req, { detalle: true });
 }
 
 // ---------------------------------------------------------------------------------------------
 // Consultas
 // ---------------------------------------------------------------------------------------------
-async function listarDelCliente(clienteId, query, req) {
-  const pag = paginar(query);
-  const { count, rows } = await Pedido.findAndCountAll({ where: { clienteId }, include: INCLUIR, order: ORDEN, limit: pag.limit, offset: pag.offset, distinct: true });
-  return { pedidos: await aApi(rows, req), pagination: paginacion(pag, count) };
+const listarDelCliente = (clienteId, query, req) => listar({ clienteId, ...(filtroEstado(query.estado) && { estado: filtroEstado(query.estado) }) }, query, req, 'cliente');
+
+async function listarDelNegocio(usuarioId, query, req) {
+  const n = await NegocioService.exigirMio(usuarioId);
+  return listar({ negocioId: n.id, ...(filtroEstado(query.estado) && { estado: filtroEstado(query.estado) }) }, query, req, 'vendedor');
 }
 
-async function listarDelVendedor(usuarioId, query, req) {
-  const vendedor = await vendedorDe(usuarioId);
-  const pag = paginar(query);
-  const { count, rows } = await Pedido.findAndCountAll({ where: { vendedorId: vendedor.id }, include: INCLUIR, order: ORDEN, limit: pag.limit, offset: pag.offset, distinct: true });
-  return { pedidos: await aApi(rows, req), pagination: paginacion(pag, count) };
+// Rol de quien mira el pedido, o null si no tiene nada que ver con él
+function rolEn(pedido, usuario) {
+  if (pedido.clienteId === usuario.id) return 'cliente';
+  if (pedido.negocio?.duenoId === usuario.id) return 'vendedor';
+  if (pedido.repartidorId && pedido.repartidorId === usuario.id) return 'repartidor';
+  return null;
 }
 
-// Solo ven un pedido: su cliente, su vendedor y su repartidor. Un repartidor aprobado puede ver los pedidos LISTOS
-// sin repartidor (para decidir si los acepta), sin el teléfono del cliente. Cualquier otro: 404.
 async function obtener(usuario, id, req) {
-  const pedido = await cargar(id);
-  if (!pedido) throw noEncontrado();
-  const esCliente = pedido.clienteId === usuario.id;
-  const esVendedor = pedido.vendedor?.usuarioId === usuario.id;
-  const esRepartidor = pedido.repartidor?.usuarioId === usuario.id;
-  if (esCliente || esVendedor || esRepartidor) return aApi(pedido, req);
-
-  if (usuario.tipoUsuario === 'repartidor' && pedido.estado === E.LISTO && !pedido.repartidorId) {
-    const rep = await Repartidor.findOne({ where: { id: usuario.id }, attributes: ['id', 'aprobacion'] });
-    if (rep?.aprobacion === APROBACION.APROBADO) return aApi(pedido, req, { ocultarCliente: true });
-  }
-  throw noEncontrado();
+  const p = await cargar(id);
+  const rol = p && rolEn(p, usuario);
+  if (!rol) throw noEncontrado();
+  return aApi(p, req, { rol, detalle: true });
 }
 
 // ---------------------------------------------------------------------------------------------
-// Vendedor: confirmar, preparar, dejar listo o rechazar
+// Negocio: confirmar, preparar, dejar listo o rechazar
 // ---------------------------------------------------------------------------------------------
-async function cambiarEstadoVendedor(usuario, id, { estado, motivo }, req) {
+async function cambiarEstadoNegocio(usuario, id, { estado, motivo, tiempoEstimado }, req) {
   const siguiente = APIAESTADOPEDIDO[estado];
+  const negocio = await NegocioService.exigirMio(usuario.id);
   const pedido = await withTransaction(async (t) => {
-    const vendedor = await vendedorDe(usuario.id, t);
-    const p = await bloquear(id, { vendedorId: vendedor.id }, t);
+    const p = await Pedido.findOne({ where: { id, negocioId: negocio.id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!p) throw noEncontrado();
     validarTransicion(p.estado, siguiente, 'vendedor');
-    const extra = { actualizadoPor: usuario.id };
+    const cambios = { estado: siguiente };
     if (siguiente === E.RECHAZADO) {
-      Object.assign(extra, { motivoCancel: motivo || null, canceladoPor: usuario.id });
-      await devolverStock(p, t);
+      cambios.motivoCancelacion = motivo?.trim() || null;
+      await devolverStock(p.id, t);
     }
-    await p.update({ ...cambiosDe(siguiente), ...extra }, { transaction: t });
+    if (siguiente === E.CONFIRMADO && tiempoEstimado) cambios.tiempoEstimado = tiempoEstimado;
+    await p.update(cambios, { transaction: t });
     return p;
   }, { usuarioId: usuario.id });
 
-  auditar({ usuarioId: usuario.id, accion: `PEDIDO${estado.toUpperCase()}`, entidad: 'PEDIDOS', entidadId: id, req });
-  if (siguiente === E.LISTO) {
-    await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo: 'pedido_listo', titulo: '¡Tu pedido está listo! 🍽️', mensaje: `Tu pedido #${pedido.id} está listo y pronto será asignado a un repartidor`, pedidoId: pedido.id });
-    const repartidores = await Repartidor.findAll({ where: { disponible: true, aprobacion: APROBACION.APROBADO, activo: true }, attributes: ['id'] });
-    for (const r of repartidores) {
-      await NotificacionService.notificar({ io: req.io, usuarioId: r.usuarioId, tipo: 'pedido_listo', titulo: 'Pedido listo', mensaje: `Pedido listo: ${pedido.id}`, pedidoId: pedido.id, extra: { vendedorId: pedido.vendedorId } });
-    }
-  } else if (siguiente === E.RECHAZADO) {
-    await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo: 'pedido_rechazado', titulo: 'Pedido rechazado', mensaje: `El negocio no pudo atender tu pedido #${pedido.id}${motivo ? `: ${motivo}` : ''}`, pedidoId: pedido.id, estado: 'rechazado' });
-  }
-  return aApi(await cargar(id), req);
+  auditar({ usuarioId: usuario.id, accion: `PEDIDO${String(estado).toUpperCase()}`, entidad: 'PEDIDOS', entidadId: id, req });
+  const [tipo, titulo, mensaje] = AVISOCLIENTE[siguiente];
+  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo, titulo, mensaje: mensaje(pedido, negocio.nombre), pedidoId: pedido.id, datos: { estado } });
+  avisarCambio(req.io, pedido, negocio.duenoId);
+  return aApi(await cargar(id), req, { rol: 'vendedor', detalle: true });
 }
 
 // ---------------------------------------------------------------------------------------------
-// Cliente: cancelar (solo pendiente), recibir y calificar
+// Cliente: cancelar (solo pendiente), confirmar que lo recibió y calificar
 // ---------------------------------------------------------------------------------------------
 async function cancelar(usuario, id, { motivo } = {}, req) {
   const pedido = await withTransaction(async (t) => {
-    const p = await bloquear(id, { clienteId: usuario.id }, t);
+    const p = await Pedido.findOne({ where: { id, clienteId: usuario.id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!p) throw noEncontrado();
-    if (p.estado !== E.PENDIENTE) throw AppError.conflict('No se puede cancelar un pedido que ya está en proceso', 'PEDIDOENPROCESO');
-    await devolverStock(p, t);
-    await p.update({ ...cambiosDe(E.CANCELADO), motivoCancel: motivo || null, canceladoPor: usuario.id, actualizadoPor: usuario.id }, { transaction: t });
+    if (p.estado !== E.PENDIENTE) throw AppError.conflict('El negocio ya aceptó tu pedido; ya no se puede cancelar desde la app', 'PEDIDOENPROCESO');
+    validarTransicion(p.estado, E.CANCELADO, 'cliente');
+    await devolverStock(p.id, t);
+    await p.update({ estado: E.CANCELADO, motivoCancelacion: motivo?.trim() || null }, { transaction: t });
     return p;
   }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'PEDIDOCANCELADO', entidad: 'PEDIDOS', entidadId: id, req });
-  const vendedor = await Vendedor.findOne({ where: { id: pedido.vendedorId }, attributes: ['id'] });
-  if (vendedor) await NotificacionService.notificar({ io: req.io, usuarioId: vendedor.usuarioId, tipo: 'pedido_cancelado', titulo: 'Pedido cancelado', mensaje: `El pedido #${pedido.id} fue cancelado por el cliente`, pedidoId: pedido.id, estado: 'cancelado' });
+  const negocio = await Negocio.findOne({ where: { id: pedido.negocioId }, attributes: ['id', 'duenoId'] });
+  await NotificacionService.notificar({
+    io: req.io, usuarioId: negocio?.duenoId, tipo: 'pedido_cancelado', titulo: 'Pedido cancelado',
+    mensaje: `El cliente canceló el pedido #${pedido.id}`, pedidoId: pedido.id, datos: { estado: 'cancelado' },
+  });
+  avisarCambio(req.io, pedido, negocio?.duenoId);
+  return aApi(await cargar(id), req, { detalle: true });
 }
 
 async function marcarRecibido(usuario, id, req) {
   const pedido = await withTransaction(async (t) => {
-    const p = await bloquear(id, { clienteId: usuario.id }, t);
+    const p = await Pedido.findOne({ where: { id, clienteId: usuario.id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!p) throw noEncontrado();
-    if (p.estado !== E.ENTREGADO) throw AppError.conflict('El pedido debe estar entregado para marcar recibido', 'TRANSICIONINVALIDA');
     validarTransicion(p.estado, E.RECIBIDO, 'cliente');
-    await p.update({ ...cambiosDe(E.RECIBIDO), actualizadoPor: usuario.id }, { transaction: t });
+    await p.update({ estado: E.RECIBIDO, pagado: true }, { transaction: t });
 
-    // Contadores del negocio, del repartidor y de los productos
-    await Vendedor.increment('totalPedidos', { by: 1, where: { id: p.vendedorId }, transaction: t });
-    if (p.repartidorId) await Repartidor.increment('pedidosCompletados', { by: 1, where: { id: p.repartidorId }, transaction: t });
-    const detalles = await DetallePedido.findAll({ where: { pedidoId: p.id }, transaction: t });
-    for (const d of detalles) await Producto.increment('totalVendidos', { by: d.cantidad, where: { id: d.productoId }, transaction: t });
+    // Contadores: pedidos del negocio y unidades vendidas de cada producto
+    await NegocioEstado.increment('numeroPedidos', { by: 1, where: { negocioId: p.negocioId }, transaction: t });
+    const detalles = await Detalle.findAll({ where: { pedidoId: p.id }, transaction: t });
+    for (const d of detalles) {
+      await sequelize.query('UPDATE tproductosinventario SET numerovendidos = numerovendidos + :n WHERE cproducto = :id', { replacements: { n: d.cantidad, id: d.productoId }, transaction: t });
+    }
     return p;
   }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'PEDIDORECIBIDO', entidad: 'PEDIDOS', entidadId: id, req });
-  const aviso = { tipo: 'pedido_recibido_cliente', titulo: '¡Pedido recibido por el cliente! ✅', mensaje: `El cliente recibió el pedido #${pedido.id}`, pedidoId: pedido.id };
-  const vendedor = await Vendedor.findOne({ where: { id: pedido.vendedorId }, attributes: ['id'] });
-  if (vendedor) await NotificacionService.notificar({ io: req.io, usuarioId: vendedor.usuarioId, ...aviso });
-  if (pedido.repartidorId) {
-    const rep = await Repartidor.findOne({ where: { id: pedido.repartidorId }, attributes: ['id'] });
-    if (rep) await NotificacionService.notificar({ io: req.io, usuarioId: rep.usuarioId, ...aviso });
-  }
-  return { pedido: await aApi(await cargar(id), req) };
+  const negocio = await Negocio.findOne({ where: { id: pedido.negocioId }, attributes: ['id', 'duenoId'] });
+  const aviso = { tipo: 'pedido_recibido', titulo: 'Pedido completado ✅', mensaje: `El cliente confirmó que recibió el pedido #${pedido.id}`, pedidoId: pedido.id, datos: { estado: 'recibido' } };
+  await NotificacionService.notificar({ io: req.io, usuarioId: negocio?.duenoId, ...aviso });
+  if (pedido.repartidorId) await NotificacionService.notificar({ io: req.io, usuarioId: pedido.repartidorId, ...aviso });
+  avisarCambio(req.io, pedido, negocio?.duenoId);
+  return aApi(await cargar(id), req, { detalle: true });
 }
 
-// La app envía { valoracion (1-5), comentario }. Por defecto califica al vendedor; con tipo:'repartidor', al repartidor.
-async function calificar(usuario, id, { valoracion, comentario, tipo = 'vendedor' }, req) {
-  const pedido = await Pedido.findOne({ where: { id, clienteId: usuario.id } });
-  if (!pedido) throw noEncontrado();
-  if (![E.ENTREGADO, E.RECIBIDO].includes(pedido.estado)) throw AppError.conflict('Solo puedes calificar un pedido entregado', 'PEDIDONOENTREGADO');
-  const TIPO = String(tipo).toUpperCase();
-  if (TIPO === 'REPARTIDOR' && !pedido.repartidorId) throw AppError.badRequest('Este pedido no tuvo repartidor', 'SINREPARTIDOR');
-  if (await Calificacion.findOne({ where: { pedidoId: id, tipo: TIPO } })) throw AppError.conflict('Ya calificaste este pedido', 'YACALIFICADO');
+// Recalcula el promedio y el número de calificaciones del negocio
+async function recalcularNegocio(negocioId, t) {
+  await sequelize.query(
+    `UPDATE tnegociosestado SET
+       calificacion = COALESCE((SELECT ROUND(AVG(puntuacion), 2) FROM tcalificaciones WHERE cnegocio = :id AND destino = 'NEGOCIO'), 0),
+       numerocalificaciones = (SELECT COUNT(*) FROM tcalificaciones WHERE cnegocio = :id AND destino = 'NEGOCIO')
+     WHERE cnegocio = :id`,
+    { replacements: { id: negocioId }, transaction: t },
+  );
+}
+
+async function calificar(usuario, id, { puntuacion, comentario, destino = 'negocio' }, req) {
+  const p = await Pedido.findOne({ where: { id, clienteId: usuario.id } });
+  if (!p) throw noEncontrado();
+  if (![E.ENTREGADO, E.RECIBIDO].includes(p.estado)) throw AppError.conflict('Podrás calificar cuando recibas tu pedido', 'PEDIDONOENTREGADO');
+  const DESTINO = String(destino).toUpperCase();
+  if (DESTINO === 'REPARTIDOR' && !p.repartidorId) throw AppError.badRequest('Este pedido no tuvo repartidor', 'SINREPARTIDOR');
+  if (await Calificacion.findOne({ where: { pedidoId: id, destino: DESTINO } })) throw AppError.conflict('Ya calificaste este pedido', 'YACALIFICADO');
 
   await withTransaction(async (t) => {
     await Calificacion.create({
-      pedidoId: id, usuarioId: usuario.id, tipo: TIPO, puntuacion: valoracion, comentario: comentario || null,
-      vendedorId: TIPO === 'VENDEDOR' ? pedido.vendedorId : null, repartidorId: TIPO === 'REPARTIDOR' ? pedido.repartidorId : null, creadoPor: usuario.id,
+      pedidoId: p.id, destino: DESTINO, autorId: usuario.id, puntuacion, comentario: comentario?.trim() || null,
+      negocioId: DESTINO === 'NEGOCIO' ? p.negocioId : null, repartidorId: DESTINO === 'REPARTIDOR' ? p.repartidorId : null,
     }, { transaction: t });
-    const [tabla, columna, clave, valor] = TIPO === 'VENDEDOR'
-      ? ['tnegocios', 'vendedor', "cusuario = :valor AND fhasta = '2999-12-31 00:00:00-05'", pedido.vendedorId]
-      : ['trepartidores', 'repartidor', "cusuario = :valor AND fhasta = '2999-12-31 00:00:00-05'", pedido.repartidorId];
-    await sequelize.query(   // recalcula el promedio y el total de calificaciones (tabla y columna vienen de una lista fija)
-      `UPDATE ${tabla} SET
-         calificacion = COALESCE((SELECT ROUND(AVG(puntuacion), 2) FROM tcalificaciones WHERE ${columna} = :valor AND visible AND eliminadoen IS NULL AND fhasta = '2999-12-31 00:00:00-05'), 0),
-         totalcalif   = (SELECT COUNT(*) FROM tcalificaciones WHERE ${columna} = :valor AND visible AND eliminadoen IS NULL AND fhasta = '2999-12-31 00:00:00-05')
-       WHERE ${clave}`,
-      { replacements: { valor }, transaction: t },
-    );
-  }, { usuarioId: usuario.id });
-  auditar({ usuarioId: usuario.id, accion: 'PEDIDOCALIFICADO', entidad: 'CALIFICACIONES', entidadId: id, detalle: { tipo: TIPO, valoracion }, req });
-}
-
-// ---------------------------------------------------------------------------------------------
-// Repartidor: aceptar, (en camino), recoger y entregar
-// ---------------------------------------------------------------------------------------------
-async function aceptarRepartidor(usuario, id, costoDelivery, req) {
-  const pedido = await withTransaction(async (t) => {
-    const repartidor = await repartidorDe(usuario.id, t);
-    if (repartidor.aprobacion !== APROBACION.APROBADO) throw AppError.forbidden('Tu cuenta de repartidor aún no está aprobada', 'REPARTIDORNOAPROBADO');
-    const p = await bloquear(id, {}, t);                        // bloqueo de fila: si dos repartidores aceptan a la vez, solo gana uno
-    if (!p) throw noEncontrado();
-    if (p.repartidorId) throw AppError.conflict('El pedido ya tiene un repartidor asignado', 'PEDIDOASIGNADO');
-    if (p.estado !== E.LISTO) throw AppError.conflict('El pedido debe estar listo para asignar repartidor', 'TRANSICIONINVALIDA');
-    validarTransicion(p.estado, E.ENCAMINO, 'repartidor');
-
-    const costo = centavos(costoDelivery);
-    const total = centavos(p.subtotal) - centavos(p.descuento || 0) + costo + centavos(p.propina || 0);
-    await p.update({ ...cambiosDe(E.ENCAMINO), repartidorId: repartidor.id, costoDelivery: dinero(costo), total: dinero(total), actualizadoPor: usuario.id }, { transaction: t });
-    await Repartidor.update({ enServicio: true, actualizadoPor: usuario.id }, { where: { id: repartidor.id }, transaction: t });
-    return p;
+    if (DESTINO === 'NEGOCIO') await recalcularNegocio(p.negocioId, t);
   }, { usuarioId: usuario.id });
 
-  auditar({ usuarioId: usuario.id, accion: 'PEDIDOACEPTADO', entidad: 'PEDIDOS', entidadId: id, detalle: { costoDelivery }, req });
-  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo: 'pedido_en_camino', titulo: '¡Repartidor asignado! 🚴', mensaje: `Un repartidor aceptó tu pedido #${pedido.id} y va en camino`, pedidoId: pedido.id, estado: 'en_camino', extra: { repartidorId: pedido.repartidorId } });
-  return { pedido: await aApi(await cargar(id), req) };
+  auditar({ usuarioId: usuario.id, accion: 'PEDIDOCALIFICADO', entidad: 'CALIFICACIONES', entidadId: id, detalle: { destino: DESTINO, puntuacion }, req });
+  return aApi(await cargar(id), req, { detalle: true });
 }
 
-// Ruta heredada (PATCH /:id/en-camino): aceptar ya deja el pedido "en camino", así que es idempotente.
-async function marcarEnCamino(usuario, id) {
-  const repartidor = await repartidorDe(usuario.id);
-  const pedido = await Pedido.findOne({ where: { id, repartidorId: repartidor.id } });
-  if (!pedido) throw noEncontrado();
-  if (pedido.estado !== E.ENCAMINO) throw AppError.conflict('El pedido debe estar listo para marcar en camino', 'TRANSICIONINVALIDA');
-}
-
-async function marcarRecogido(usuario, id, req) {
-  const pedido = await withTransaction(async (t) => {
-    const repartidor = await repartidorDe(usuario.id, t);
-    const p = await bloquear(id, { repartidorId: repartidor.id }, t);
-    if (!p) throw noEncontrado();
-    if (p.estado !== E.ENCAMINO) throw AppError.conflict('El pedido debe estar en camino para marcar como recogido', 'TRANSICIONINVALIDA');
-    validarTransicion(p.estado, E.RECOGIDO, 'repartidor');
-    await p.update({ ...cambiosDe(E.RECOGIDO), actualizadoPor: usuario.id }, { transaction: t });
-    return p;
-  }, { usuarioId: usuario.id });
-
-  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo: 'pedido_recogido', titulo: '¡Tu pedido fue recogido! 🚴', mensaje: `El repartidor recogió tu pedido #${pedido.id} y va en camino`, pedidoId: pedido.id, estado: 'recogido' });
-  return { id: pedido.id, estado: 'recogido', fechaRecogida: pedido.fechaRecogida };
-}
-
-async function marcarEntregado(usuario, id, req) {
-  const pedido = await withTransaction(async (t) => {
-    const repartidor = await repartidorDe(usuario.id, t);
-    const p = await bloquear(id, { repartidorId: repartidor.id }, t);
-    if (!p) throw noEncontrado();
-    if (p.estado !== E.RECOGIDO) throw AppError.conflict('El pedido debe estar recogido para marcar entregado', 'TRANSICIONINVALIDA');
-    validarTransicion(p.estado, E.ENTREGADO, 'repartidor');
-    await p.update({ ...cambiosDe(E.ENTREGADO), actualizadoPor: usuario.id }, { transaction: t });
-    if (!(await tieneActivos(repartidor.id, p.id, t))) await Repartidor.update({ enServicio: false, actualizadoPor: usuario.id }, { where: { id: repartidor.id }, transaction: t });
-    return p;
-  }, { usuarioId: usuario.id });
-
-  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo: 'pedido_entregado', titulo: '¡Pedido entregado! 🎉', mensaje: `Tu pedido #${pedido.id} fue entregado. Por favor confirma la recepción.`, pedidoId: pedido.id, estado: 'entregado' });
+// Métodos de pago que la app puede ofrecer hoy
+async function metodosPago() {
+  const filas = await sequelize.query(
+    "SELECT cmetodopago AS codigo, descripcion FROM tmetodospago WHERE esactivo AND cidioma = 'es' AND fhasta = '2999-12-31 00:00:00-05' ORDER BY cmetodopago",
+    { type: QueryTypes.SELECT },
+  );
+  return filas.map((f) => ({ codigo: METODOPAGOAAPI[f.codigo], descripcion: f.descripcion }));
 }
 
 module.exports = {
-  crear, listarDelCliente, listarDelVendedor, obtener, cambiarEstadoVendedor, cancelar, marcarRecibido, calificar,
-  aceptarRepartidor, marcarEnCamino, marcarRecogido, marcarEntregado, aApi, cargar, INCLUIR, ORDEN,
+  crear, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, metodosPago,
+  aApi, cargar, distanciaKm,
 };

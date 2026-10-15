@@ -2,10 +2,12 @@ const express = require('express');
 const controller = require('./negocios.controller');
 const schema = require('./negocio.schema');
 const productoSchema = require('../productos/producto.schema');
+const pedidoController = require('../pedidos/pedido.controller');
+const pedidoSchema = require('../pedidos/pedido.schema');
 const validar = require('../../shared/middlewares/validar');
 const { verificarToken, verificarRol } = require('../../middlewares/auth.middleware');
 
-// /api/mi-negocio: el negocio del vendedor autenticado y sus productos.
+// /api/mi-negocio: el negocio del vendedor autenticado, sus productos y los pedidos que recibe.
 const router = express.Router();
 router.use(verificarToken, verificarRol('vendedor'));
 
@@ -25,5 +27,9 @@ router.patch('/productos/:id/estado', productoSchema.estado, validar, controller
 router.patch('/productos/:id/stock', productoSchema.stock, validar, controller.stockProducto);
 router.put('/productos/:id/imagen', productoSchema.imagen, validar, controller.imagenProducto);
 router.delete('/productos/:id', productoSchema.id, validar, controller.eliminarProducto);
+
+// Pedidos que recibe el negocio
+router.get('/pedidos', pedidoSchema.listado, validar, pedidoController.delNegocio);
+router.patch('/pedidos/:id/estado', pedidoSchema.estadoNegocio, validar, pedidoController.estadoNegocio);
 
 module.exports = router;

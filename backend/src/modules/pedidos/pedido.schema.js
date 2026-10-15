@@ -1,38 +1,40 @@
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 
 // Reglas de validación de las rutas de pedidos.
-const id = [param('id').matches(/^PED-\d{8}-\d{6}$/).withMessage('ID de pedido inválido')];
+const id = [param('id').isInt({ min: 1 }).withMessage('ID de pedido inválido').toInt()];
+
+const listado = [
+  query('estado').optional().isIn(['activos', 'historial']).withMessage('estado debe ser activos o historial'),
+  query('page').optional().isInt({ min: 1 }).withMessage('Página inválida'),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Límite inválido (1 a 50)'),
+];
 
 const crear = [
-  body('productos').isArray({ min: 1, max: 50 }).withMessage('Debe incluir al menos un producto (máximo 50)'),
-  body('productos.*.productoId').matches(/^PRO-\d{6}$/).withMessage('ID del producto inválido'),
-  body('productos.*.cantidad').isInt({ min: 1, max: 99 }).withMessage('La cantidad debe estar entre 1 y 99'),
-  body('productos.*.notas').optional({ values: 'null' }).isString().isLength({ max: 300 }).withMessage('Las notas del producto son muy largas'),
-  body('vendedorId').optional({ values: 'falsy' }).matches(/^[a-z0-9]{3,30}$/).withMessage('ID de vendedor inválido'),
-  body('metodoPago').isString().trim().notEmpty().withMessage('El método de pago es requerido'),
-  body('direccionEntregaId').optional({ values: 'falsy' }).matches(/^DIR-\d{6}$/).withMessage('ID de dirección inválido'),
-  body('notasCliente').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('Las notas son muy largas'),
+  body('negocioId').isInt({ min: 1 }).withMessage('Indica el negocio').toInt(),
+  body('direccionId').isInt({ min: 1 }).withMessage('Elige la dirección de entrega').toInt(),
+  body('metodoPago').isString().withMessage('Elige cómo vas a pagar').trim().notEmpty().withMessage('Elige cómo vas a pagar'),
+  body('productos').isArray({ min: 1, max: 50 }).withMessage('Agrega al menos un producto (máximo 50)'),
+  body('productos.*.productoId').isInt({ min: 1 }).withMessage('Producto inválido').toInt(),
+  body('productos.*.cantidad').isInt({ min: 1, max: 99 }).withMessage('La cantidad debe estar entre 1 y 99').toInt(),
+  body('productos.*.notas').optional({ values: 'null' }).isString().isLength({ max: 200 }).withMessage('La nota del producto es muy larga (máximo 200)'),
+  body('notas').optional({ values: 'null' }).isString().isLength({ max: 300 }).withMessage('Las indicaciones son muy largas (máximo 300)'),
 ];
 
-// Cambios de estado que puede pedir el vendedor
-const estado = [
+// Cambios de estado que puede pedir el negocio
+const estadoNegocio = [
   ...id,
   body('estado').isIn(['confirmado', 'preparando', 'listo', 'rechazado']).withMessage('Estado inválido'),
-  body('motivo').optional({ values: 'null' }).isString().isLength({ max: 200 }).withMessage('El motivo es muy largo'),
+  body('motivo').optional({ values: 'null' }).isString().isLength({ max: 300 }).withMessage('El motivo es muy largo'),
+  body('tiempoEstimado').optional({ values: 'null' }).isInt({ min: 5, max: 240 }).withMessage('Tiempo estimado inválido (5 a 240 minutos)').toInt(),
 ];
 
-const cancelar = [...id, body('motivo').optional({ values: 'null' }).isString().isLength({ max: 200 }).withMessage('El motivo es muy largo')];
-
-const aceptar = [
-  ...id,
-  body('costoDelivery').isFloat({ min: 0, max: 100 }).withMessage('El costo de delivery es requerido y debe estar entre 0 y 100'),
-];
+const cancelar = [...id, body('motivo').optional({ values: 'null' }).isString().isLength({ max: 300 }).withMessage('El motivo es muy largo')];
 
 const calificar = [
   ...id,
-  body('valoracion').isInt({ min: 1, max: 5 }).withMessage('La valoración debe ser un número de 1 a 5'),
-  body('comentario').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('El comentario es muy largo'),
-  body('tipo').optional().toLowerCase().isIn(['vendedor', 'repartidor']).withMessage('El tipo debe ser vendedor o repartidor'),
+  body('puntuacion').isInt({ min: 1, max: 5 }).withMessage('La calificación va de 1 a 5 estrellas').toInt(),
+  body('comentario').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('El comentario es muy largo (máximo 500)'),
+  body('destino').optional().toLowerCase().isIn(['negocio', 'repartidor']).withMessage('Se califica al negocio o al repartidor'),
 ];
 
-module.exports = { id, crear, estado, cancelar, aceptar, calificar };
+module.exports = { id, listado, crear, estadoNegocio, cancelar, calificar };

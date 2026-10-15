@@ -2,53 +2,53 @@ const Notificacion = require('./notificacion.model');
 const Dispositivo = require('./dispositivo.model');
 const { enviarPush } = require('../../services/fcm.service');
 const AppError = require('../../shared/errors/AppError');
-const withTransaction = require('../../shared/helpers/withTransaction');
 const { logMensaje } = require('../../shared/services/log.service');
 
-// Notificaciones de la app: se guardan en la BD (lista de notificaciones), se emiten por socket al celular que
-// está conectado (sala "user:<usuario>") y se envían como push (Firebase) a los dispositivos registrados.
+// Notificaciones de la app: se guardan en la BD (lista de avisos), se emiten por socket al celular que está
+// conectado (sala "user:<usuario>") y se envían como push (Firebase) a los dispositivos registrados.
 
 const aApi = (n) => ({
   id: Number(n.id),
-  usuarioId: n.usuarioId,
+  tipo: n.tipo,
   titulo: n.titulo,
   mensaje: n.mensaje,
-  tipo: n.tipo,
+  pedidoId: n.pedidoId == null ? null : Number(n.pedidoId),
+  datos: n.datos || {},
   leida: n.leida,
-  pedidoId: n.pedidoId,
-  createdAt: n.creadoEn,
+  fecha: n.creadoEn,
 });
 
-async function listar(usuarioId, { limite = 100, pagina = 1 } = {}) {
-  const tope = Math.min(Number(limite) || 100, 200);
+async function listar(usuarioId, { limite = 50, pagina = 1 } = {}) {
+  const tope = Math.min(Number(limite) || 50, 100);
   const salto = (Math.max(Number(pagina) || 1, 1) - 1) * tope;
-  const { rows, count } = await Notificacion.findAndCountAll({
-    where: { usuarioId }, order: [['creadoEn', 'DESC']], limit: tope, offset: salto,
-  });
+  const { rows, count } = await Notificacion.findAndCountAll({ where: { usuarioId }, order: [['creadoEn', 'DESC'], ['id', 'DESC']], limit: tope, offset: salto });
   const noLeidas = await Notificacion.count({ where: { usuarioId, leida: false } });
-  return { notificaciones: rows.map(aApi), total: count, noLeidas };
+  return { notificaciones: rows.map(aApi), total: count, noLeidas, hayMas: salto + rows.length < count };
 }
 
+const noLeidas = async (usuarioId) => ({ noLeidas: await Notificacion.count({ where: { usuarioId, leida: false } }) });
+
 async function marcarLeida(usuarioId, id) {
-  const n = await Notificacion.findOne({ where: { id, usuarioId } });
-  if (!n) throw AppError.notFound('Notificación no encontrada', 'NOTIFICACIONNOENCONTRADA');   // ajena o inexistente: mismo error
-  await withTransaction((t) => n.update({ leida: true, leidaEn: new Date(), actualizadoPor: usuarioId }, { transaction: t }), { usuarioId });
+  const [cambiadas] = await Notificacion.update({ leida: true, leidaEn: new Date() }, { where: { id, usuarioId } });
+  if (!cambiadas) throw AppError.notFound('Notificación no encontrada', 'NOTIFICACIONNOENCONTRADA');   // ajena o inexistente: mismo error
+}
+
+async function marcarTodas(usuarioId) {
+  const [cambiadas] = await Notificacion.update({ leida: true, leidaEn: new Date() }, { where: { usuarioId, leida: false } });
+  return { marcadas: cambiadas };
 }
 
 // Registra (o reasigna) el token de Firebase del celular. Un token pertenece a un solo usuario a la vez.
 async function registrarDispositivo(usuarioId, { token, plataforma, modelo, appVer }) {
-  const datos = { usuarioId, plataforma: String(plataforma || 'android').toUpperCase(), modelo, appVer, activo: true, ultimoUsoEn: new Date(), actualizadoPor: usuarioId };
-  await withTransaction(async (t) => {
-    const existente = await Dispositivo.findOne({ where: { tokenFcm: token }, paranoid: false, transaction: t });
-    if (!existente) return Dispositivo.create({ ...datos, tokenFcm: token, creadoPor: usuarioId }, { transaction: t });
-    if (existente.eliminadoEn) await existente.restore({ transaction: t });
-    return existente.update(datos, { transaction: t });
-  }, { usuarioId });
+  const datos = { usuarioId, plataforma: String(plataforma || 'android').toUpperCase(), modelo: modelo || null, versionApp: appVer || null, activo: true, ultimoUso: new Date() };
+  const existente = await Dispositivo.findOne({ where: { tokenFcm: token } });
+  if (existente) await existente.update(datos);
+  else await Dispositivo.create({ ...datos, tokenFcm: token });
 }
 
+// Al cerrar sesión: ese celular deja de recibir los avisos de esta cuenta
 async function quitarDispositivo(usuarioId, token) {
-  const d = await Dispositivo.findOne({ where: { tokenFcm: token, usuarioId } });
-  if (d) await withTransaction((t) => d.destroy({ transaction: t }), { usuarioId });
+  await Dispositivo.destroy({ where: { tokenFcm: token, usuarioId } });
 }
 
 const textoPlano = (datos) => Object.fromEntries(Object.entries(datos).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]));
@@ -66,16 +66,16 @@ async function enviarAlCelular(usuarioId, titulo, mensaje, datos) {
 }
 
 // Crea la notificación, la emite por socket y la envía como push. NUNCA lanza error: una notificación fallida no
-// debe tumbar la operación que la originó (queda registrada en LOGMENSAJES).
-//   guardar:false -> solo socket/push (sin fila en la lista de notificaciones)
-async function notificar({ io, usuarioId, tipo, titulo, mensaje, pedidoId = null, estado = null, extra = {}, guardar = true }) {
+// debe tumbar la operación que la originó (queda registrada en TLOGMENSAJES).
+async function notificar({ io, usuarioId, tipo, titulo, mensaje, pedidoId = null, datos = {} }) {
+  if (!usuarioId) return;
   try {
-    if (guardar) await Notificacion.create({ usuarioId, tipo, titulo, mensaje, pedidoId, canal: 'APP', datos: { estado, ...extra } });
-    if (io) io.to(`user:${usuarioId}`).emit('notificacion', { title: titulo, message: mensaje, tipo, pedidoId, ...(estado && { estado }), ...extra, ts: Date.now() });
-    enviarAlCelular(usuarioId, titulo, mensaje, { tipo, pedidoId, estado, ...extra }).catch(() => {});
+    const n = await Notificacion.create({ usuarioId, tipo, titulo, mensaje, pedidoId, datos });
+    if (io) io.to(`user:${usuarioId}`).emit('notificacion', aApi(n));
+    enviarAlCelular(usuarioId, titulo, mensaje, { tipo, pedidoId, ...datos }).catch(() => {});
   } catch (e) {
     logMensaje({ nivel: 'ADVERTENCIA', modulo: 'NOTIFICACIONES', accion: 'NOTIFICACIONFALLIDA', mensaje: 'No se pudo crear la notificación', detalle: { tipo, error: e.message }, usuarioId, pedidoId });
   }
 }
 
-module.exports = { listar, marcarLeida, registrarDispositivo, quitarDispositivo, notificar };
+module.exports = { listar, noLeidas, marcarLeida, marcarTodas, registrarDispositivo, quitarDispositivo, notificar };

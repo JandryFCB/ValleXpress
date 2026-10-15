@@ -1,15 +1,16 @@
 const AppError = require('../../shared/errors/AppError');
 const { ESTADOPEDIDO: E, ESTADOPEDIDOAAPI } = require('../../shared/constants/codigos');
 
-// Máquina de estados del pedido (por CÓDIGO del catálogo ESTADOPEDIDO). Define QUÉ transiciones existen y
-// QUIÉN puede hacerlas; ningún endpoint puede saltarse el flujo.
+// Máquina de estados del pedido (por CÓDIGO del catálogo TESTATUSPEDIDO). Define QUÉ transiciones existen y
+// QUIÉN puede hacerlas; ningún endpoint puede saltarse el flujo. La fecha de cada paso NO se guarda en columnas:
+// sale del historial de TPEDIDOS (cada cambio de estado deja su versión con su FDESDE).
 //
 //   PENDIENTE -> CONFIRMADO -> PREPARANDO -> LISTO -> EN CAMINO -> RECOGIDO -> ENTREGADO -> RECIBIDO
-//        |  \-> RECHAZADO (vendedor)           (EN CAMINO: un repartidor aceptó y va al negocio)
+//        |  \-> RECHAZADO (negocio)            (EN CAMINO: un repartidor aceptó y va al negocio)
 //        \----> CANCELADO (cliente, solo mientras está pendiente)
 const TRANSICIONES = Object.freeze({
   [E.PENDIENTE]: [E.CONFIRMADO, E.RECHAZADO, E.CANCELADO],
-  [E.CONFIRMADO]: [E.PREPARANDO],
+  [E.CONFIRMADO]: [E.PREPARANDO, E.LISTO],
   [E.PREPARANDO]: [E.LISTO],
   [E.LISTO]: [E.ENCAMINO],
   [E.ENCAMINO]: [E.RECOGIDO],
@@ -24,12 +25,9 @@ const QUIEN = Object.freeze({
   [E.RECIBIDO]: 'cliente', [E.CANCELADO]: 'cliente',
 });
 
-// Columna de fecha que se completa al entrar a cada estado
-const FECHA = Object.freeze({
-  [E.CONFIRMADO]: 'fechaConfirmacion', [E.PREPARANDO]: 'fechaPreparacion', [E.LISTO]: 'fechaListo',
-  [E.ENCAMINO]: 'fechaAsignacion', [E.RECOGIDO]: 'fechaRecogida', [E.ENTREGADO]: 'fechaEntrega',
-  [E.RECIBIDO]: 'fechaRecibido', [E.CANCELADO]: 'fechaCancelado', [E.RECHAZADO]: 'fechaCancelado',
-});
+// Pedidos "en curso" (los que se muestran como activos) y terminados
+const ACTIVOS = Object.freeze([E.PENDIENTE, E.CONFIRMADO, E.PREPARANDO, E.LISTO, E.ENCAMINO, E.RECOGIDO, E.ENTREGADO]);
+const TERMINADOS = Object.freeze([E.RECIBIDO, E.RECHAZADO, E.CANCELADO]);
 
 const nombre = (codigo) => ESTADOPEDIDOAAPI[codigo] || codigo;
 
@@ -43,7 +41,4 @@ function validarTransicion(actual, siguiente, rol) {
   }
 }
 
-// Campos a actualizar al entrar a "siguiente": el estado y su fecha
-const cambiosDe = (siguiente) => ({ estado: siguiente, [FECHA[siguiente]]: new Date() });
-
-module.exports = { TRANSICIONES, validarTransicion, cambiosDe };
+module.exports = { TRANSICIONES, ACTIVOS, TERMINADOS, validarTransicion };

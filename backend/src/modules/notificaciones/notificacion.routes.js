@@ -9,6 +9,8 @@ const { verificarToken } = require('../../middlewares/auth.middleware');
 router.use(verificarToken);
 
 router.get('/', schema.listado, validar, controller.listar);
+router.get('/no-leidas', controller.noLeidas);
+router.patch('/leer-todas', controller.marcarTodas);
 router.patch('/:id/leida', schema.id, validar, controller.marcarLeida);
 router.post('/dispositivo', schema.dispositivo, validar, controller.registrarDispositivo);
 router.delete('/dispositivo', schema.quitarDispositivo, validar, controller.quitarDispositivo);

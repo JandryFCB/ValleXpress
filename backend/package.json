@@ -11,7 +11,7 @@
     "test:catalogo": "node test/catalogo.e2e.js",
     "test:tienda": "node test/tienda.e2e.js",
     "test:pedidos": "node test/pedidos.e2e.js",
-    "test": "npm run test:auth && npm run test:cuenta && npm run test:catalogo",
+    "test": "npm run test:auth && npm run test:cuenta && npm run test:catalogo && npm run test:pedidos",
     "test:repartidores": "node test/repartidores.e2e.js",
     "test:identidad": "node test/identidad.e2e.js"
   },

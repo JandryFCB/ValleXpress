@@ -4,11 +4,14 @@ const service = require('./notificacion.service');
 // Controller delgado: la lógica está en notificacion.service.js y las validaciones en notificacion.schema.js.
 
 const listar = asyncHandler(async (req, res) => res.json(await service.listar(req.usuario.id, req.query)));
+const noLeidas = asyncHandler(async (req, res) => res.json(await service.noLeidas(req.usuario.id)));
 
 const marcarLeida = asyncHandler(async (req, res) => {
-  await service.marcarLeida(req.usuario.id, req.params.id);
+  await service.marcarLeida(req.usuario.id, Number(req.params.id));
   res.json({ message: 'Marcada como leída' });
 });
+
+const marcarTodas = asyncHandler(async (req, res) => res.json(await service.marcarTodas(req.usuario.id)));
 
 // La app envía aquí el token de Firebase de su celular para recibir notificaciones push
 const registrarDispositivo = asyncHandler(async (req, res) => {
@@ -21,4 +24,4 @@ const quitarDispositivo = asyncHandler(async (req, res) => {
   res.json({ message: 'Dispositivo eliminado' });
 });
 
-module.exports = { listar, marcarLeida, registrarDispositivo, quitarDispositivo };
+module.exports = { listar, noLeidas, marcarLeida, marcarTodas, registrarDispositivo, quitarDispositivo };
