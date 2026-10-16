@@ -1,5 +1,10 @@
 const admin = require('firebase-admin');
 
+// Canales de Android (los crea la app al abrir; deben coincidir con lib/services/fcm_mobile.dart):
+//   'pedidos'  todo lo de un pedido o una entrega: suena, vibra y aparece arriba de la pantalla
+//   'general'  cuenta, aprobaciones y demás: suena sin interrumpir tanto
+const canalDe = (tipo = '') => (/^(pedido|repartidor_cerca|repartidor_asignado)/.test(tipo) ? 'pedidos' : 'general');
+
 // Arma el mensaje de FCM (los valores de "data" deben ser texto)
 function armarMensaje(fcmToken, title, body, data = {}) {
   return {
@@ -15,12 +20,15 @@ function armarMensaje(fcmToken, title, body, data = {}) {
     android: {
       priority: 'high',
       notification: {
-        channelId: 'verification_channel',
-        priority: 'high',
+        channelId: canalDe(data.tipo),
+        priority: 'max',
         sound: 'default',
-        vibrateTimings: ['0s', '0.5s', '0.5s']
+        defaultVibrateTimings: true,
+        // Cada pedido tiene su propia notificación: tres pedidos nuevos = tres avisos (no se pisan)
+        ...(data.pedidoId && { tag: `pedido-${data.pedidoId}-${data.tipo || ''}` }),
       }
-    }
+    },
+    apns: { payload: { aps: { sound: 'default' } } },   // iPhone: también con sonido
   };
 }
 

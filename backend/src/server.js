@@ -14,7 +14,12 @@ try {
   if (serviceAccountPath) {
     // Normalizar path para Windows (reemplazar barras invertidas)
     serviceAccountPath = serviceAccountPath.replace(/\\/g, '/');
-    
+    // La ruta del servidor (/opt/...) no existe en la PC de desarrollo: se busca el mismo archivo en la carpeta del backend
+    if (!fs.existsSync(serviceAccountPath)) {
+      const local = path.join(__dirname, '..', path.basename(serviceAccountPath));
+      if (fs.existsSync(local)) serviceAccountPath = local;
+    }
+
     // Verificar si el archivo existe
     if (fs.existsSync(serviceAccountPath)) {
       // Leer y parsear el archivo JSON manualmente
