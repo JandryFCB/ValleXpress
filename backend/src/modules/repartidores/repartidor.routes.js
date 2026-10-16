@@ -12,6 +12,7 @@ router.use(verificarToken, verificarRol('repartidor'));
 router.get('/', controller.miPerfil);
 router.post('/', schema.crear, validar, controller.crear);
 router.put('/', schema.actualizar, validar, controller.actualizar);
+router.post('/revision', controller.revision);
 router.patch('/disponibilidad', schema.disponibilidad, validar, controller.disponibilidad);
 router.put('/ubicacion', schema.ubicacion, validar, controller.ubicacion);
 

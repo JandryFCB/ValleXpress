@@ -2,12 +2,13 @@ const { Op } = require('sequelize');
 const { Repartidor, RepartidorEstado, Ubicacion } = require('./repartidor.model');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
+const { datosAprobacion, pedirRevision: pedirRevisionDe } = require('../../shared/helpers/aprobacion');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const { auditar, logMensaje } = require('../../shared/services/log.service');
 const { normalizarPlaca } = require('../../shared/utils/normalizers');
 const { distanciaKm } = require('../../shared/utils/geo');
 const {
-  APROBACION, APROBACIONAAPI, TIPOVEHICULO, VEHICULOAAPI, APIAVEHICULO, VEHICULOSINPLACA, ESTADOPEDIDO: E, vehiculoACodigo,
+  APROBACION, TIPOVEHICULO, VEHICULOAAPI, APIAVEHICULO, VEHICULOSINPLACA, ESTADOPEDIDO: E, vehiculoACodigo,
 } = require('../../shared/constants/codigos');
 
 // Lógica del REPARTIDOR: su perfil (vehículo y placa), estar en línea y su ubicación en vivo.
@@ -50,7 +51,7 @@ function aApi(r) {
     vehiculo: VEHICULOAAPI[r.vehiculo],
     placa: r.placa,
     color: r.color,
-    aprobacion: APROBACIONAAPI[r.aprobacion],
+    ...datosAprobacion(r),
     disponible: e.disponible === true,
     calificacion: num(e.calificacion) ?? 0,
     numeroCalificaciones: e.numeroCalificaciones ?? 0,
@@ -189,7 +190,13 @@ async function recorrido(pedidoId) {
   return puntos.map((u) => ({ latitud: num(u.latitud), longitud: num(u.longitud), fecha: u.registradoEn }));
 }
 
+// Rechazado → vuelve a revisión (tras corregir su vehículo o placa)
+async function pedirRevision(usuarioId, req) {
+  await pedirRevisionDe(await exigirPerfil(usuarioId), { usuarioId, entidad: 'REPARTIDORES', entidadId: usuarioId, req });
+  return aApi(await cargar(usuarioId));
+}
+
 module.exports = {
-  crearPerfil, crear, miPerfil, actualizar, cambiarDisponibilidad, registrarUbicacion, recorrido,
+  crearPerfil, crear, miPerfil, actualizar, pedirRevision, cambiarDisponibilidad, registrarUbicacion, recorrido,
   exigirPerfil, exigirAprobado, cargar, aApi, vehiculoDe, ENCURSO,
 };

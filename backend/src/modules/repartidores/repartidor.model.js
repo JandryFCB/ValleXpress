@@ -11,6 +11,7 @@ const Repartidor = sequelize.define('Repartidor', {
   color: { type: DataTypes.STRING(30), field: 'colorvehiculo' },
   aprobacion: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: '001', field: 'cestatusaprobacion' },
   aprobadoEn: { type: DataTypes.DATE, field: 'faprobacion' },
+  motivoAprobacion: { type: DataTypes.STRING(300), field: 'motivoaprobacion' },   // por qué se rechazó o suspendió
   ...columnasHistorial,
 }, opcionesHistorial('TREPARTIDORES'));
 

@@ -4,11 +4,12 @@ const Direccion = require('../direcciones/direccion.model');
 const Usuario = require('../auth/usuario.model');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
+const { datosAprobacion, pedirRevision: pedirRevisionDe } = require('../../shared/helpers/aprobacion');
 const ArchivoService = require('../../shared/services/archivo.service');
 const CatalogoService = require('../../shared/services/catalogo.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const { auditar } = require('../../shared/services/log.service');
-const { APROBACION, APROBACIONAAPI, CATEGORIA, TIPODIRECCION } = require('../../shared/constants/codigos');
+const { APROBACION, CATEGORIA, TIPODIRECCION } = require('../../shared/constants/codigos');
 
 // Lógica de negocio de los NEGOCIOS (tiendas). Público: solo se ven los aprobados. El dueño (rol vendedor) ve y
 // edita el suyo aunque esté pendiente. Cada cambio queda en el historial (FDESDE/FHASTA) con quién lo hizo.
@@ -83,7 +84,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
         ? { id: Number(n.local.id), direccion: n.local.direccion, referencia: n.local.referencia, latitud: num(n.local.latitud), longitud: num(n.local.longitud) }
         : null,
       horarios,
-      ...(privado && { ruc: n.ruc, aprobacion: APROBACIONAAPI[n.aprobacion], duenoId: n.duenoId }),
+      ...(privado && { ruc: n.ruc, ...datosAprobacion(n), duenoId: n.duenoId }),
     };
   });
   return Array.isArray(entrada) ? salida : salida[0];
@@ -189,6 +190,13 @@ async function actualizar(usuarioId, datos, req) {
   return miNegocio(usuarioId, req);
 }
 
+// Rechazado → vuelve a revisión (tras corregir sus datos)
+async function pedirRevision(usuarioId, req) {
+  const n = await exigirMio(usuarioId);
+  await pedirRevisionDe(n, { usuarioId, entidad: 'NEGOCIOS', entidadId: n.id, req });
+  return miNegocio(usuarioId, req);
+}
+
 // El local es una dirección (tipo 005) de la persona dueña. Si ya había uno, se actualiza (queda en el historial).
 async function fijarLocal(usuarioId, datos, req) {
   const n = await exigirMio(usuarioId);
@@ -251,6 +259,6 @@ async function subirImagen(usuarioId, tipo, base64, req) {
 
 module.exports = {
   categorias, listar, obtener,
-  delDueno, exigirMio, miNegocio, crearParaUsuario, crear, actualizar, fijarLocal, fijarHorarios, cambiarEstado, subirImagen,
+  delDueno, exigirMio, miNegocio, crearParaUsuario, crear, actualizar, pedirRevision, fijarLocal, fijarHorarios, cambiarEstado, subirImagen,
   dentroDeHorario, aApi,
 };

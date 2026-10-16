@@ -129,10 +129,30 @@ const AVISOAPROBACION = {
   pendiente: ['Tu cuenta está en revisión', (que) => `${que} volvió a revisión`],
 };
 
+// Correo de la decisión: [asunto, título, párrafos]. "pendiente" (volver a revisión) no manda correo.
+const CORREOAPROBACION = {
+  aprobado: (que) => ['¡Tu cuenta de ValleXpress fue aprobada! 🎉', '¡Ya puedes empezar!', [`${que} fue aprobado y ya está activo en ValleXpress.`, 'Abre la app para empezar.']],
+  rechazado: (que, motivo) => ['Tu solicitud en ValleXpress no fue aprobada', 'Revisamos tu solicitud', [`${que} no fue aprobado por ahora.`, motivo, 'Corrige tus datos en la app y pide una nueva revisión, o respóndenos a este correo si tienes dudas.']],
+  suspendido: (que, motivo) => ['Tu cuenta de ValleXpress fue suspendida', 'Suspendimos tu cuenta', [`${que} fue suspendido y por ahora no recibirá pedidos.`, motivo, 'Si crees que es un error, respóndenos a este correo y lo revisamos.']],
+};
+
+const motivoLimpio = (estado, motivo) => (['rechazado', 'suspendido'].includes(estado) ? motivo.trim().slice(0, 300) : null);
+
 function exigirMotivo(estado, motivo) {
   if (['rechazado', 'suspendido'].includes(estado) && !motivo?.trim()) {
     throw AppError.badRequest('Escribe el motivo: se le enviará al usuario', 'MOTIVOREQUERIDO');
   }
+}
+
+// Avisa la decisión dentro de la app (notificación en vivo) y por correo
+async function avisarAprobacion({ io, usuarioId, tipo, estado, que, motivo, datos }) {
+  const [titulo, mensaje] = AVISOAPROBACION[estado];
+  await NotificacionService.notificar({ io, usuarioId, tipo: `${tipo}_${estado}`, titulo, mensaje: mensaje(que, motivo), datos });
+  const correo = CORREOAPROBACION[estado];
+  const u = correo && (await Usuario.findByPk(usuarioId, { attributes: ['id', 'nombre', 'email'] }));
+  if (!u?.email) return;
+  const [asunto, tituloCorreo, parrafos] = correo(que, motivo ? `Motivo: <strong>${motivo.replace(/[<>&]/g, '')}</strong>` : null);
+  Correo.avisoCuenta({ para: u.email, nombre: u.nombre, asunto, titulo: tituloCorreo, parrafos: parrafos.filter(Boolean) });
 }
 
 async function cambiarAprobacionNegocio(admin, id, { estado, motivo }, req) {
@@ -142,15 +162,18 @@ async function cambiarAprobacionNegocio(admin, id, { estado, motivo }, req) {
     const negocio = await Negocio.findOne({ where: { id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!negocio) throw AppError.notFound('Negocio no encontrado', 'NEGOCIONOENCONTRADO');
     if (negocio.aprobacion === codigo) throw AppError.conflict(`El negocio ya está ${estado}`, 'SINCAMBIOS');
-    await negocio.update({ aprobacion: codigo, aprobadoEn: codigo === APROBACION.APROBADO ? new Date() : negocio.aprobadoEn }, { transaction: t });
+    await negocio.update({
+      aprobacion: codigo,
+      aprobadoEn: codigo === APROBACION.APROBADO ? new Date() : negocio.aprobadoEn,
+      motivoAprobacion: motivoLimpio(estado, motivo),
+    }, { transaction: t });
     // Un negocio que deja de estar aprobado se cierra: no puede recibir pedidos
     if (codigo !== APROBACION.APROBADO) await NegocioEstado.update({ abierto: false }, { where: { negocioId: id }, transaction: t });
     return negocio;
   }, { usuarioId: admin.id });
 
   auditar({ usuarioId: admin.id, accion: 'NEGOCIOAPROBACION', entidad: 'NEGOCIOS', entidadId: id, detalle: { estado, motivo: motivo || null }, req });
-  const [titulo, mensaje] = AVISOAPROBACION[estado];
-  await NotificacionService.notificar({ io: req.io, usuarioId: n.duenoId, tipo: `negocio_${estado}`, titulo, mensaje: mensaje(`Tu negocio "${n.nombre}"`, motivo?.trim()), datos: { negocioId: Number(id) } });
+  await avisarAprobacion({ io: req.io, usuarioId: n.duenoId, tipo: 'negocio', estado, que: `Tu negocio "${n.nombre}"`, motivo: motivoLimpio(estado, motivo), datos: { negocioId: Number(id) } });
   const [actualizado] = await negociosApi([await Negocio.findOne({ where: { id }, include: INCLUIRNEGOCIO })], req);
   return actualizado;
 }
@@ -177,14 +200,17 @@ async function cambiarAprobacionRepartidor(admin, usuarioId, { estado, motivo },
     const r = await Repartidor.findOne({ where: { usuarioId }, transaction: t, lock: t.LOCK.UPDATE });
     if (!r) throw AppError.notFound('Repartidor no encontrado', 'REPARTIDORNOENCONTRADO');
     if (r.aprobacion === codigo) throw AppError.conflict(`El repartidor ya está ${estado}`, 'SINCAMBIOS');
-    await r.update({ aprobacion: codigo, aprobadoEn: codigo === APROBACION.APROBADO ? new Date() : r.aprobadoEn }, { transaction: t });
+    await r.update({
+      aprobacion: codigo,
+      aprobadoEn: codigo === APROBACION.APROBADO ? new Date() : r.aprobadoEn,
+      motivoAprobacion: motivoLimpio(estado, motivo),
+    }, { transaction: t });
     // Si deja de estar aprobado, se desconecta: ya no recibe pedidos
     if (codigo !== APROBACION.APROBADO) await RepartidorEstado.update({ disponible: false, ultimoCambio: new Date() }, { where: { usuarioId }, transaction: t });
   }, { usuarioId: admin.id });
 
   auditar({ usuarioId: admin.id, accion: 'REPARTIDORAPROBACION', entidad: 'REPARTIDORES', entidadId: usuarioId, detalle: { estado, motivo: motivo || null }, req });
-  const [titulo, mensaje] = AVISOAPROBACION[estado];
-  await NotificacionService.notificar({ io: req.io, usuarioId, tipo: `repartidor_${estado}`, titulo, mensaje: mensaje('Tu perfil de repartidor', motivo?.trim()) });
+  await avisarAprobacion({ io: req.io, usuarioId, tipo: 'repartidor', estado, que: 'Tu perfil de repartidor', motivo: motivoLimpio(estado, motivo) });
   return repartidorApi(await Repartidor.findOne({ where: { usuarioId }, include: INCLUIRREPARTIDOR }));
 }
 

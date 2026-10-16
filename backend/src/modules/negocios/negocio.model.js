@@ -21,6 +21,7 @@ const Negocio = sequelize.define('Negocio', {
   radioKm: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 5, field: 'radiokm' },
   aprobacion: { type: DataTypes.CHAR(3), allowNull: false, defaultValue: '001', field: 'cestatusaprobacion' },
   aprobadoEn: { type: DataTypes.DATE, field: 'faprobacion' },
+  motivoAprobacion: { type: DataTypes.STRING(300), field: 'motivoaprobacion' },   // por qué se rechazó o suspendió
   ...columnasHistorial,
 }, opcionesHistorial('TNEGOCIOS'));
 

@@ -32,6 +32,7 @@ function rutasDeGestion(router) {
 const router = express.Router();
 router.use(verificarToken, verificarRol('vendedor'));
 router.post('/', schema.crear, validar, controller.crear);
+router.post('/revision', controller.revision);
 rutasDeGestion(router);
 
 // Pedidos que recibe el negocio

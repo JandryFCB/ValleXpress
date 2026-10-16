@@ -17,6 +17,8 @@ const u = (req) => req.duenoId || req.usuario.id;
 const miNegocio = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.miNegocio(u(req), req) }));
 const crear = asyncHandler(async (req, res) => res.status(201).json({ negocio: await NegocioService.crear(u(req), req.body, req) }));
 const actualizar = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.actualizar(u(req), req.body, req) }));
+// Solo el dueño (no el administrador que gestiona) pide una nueva revisión
+const revision = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.pedirRevision(req.usuario.id, req) }));
 const local = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.fijarLocal(u(req), req.body, req) }));
 const horarios = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.fijarHorarios(u(req), req.body.horarios, req) }));
 const estado = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.cambiarEstado(u(req), req.body, req) }));
@@ -38,6 +40,7 @@ const eliminarProducto = asyncHandler(async (req, res) => {
 
 module.exports = {
   categorias, listar, obtener, menu,
+  revision,
   miNegocio, crear, actualizar, local, horarios, estado, logo, portada,
   misProductos, crearProducto, actualizarProducto, estadoProducto, stockProducto, imagenProducto, eliminarProducto,
 };

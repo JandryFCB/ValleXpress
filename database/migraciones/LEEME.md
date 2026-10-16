@@ -12,6 +12,9 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `004_vusuarios.sql` | Vista `VUSUARIOS` de lectura (usuario + persona + teléfono + acceso) |
 | `005_direcciones.sql` | Direcciones de la persona (`TPERSONADIRECCIONES`), tipos de dirección y de teléfono; agrega el tipo a `TPERSONATELEFONOS` |
 | `006_catalogo.sql` | Imágenes (`TARCHIVOS`), negocios con código propio, estado, horarios, productos e inventario; foto de perfil |
+| `007_pedidos.sql` | Estatus de pedido, métodos de pago, pedidos (histórica = línea de tiempo), detalles, calificaciones y notificaciones |
+| `008_repartidores.sql` | Tipos de vehículo, perfil del repartidor (histórica), estado en línea y ubicaciones del recorrido |
+| `009_motivo_aprobacion.sql` | Motivo del rechazo o la suspensión en negocios y repartidores |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 
