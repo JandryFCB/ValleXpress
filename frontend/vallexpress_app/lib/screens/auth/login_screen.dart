@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../config/constants.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
+import '../../utils/contacto.dart';
 import '../../widgets/ui/ui.dart';
 import 'forgot_password_screen.dart';
 
@@ -80,14 +80,6 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       setState(() => _aviso = null);
       mostrarError(context, auth.error ?? 'No se pudo iniciar sesión');
-    }
-  }
-
-  Future<void> _escribirASoporte(String correo) async {
-    final abierto = await launchUrl(Uri(scheme: 'mailto', path: correo, queryParameters: {'subject': 'Ayuda con mi cuenta de ValleXpress'}));
-    if (!abierto && mounted) {
-      await Clipboard.setData(ClipboardData(text: correo));
-      if (mounted) mostrarMensaje(context, 'Copiamos el correo de soporte: $correo');
     }
   }
 
@@ -208,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     aviso: _aviso!,
                                     faltan: _faltan,
                                     onRecuperar: _recuperar,
-                                    onSoporte: _aviso!.soporte == null ? null : () => _escribirASoporte(_aviso!.soporte!),
+                                    onSoporte: _aviso!.soporte == null ? null : () => escribirASoporte(context, _aviso!.soporte!),
                                   ),
                                 ),
                         ),

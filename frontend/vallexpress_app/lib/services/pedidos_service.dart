@@ -136,6 +136,9 @@ class PedidosService {
     return _perfil(res, crear ? 201 : 200);
   }
 
+  /// Rechazado → vuelve a revisión (después de corregir el vehículo o la placa)
+  static Future<PerfilRepartidor> pedirRevisionRepartidor() async => _perfil(await http.post(_url('/repartidor/revision'), headers: await _cabeceras()));
+
   static Future<PerfilRepartidor> cambiarDisponibilidad(bool disponible) async =>
       _perfil(await http.patch(_url('/repartidor/disponibilidad'), headers: await _cabeceras(), body: jsonEncode({'disponible': disponible})));
 

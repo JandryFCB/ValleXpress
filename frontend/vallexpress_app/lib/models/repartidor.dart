@@ -10,6 +10,8 @@ class PerfilRepartidor {
     this.placa,
     this.color,
     this.aprobacion = 'pendiente',
+    this.motivoAprobacion,
+    this.soporte,
     this.disponible = false,
     this.calificacion = 0,
     this.numeroCalificaciones = 0,
@@ -21,6 +23,8 @@ class PerfilRepartidor {
   final String? placa;
   final String? color;
   final String aprobacion;
+  final String? motivoAprobacion; // por qué lo rechazaron o suspendieron
+  final String? soporte; // correo de soporte (solo mientras no esté aprobado)
   final bool disponible;
   final double calificacion;
   final int numeroCalificaciones;
@@ -34,6 +38,8 @@ class PerfilRepartidor {
         placa: (j['placa'] ?? '').toString().isEmpty ? null : '${j['placa']}',
         color: (j['color'] ?? '').toString().isEmpty ? null : '${j['color']}',
         aprobacion: '${j['aprobacion'] ?? 'pendiente'}',
+        motivoAprobacion: (j['motivoAprobacion'] ?? '').toString().isEmpty ? null : '${j['motivoAprobacion']}',
+        soporte: (j['soporte'] ?? '').toString().isEmpty ? null : '${j['soporte']}',
         disponible: j['disponible'] == true,
         calificacion: _num(j['calificacion']),
         numeroCalificaciones: (j['numeroCalificaciones'] as num?)?.toInt() ?? 0,

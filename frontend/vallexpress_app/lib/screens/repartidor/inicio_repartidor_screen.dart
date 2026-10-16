@@ -10,6 +10,7 @@ import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
 import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
+import '../../widgets/panel_aprobacion.dart';
 import '../../widgets/ui/ui.dart';
 import '../pedidos/avisos_screen.dart';
 import '../pedidos/mis_pedidos_screen.dart' show TarjetaPedido;
@@ -90,18 +91,30 @@ class _EntregasState extends State<_Entregas> {
   int? _aceptando;
   String? _error;
   StreamSubscription? _vivo;
+  StreamSubscription? _decision;
 
   @override
   void initState() {
     super.initState();
     _cargar();
     _vivo = TiempoReal.instancia.cambios().listen((_) => _cargar());
+    // La decisión del administrador (aprobado, rechazado, suspendido) llega como aviso: se recarga al instante
+    _decision = TiempoReal.instancia.avisos.where((a) => a.tipo.startsWith('repartidor_')).listen((a) async {
+      await _cargar();
+      if (mounted && a.tipo == 'repartidor_aprobado') Confeti.lanzar(context);
+    });
   }
 
   @override
   void dispose() {
     _vivo?.cancel();
+    _decision?.cancel();
     super.dispose();
+  }
+
+  Future<void> _abrirVehiculo() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => VehiculoScreen(actual: _perfil)));
+    _cargar();
   }
 
   Future<void> _cargar() async {
@@ -224,6 +237,24 @@ class _EntregasState extends State<_Entregas> {
       );
     }
     final perfil = _perfil!;
+    // Sin aprobar (y sin una entrega que terminar): la pantalla de la solicitud en vez de las entregas
+    if (!perfil.aprobado && _enCurso == null) {
+      return PanelAprobacion(
+        tipo: TipoSolicitud.repartidor,
+        aprobacion: perfil.aprobacion,
+        motivo: perfil.motivoAprobacion,
+        soporte: perfil.soporte,
+        textoMientras: 'Revisar mi vehículo',
+        onMientras: _abrirVehiculo,
+        textoCorregir: 'Corregir mi vehículo',
+        onCorregir: _abrirVehiculo,
+        onPedirRevision: () async {
+          await PedidosService.pedirRevisionRepartidor();
+          await _cargar();
+        },
+        onActualizar: _cargar,
+      );
+    }
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
 
@@ -280,7 +311,7 @@ class _EntregasState extends State<_Entregas> {
           if (!perfil.aprobado) ...[
             const SizedBox(height: 12),
             const InsigniaValle(
-              'Tu cuenta está en revisión: cuando la aprueben podrás conectarte',
+              'Tu cuenta no está aprobada: termina esta entrega y revisa tu solicitud',
               color: AppTheme.warningColor,
               icono: Icons.hourglass_top_rounded,
             ),

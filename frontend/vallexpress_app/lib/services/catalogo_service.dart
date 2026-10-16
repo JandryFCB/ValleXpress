@@ -97,6 +97,9 @@ class CatalogoService {
         201,
       );
 
+  /// Rechazado → vuelve a revisión (después de corregir los datos). Solo el dueño, no el administrador.
+  static Future<Negocio> pedirRevisionNegocio() async => _negocio(await http.post(_url('/mi-negocio/revision'), headers: await _cabeceras()));
+
   static Future<Negocio> actualizarNegocio(Map<String, dynamic> cambios) async =>
       _negocio(await http.put(_url(_base), headers: await _cabeceras(), body: jsonEncode(cambios)));
 

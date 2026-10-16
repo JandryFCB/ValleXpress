@@ -203,7 +203,11 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
                               children: [
                                 InsigniaValle(n.categoria.descripcion, color: AppTheme.infoColor, icono: n.categoria.icono),
                                 if (n.aprobacion != null && n.aprobacion != 'aprobado')
-                                  InsigniaValle(n.aprobacion == 'pendiente' ? 'Pendiente de aprobación' : 'No visible: ${n.aprobacion}', color: AppTheme.warningColor, icono: Icons.hourglass_top_rounded),
+                                  switch (n.aprobacion) {
+                                    'rechazado' => const InsigniaValle('No aprobado', color: AppTheme.errorColor, icono: Icons.assignment_late_rounded),
+                                    'suspendido' => const InsigniaValle('Suspendido', color: AppTheme.errorColor, icono: Icons.block_rounded),
+                                    _ => const InsigniaValle('En revisión', color: AppTheme.warningColor, icono: Icons.hourglass_top_rounded),
+                                  },
                               ],
                             ),
                           ],

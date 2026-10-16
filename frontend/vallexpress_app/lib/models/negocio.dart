@@ -90,6 +90,8 @@ class Negocio {
     this.horarios = const [],
     this.ruc,
     this.aprobacion,
+    this.motivoAprobacion,
+    this.soporte,
   });
 
   final int id;
@@ -112,6 +114,8 @@ class Negocio {
   final List<HorarioDia> horarios;
   final String? ruc;
   final String? aprobacion; // 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' (solo para el dueño)
+  final String? motivoAprobacion; // por qué lo rechazaron o suspendieron
+  final String? soporte; // correo de soporte (solo mientras no esté aprobado)
 
   /// Horario de hoy (según el día del teléfono), o null si no hay horarios cargados
   HorarioDia? get horarioHoy {
@@ -141,5 +145,7 @@ class Negocio {
         horarios: (j['horarios'] as List? ?? []).map((h) => HorarioDia.desdeJson(Map<String, dynamic>.from(h))).toList(),
         ruc: _texto(j['ruc']),
         aprobacion: _texto(j['aprobacion']),
+        motivoAprobacion: _texto(j['motivoAprobacion']),
+        soporte: _texto(j['soporte']),
       );
 }
