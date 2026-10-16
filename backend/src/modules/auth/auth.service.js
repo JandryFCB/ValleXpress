@@ -13,6 +13,7 @@ const ArchivoService = require('../../shared/services/archivo.service');
 const NegocioService = require('../negocios/negocio.service');
 const RepartidorService = require('../repartidores/repartidor.service');
 const { logMensaje, auditar } = require('../../shared/services/log.service');
+const Correo = require('../../shared/services/correo.service');
 const { hashClave, compararClave, HASHRELLENO } = require('../../shared/utils/clave');
 const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
 const { ROLES, APIAROL, ROLESREGISTRABLES, PROPOSITOCODIGO } = require('../../shared/constants/codigos');
@@ -49,6 +50,26 @@ const usuarioPerfil = async (u, req) => ({
   ultimaConexion: u.ultimaConexion,
 });
 
+// Cuenta bloqueada por intentos fallidos: "retryAfter" (segundos) le permite a la app mostrar la cuenta regresiva
+function bloqueoTemporal(hasta) {
+  const segundos = Math.max(1, Math.ceil((new Date(hasta) - new Date()) / 1000));
+  return AppError.tooMany(
+    `Bloqueamos tu cuenta por seguridad tras ${MAXINTENTOSFALLIDOS} intentos fallidos. Intenta en ${Math.ceil(segundos / 60)} min o recupera tu contraseña`,
+    'CUENTABLOQUEADA',
+    { retryAfter: segundos, bloqueadaHasta: new Date(hasta).toISOString(), soporte: Correo.soporte() },
+  );
+}
+
+// La cuenta no está activa: bloqueada por el administrador ('003') o dada de baja ('002')
+function cuentaInactiva(usuario) {
+  const baja = usuario.estatus === '002';
+  return AppError.forbidden(
+    baja ? 'Tu cuenta está dada de baja. Si quieres volver, escríbenos y la reactivamos' : 'Tu cuenta está bloqueada. Escríbenos para revisar tu caso',
+    'CUENTADESACTIVADA',
+    { estatus: baja ? 'inactivo' : 'bloqueado', soporte: Correo.soporte() },
+  );
+}
+
 // Abre una sesión persistente para el usuario y arma el par de tokens que recibe la app
 async function abrirSesion(usuario, req, opciones = {}) {
   const refreshToken = await SesionService.crear(
@@ -60,16 +81,15 @@ async function abrirSesion(usuario, req, opciones = {}) {
 }
 
 // Envía un correo con código. Devuelve true/false; si falla lo deja en TLOGMENSAJES (no rompe la petición).
-// Solo en desarrollo el código se imprime en consola (para probar sin proveedor de correo).
+// En desarrollo el código también se imprime en la consola (para probar sin depender del correo).
 async function enviarCorreoCodigo(tipo, { email, codigo, nombre }, req) {
-  const mailer = require('../../services/mailer.service');
+  if (process.env.NODE_ENV === 'development') console.log(`[DEV] Código de ${tipo} para ${email}: ${codigo}`);
   try {
-    if (tipo === 'reset') await mailer.sendPasswordResetCode(email, codigo);
-    else await mailer.sendEmailVerificationCode(email, codigo, nombre);
+    if (tipo === 'reset') await Correo.codigoReset(email, codigo);
+    else await Correo.codigoVerificacion(email, codigo, nombre);
     return true;
   } catch (e) {
     logMensaje({ nivel: 'ADVERTENCIA', modulo: 'CORREO', accion: 'ENVIOFALLIDO', mensaje: `No se pudo enviar el correo (${tipo})`, detalle: { error: e.message, tipo }, req });
-    if (process.env.NODE_ENV === 'development') console.log(`[DEV] Código de ${tipo} para ${email}: ${codigo}`);
     return false;
   }
 }
@@ -154,26 +174,29 @@ async function login({ email: identificador, password }, req) {
     await compararClave(password, HASHRELLENO);     // mismo tiempo de respuesta exista o no la cuenta
     throw AppError.unauthorized('Credenciales inválidas', 'CREDENCIALESINVALIDAS');
   }
-  if (!usuario.activo) throw AppError.forbidden('Cuenta desactivada', 'CUENTADESACTIVADA');
+  // Cuenta bloqueada o dada de baja por el administrador: se dice claramente y a quién escribir
+  if (!usuario.activo) throw cuentaInactiva(usuario);
 
-  if (usuario.bloqueadoHasta && new Date(usuario.bloqueadoHasta) > new Date()) {
-    const segundos = Math.ceil((new Date(usuario.bloqueadoHasta) - new Date()) / 1000);
-    throw AppError.tooMany(
-      `Cuenta bloqueada temporalmente por demasiados intentos fallidos. Intenta en ${Math.ceil(segundos / 60)} minutos`,
-      'CUENTABLOQUEADA',
-      { retryAfter: segundos },
-    );
-  }
+  if (usuario.bloqueadoHasta && new Date(usuario.bloqueadoHasta) > new Date()) throw bloqueoTemporal(usuario.bloqueadoHasta);
 
   if (!(await usuario.verificarClave(password))) {
     const intentos = usuario.intentosFallidos + 1;
     const bloquear = intentos >= MAXINTENTOSFALLIDOS;
-    await UsuarioAcceso.update({
-      intentos: bloquear ? 0 : intentos,
-      bloqueadoHasta: bloquear ? new Date(Date.now() + MINUTOSBLOQUEO * 60 * 1000) : null,
-    }, { where: { id: usuario.id } });
+    const hasta = new Date(Date.now() + MINUTOSBLOQUEO * 60 * 1000);
+    await UsuarioAcceso.update({ intentos: bloquear ? 0 : intentos, bloqueadoHasta: bloquear ? hasta : null }, { where: { id: usuario.id } });
     auditar({ usuarioId: usuario.id, accion: 'LOGINFALLIDO', entidad: 'USUARIOS', entidadId: usuario.id, detalle: { intentos, bloqueado: bloquear }, req });
-    throw AppError.unauthorized('Credenciales inválidas', 'CREDENCIALESINVALIDAS');
+    if (bloquear) {
+      Correo.bloqueoTemporal({ para: usuario.email, nombre: usuario.nombre, minutos: MINUTOSBLOQUEO });
+      throw bloqueoTemporal(hasta);
+    }
+    // Avisa antes de bloquear: en los dos últimos intentos dice cuántos le quedan
+    const restantes = MAXINTENTOSFALLIDOS - intentos;
+    if (restantes > 2) throw AppError.unauthorized('Credenciales inválidas', 'CREDENCIALESINVALIDAS');
+    throw AppError.unauthorized(
+      `Contraseña incorrecta. Te ${restantes === 1 ? 'queda 1 intento' : `quedan ${restantes} intentos`} antes de que bloqueemos tu cuenta ${MINUTOSBLOQUEO} minutos`,
+      'CREDENCIALESINVALIDAS',
+      { intentosRestantes: restantes },
+    );
   }
 
   await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null, ultimaConexion: new Date(), ultimaIp: ipDe(req) }, { where: { id: usuario.id } });

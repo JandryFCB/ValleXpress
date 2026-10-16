@@ -128,6 +128,7 @@ const CLAVEADMIN = 'admin-secreta-1';
     check('y no puede renovar la sesión', r.status === 401);
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });
     check('ni volver a entrar', r.status === 403 && r.body.code === 'CUENTADESACTIVADA');
+    check('el login le dice que está bloqueada y a quién escribir', r.body.estatus === 'bloqueado' && /bloqueada/.test(r.body.error) && 'soporte' in r.body, JSON.stringify(r.body));
     r = await api('PATCH', `/api/admin/usuarios/${cliente.usuario.id}/estado`, { activo: true }, A);
     check('desbloquear: 200', r.status === 200 && r.body.usuario.activo === true);
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });

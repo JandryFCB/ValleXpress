@@ -497,7 +497,7 @@ class _HojaClaveState extends State<_HojaClave> {
           children: [
             Text('Contraseña nueva para ${widget.nombre}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text('Dísela en persona o por un medio seguro. Sus sesiones abiertas se cerrarán.', style: Theme.of(context).textTheme.bodySmall),
+            Text('Se la enviaremos a su correo y se cerrarán sus sesiones abiertas.', style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 16),
             CampoValle(controller: _clave, etiqueta: 'Contraseña nueva', icono: Icons.lock_outline_rounded, esClave: true, accion: TextInputAction.done, onChanged: (_) => setState(() {})),
             const SizedBox(height: 8),
@@ -538,6 +538,7 @@ class _FormularioUsuarioScreenState extends State<FormularioUsuarioScreen> {
   String _rol = 'cliente';
   String? _categoria = '001';
   Vehiculo _vehiculo = Vehiculo.moto;
+  bool _enviarCorreo = true;
   List<Categoria> _categorias = [];
   bool _guardando = false;
   String? _error;
@@ -583,6 +584,7 @@ class _FormularioUsuarioScreenState extends State<FormularioUsuarioScreen> {
           ...datos,
           'password': _clave.text,
           'rol': _rol,
+          'enviarCorreo': _enviarCorreo,
           if (_rol == 'vendedor') ...{'nombreNegocio': _negocio.text.trim(), 'categoriaNegocio': _categoria},
           if (_rol == 'repartidor') ...{'vehiculo': _vehiculo.codigo, if (_vehiculo.llevaPlaca) 'placa': _placa.text.trim(), 'color': _color.text.trim()},
         });
@@ -678,6 +680,19 @@ class _FormularioUsuarioScreenState extends State<FormularioUsuarioScreen> {
               ],
               const SizedBox(height: 12),
               CampoValle(controller: _color, etiqueta: 'Color (opcional)', icono: Icons.palette_outlined, mayusculas: TextCapitalization.sentences, maxLongitud: 30),
+            ],
+            if (!_editando) ...[
+              const SizedBox(height: 16),
+              TarjetaValle(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: SwitchListTile(
+                  value: _enviarCorreo,
+                  onChanged: (v) => setState(() => _enviarCorreo = v),
+                  secondary: const Icon(Icons.mark_email_read_rounded),
+                  title: const Text('Enviarle sus datos por correo'),
+                  subtitle: const Text('Le llega un correo de bienvenida con su usuario y la contraseña temporal'),
+                ),
+              ),
             ],
             if (_error != null) ...[
               const SizedBox(height: 16),

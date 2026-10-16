@@ -75,7 +75,7 @@ module.exports = function crearArnes({ puerto, bd, env = {} }) {
     for (const archivo of fs.readdirSync(carpeta).filter((f) => f.endsWith('.sql')).sort()) {
       await db.query(fs.readFileSync(path.join(carpeta, archivo), 'utf8'));
     }
-    srv = spawn(process.execPath, ['src/server.js'], { cwd: BACKEND, env: { ...process.env, NODE_ENV: 'development', PORT: String(puerto), DB_NAME: bd, LIMITES_DESACTIVADOS: 'true', UPLOADS_DIR: UPLOADS, ...env } });
+    srv = spawn(process.execPath, ['src/server.js'], { cwd: BACKEND, env: { ...process.env, NODE_ENV: 'development', PORT: String(puerto), DB_NAME: bd, LIMITES_DESACTIVADOS: 'true', UPLOADS_DIR: UPLOADS, BREVO_API_KEY: '', ...env } });
     srv.stdout.on('data', (d) => { salida += d.toString(); }); srv.stderr.on('data', (d) => { salida += d.toString(); });
     for (let i = 0; i < 50; i++) { try { if ((await fetch(`${BASE}/api/health`)).ok) break; } catch { /* aún no */ } await dormir(200); }
     return { db, q: async (sql, p) => (await db.query(sql, p)).rows };

@@ -39,6 +39,7 @@ class ResumenAdmin {
     required this.repartidoresEnLinea,
     required this.pendientes,
     required this.aprobacionAutomatica,
+    this.correoConfigurado = true,
   });
 
   final int pedidosHoy;
@@ -53,6 +54,7 @@ class ResumenAdmin {
   final int repartidoresEnLinea;
   final int pendientes;
   final bool aprobacionAutomatica;
+  final bool correoConfigurado;
 
   int get totalEnCurso => enCurso.values.fold(0, (a, b) => a + b);
   int get totalUsuarios => usuarios.values.fold(0, (a, b) => a + b);
@@ -80,6 +82,7 @@ class ResumenAdmin {
       repartidoresEnLinea: (rep['enLinea'] as num?)?.toInt() ?? 0,
       pendientes: (j['pendientes'] as num?)?.toInt() ?? 0,
       aprobacionAutomatica: j['aprobacionAutomatica'] == true,
+      correoConfigurado: j['correoConfigurado'] != false,
     );
   }
 }

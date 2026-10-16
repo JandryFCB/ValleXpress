@@ -142,7 +142,11 @@ async function registrarCliente(email, nombre, apellido, extra = {}) {
     check('perfil sin token: 401 TOKENNOPROPORCIONADO', r.status === 401 && r.body.code === 'TOKENNOPROPORCIONADO');
     r = await api('GET', '/api/auth/profile', null, 'basura.token.falso');
     check('token falso: 401 "Token inválido"', r.status === 401 && r.body.error === 'Token inválido');
-    for (let i = 1; i <= 5; i++) r = await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'mala' });
+    const fallos = [];
+    for (let i = 1; i <= 5; i++) fallos.push(await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'mala' }));
+    check('los 2 primeros fallos dicen solo "Credenciales inválidas"', fallos[1].status === 401 && fallos[1].body.error === 'Credenciales inválidas' && fallos[1].body.intentosRestantes === undefined);
+    check('el 3.º y el 4.º avisan cuántos intentos quedan', fallos[2].body.intentosRestantes === 2 && fallos[3].body.intentosRestantes === 1 && /queda 1 intento/.test(fallos[3].body.error), JSON.stringify(fallos[3].body));
+    check('el 5.º ya responde 429 CUENTABLOQUEADA con los segundos que faltan', fallos[4].status === 429 && fallos[4].body.code === 'CUENTABLOQUEADA' && fallos[4].body.retryAfter > 800 && !!fallos[4].body.bloqueadaHasta, JSON.stringify(fallos[4].body));
     r = await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'secreto1' });
     check('5 fallos: aun con la clave CORRECTA, 429 CUENTABLOQUEADA con retryAfter', r.status === 429 && r.body.code === 'CUENTABLOQUEADA' && r.body.retryAfter > 0, JSON.stringify(r.body));
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });

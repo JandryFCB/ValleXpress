@@ -24,7 +24,7 @@ const estadoUsuario = asyncHandler(async (req, res) => res.json({ usuario: await
 const usuario = asyncHandler(async (req, res) => res.json({ usuario: await service.obtenerUsuario(req.params.usuario, req) }));
 const crearUsuario = asyncHandler(async (req, res) => res.status(201).json({ usuario: await service.crearUsuario(req.usuario, req.body, req) }));
 const editarUsuario = asyncHandler(async (req, res) => res.json({ usuario: await service.editarUsuario(req.usuario, req.params.usuario, req.body, req) }));
-const claveUsuario = asyncHandler(async (req, res) => res.json({ usuario: await service.ponerClave(req.usuario, req.params.usuario, req.body.clave, req) }));
+const claveUsuario = asyncHandler(async (req, res) => res.json({ usuario: await service.ponerClave(req.usuario, req.params.usuario, req.body.clave, req, { enviarCorreo: req.body.enviarCorreo !== false }) }));
 const fotoUsuario = asyncHandler(async (req, res) => res.json({ usuario: await service.fotoUsuario(req.usuario, req.params.usuario, req.body.imagen, req) }));
 const bajaUsuario = asyncHandler(async (req, res) => res.json({ usuario: await service.darDeBaja(req.usuario, req.params.usuario, req.body, req) }));
 const editarRepartidor = asyncHandler(async (req, res) => res.json({ repartidor: await service.editarRepartidor(req.usuario, req.params.usuario, req.body, req) }));

@@ -5,25 +5,61 @@ import 'api_error.dart';
 import 'dispositivo.dart';
 import 'session_store.dart';
 
+/// Por qué no se pudo entrar, con lo que la pantalla de login necesita para explicarlo bien:
+/// cuenta bloqueada por intentos (con los segundos que faltan), bloqueada o dada de baja por el administrador,
+/// o cuántos intentos quedan antes del bloqueo.
+class ErrorLogin implements Exception {
+  const ErrorLogin(this.mensaje, {this.codigo, this.segundos, this.intentosRestantes, this.estatus, this.soporte});
+
+  final String mensaje;
+  final String? codigo;
+
+  /// Segundos que faltan para que se desbloquee (CUENTABLOQUEADA)
+  final int? segundos;
+  final int? intentosRestantes;
+
+  /// 'bloqueado' | 'inactivo' cuando el administrador la desactivó (CUENTADESACTIVADA)
+  final String? estatus;
+
+  /// Correo de soporte para escribir
+  final String? soporte;
+
+  bool get bloqueoTemporal => codigo == 'CUENTABLOQUEADA';
+  bool get desactivada => codigo == 'CUENTADESACTIVADA';
+
+  @override
+  String toString() => mensaje;
+}
+
 class AuthService {
   // Login
   Future<Map<String, dynamic>> login(String email, String password) async {
+    final http.Response response;
     try {
-      final response = await http.post(
+      response = await http.post(
         Uri.parse('${AppConstants.baseUrl}/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'email': email, 'password': password, ...await datosDispositivo()}),
       );
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        final error = json.decode(response.body);
-        throw Exception(error['error'] ?? 'Error al iniciar sesión');
-      }
     } catch (e) {
-      throw Exception('Error de conexión: $e');
+      throw const ErrorLogin('No pudimos conectarnos. Revisa tu internet e intenta de nuevo', codigo: 'SINCONEXION');
     }
+    if (response.statusCode == 200) return json.decode(response.body);
+
+    Map<String, dynamic> e = {};
+    try {
+      e = Map<String, dynamic>.from(json.decode(response.body));
+    } catch (_) {
+      // respuesta sin JSON
+    }
+    throw ErrorLogin(
+      '${e['error'] ?? 'No se pudo iniciar sesión (${response.statusCode})'}',
+      codigo: e['code']?.toString(),
+      segundos: (e['retryAfter'] as num?)?.toInt(),
+      intentosRestantes: (e['intentosRestantes'] as num?)?.toInt(),
+      estatus: e['estatus']?.toString(),
+      soporte: e['soporte']?.toString(),
+    );
   }
 
   // Registro

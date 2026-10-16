@@ -92,9 +92,13 @@ class AuthProvider with ChangeNotifier {
   // ---------------------------------------------------------------------------------------------
   // Login y registro
   // ---------------------------------------------------------------------------------------------
+  /// Detalle del último login fallido (bloqueo, intentos que quedan...) para que la pantalla lo explique
+  ErrorLogin? errorLogin;
+
   Future<bool> login(String email, String password) async {
     _isLoading = true;
     _error = null;
+    errorLogin = null;
     notifyListeners();
 
     try {
@@ -104,6 +108,7 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      if (e is ErrorLogin) errorLogin = e;
       _error = _limpiar(e);
       _isLoading = false;
       notifyListeners();

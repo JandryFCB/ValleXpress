@@ -65,9 +65,10 @@ const crearUsuario = [
   body('vehiculo').if(body('rol').equals('repartidor')).isString().isLength({ min: 2, max: 20 }).withMessage('Elige el vehículo'),
   body('placa').optional({ values: 'falsy' }).isString().isLength({ max: 12 }).withMessage('Placa inválida'),
   body('color').optional({ values: 'falsy' }).isString().isLength({ max: 30 }).withMessage('Color demasiado largo'),
+  body('enviarCorreo').optional().isBoolean().withMessage('enviarCorreo debe ser true o false').toBoolean(),
 ];
 const editarUsuario = [...usuario, ...datosPersona(false)];
-const claveUsuario = [...usuario, clave('clave')];
+const claveUsuario = [...usuario, clave('clave'), body('enviarCorreo').optional().isBoolean().toBoolean()];
 const fotoUsuario = [...usuario, body('imagen').isString().withMessage('Envía la imagen').notEmpty().withMessage('Envía la imagen')];
 const bajaUsuario = [...usuario, body('motivo').isString().trim().isLength({ min: 3, max: 300 }).withMessage('Escribe el motivo de la baja')];
 const negocioGestion = [param('negocioId').isInt({ min: 1 }).withMessage('ID de negocio inválido')];

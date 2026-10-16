@@ -146,6 +146,19 @@ class _ResumenState extends State<_Resumen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
                   _Saludo(nombre: nombre),
+                  if (!r.correoConfigurado)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: TarjetaValle(
+                        color: AppTheme.errorColor.withValues(alpha: 0.1),
+                        colorBorde: AppTheme.errorColor.withValues(alpha: 0.5),
+                        child: const Row(children: [
+                          Icon(Icons.mail_lock_rounded, color: AppTheme.errorColor),
+                          SizedBox(width: 10),
+                          Expanded(child: Text('Los correos no están saliendo: falta configurar BREVO_API_KEY y SMTP_FROM en el servidor')),
+                        ]),
+                      ),
+                    ),
                   if (r.pendientes > 0) Aparecer(child: _AvisoPendientes(cantidad: r.pendientes, onTap: widget.irAAprobaciones)),
                   const SizedBox(height: 14),
                   _Cifras(r: r),

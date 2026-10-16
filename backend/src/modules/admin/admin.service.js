@@ -9,6 +9,7 @@ const AuthService = require('../auth/auth.service');
 const ArchivoService = require('../../shared/services/archivo.service');
 const { hashClave } = require('../../shared/utils/clave');
 const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
+const Correo = require('../../shared/services/correo.service');
 const { Negocio, NegocioEstado } = require('../negocios/negocio.model');
 const NegocioService = require('../negocios/negocio.service');
 const { Repartidor, RepartidorEstado } = require('../repartidores/repartidor.model');
@@ -89,6 +90,7 @@ async function resumen() {
     repartidores: { ...repartidoresPor, enLinea: Number(enLinea.total) },
     pendientes: (negociosPor.pendiente || 0) + (repartidoresPor.pendiente || 0),
     aprobacionAutomatica: (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true,
+    correoConfigurado: Correo.configurado(),
   };
 }
 
@@ -239,7 +241,12 @@ const obtenerUsuario = async (usuarioId, req) => usuarioApi(await exigirUsuario(
 async function crearUsuario(admin, datos, req) {
   const cuenta = await withTransaction((t) => AuthService.crearCuenta(datos.rol, datos, t, { aprobado: true }), { usuarioId: admin.id });
   auditar({ usuarioId: admin.id, accion: 'USUARIOCREADOADMIN', entidad: 'USUARIOS', entidadId: cuenta.id, detalle: { rol: datos.rol }, req });
-  return usuarioApi(await exigirUsuario(cuenta.id), req);
+  const u = await exigirUsuario(cuenta.id);
+  // Le llegan por correo su usuario y la contraseña temporal (salvo que el admin prefiera dárselos en persona)
+  if (datos.enviarCorreo !== false) {
+    Correo.bienvenida({ para: u.email, nombre: u.nombre, usuario: u.id, rol: datos.rol, claveTemporal: datos.password });
+  }
+  return usuarioApi(u, req);
 }
 
 // Corrige los datos personales: nombre, apellido, correo, cédula y teléfono principal (sin repetir los de otros)
@@ -274,8 +281,8 @@ async function editarUsuario(admin, usuarioId, datos, req) {
 }
 
 // Clave nueva (por ejemplo, si el usuario la olvidó y no tiene su correo): se cierran todas sus sesiones
-async function ponerClave(admin, usuarioId, clave, req) {
-  await exigirUsuario(usuarioId);
+async function ponerClave(admin, usuarioId, clave, req, { enviarCorreo = true } = {}) {
+  const u = await exigirUsuario(usuarioId);
   const claveHash = await hashClave(clave);
   await withTransaction(async (t) => {
     await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id: usuarioId }, transaction: t });
@@ -284,6 +291,14 @@ async function ponerClave(admin, usuarioId, clave, req) {
   }, { usuarioId: admin.id });
   if (req.io) req.io.in(`user:${usuarioId}`).disconnectSockets(true);
   auditar({ usuarioId: admin.id, accion: 'CLAVEPUESTAADMIN', entidad: 'USUARIOS', entidadId: usuarioId, req });
+  if (enviarCorreo) {
+    Correo.avisoCuenta({
+      para: u.email, nombre: u.nombre, asunto: 'Tu contraseña de ValleXpress cambió', titulo: 'Tienes una contraseña nueva',
+      parrafos: ['El equipo de ValleXpress te puso una contraseña nueva y cerró tus sesiones abiertas. Entra con ella:',
+        `Usuario: <strong>${u.id}</strong><br>Contraseña: <strong>${clave.replace(/[<>&]/g, '')}</strong>`],
+      avisoFinal: 'Cámbiala apenas entres: Perfil → Configuración → Cambiar contraseña. Si no pediste este cambio, escríbenos.',
+    });
+  }
   return usuarioApi(await exigirUsuario(usuarioId), req);
 }
 
@@ -314,6 +329,14 @@ async function cambiarEstatus(admin, usuarioId, estatus, motivo, req) {
   if (estatus !== 'activo' && req.io) req.io.in(`user:${usuarioId}`).disconnectSockets(true);
   const accion = { activo: 'USUARIOREACTIVADO', bloqueado: 'USUARIOBLOQUEADO', inactivo: 'USUARIODADODEBAJA' }[estatus];
   auditar({ usuarioId: admin.id, accion, entidad: 'USUARIOS', entidadId: usuarioId, detalle: { motivo: motivo || null }, req });
+  // Como ya no puede entrar a la app, se le avisa por correo (con el motivo y a quién escribir)
+  const motivoHtml = motivo ? `Motivo: <strong>${motivo.trim().replace(/[<>&]/g, '')}</strong>` : null;
+  const correo = {
+    activo: ['Tu cuenta de ValleXpress está activa de nuevo', '¡Bienvenido de vuelta!', ['Reactivamos tu cuenta: ya puedes entrar a la app con tu usuario y tu contraseña de siempre.']],
+    bloqueado: ['Tu cuenta de ValleXpress fue bloqueada', 'Bloqueamos tu cuenta', ['Por ahora no podrás entrar a la app.', motivoHtml, 'Si crees que es un error, respóndenos a este correo y lo revisamos.']],
+    inactivo: ['Tu cuenta de ValleXpress fue dada de baja', 'Tu cuenta quedó inactiva', ['Dimos de baja tu cuenta; tu historial no se borró.', motivoHtml, 'Si quieres volver, respóndenos y la reactivamos.']],
+  }[estatus];
+  Correo.avisoCuenta({ para: u.email, nombre: u.nombre, asunto: correo[0], titulo: correo[1], parrafos: correo[2].filter(Boolean) });
   return usuarioApi(await exigirUsuario(usuarioId), req);
 }
 
