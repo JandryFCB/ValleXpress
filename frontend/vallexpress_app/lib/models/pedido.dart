@@ -326,6 +326,7 @@ class Aviso {
         'pedido_listo' => Icons.inventory_2_rounded,
         'pedido_en_camino' || 'pedido_recogido' => Icons.delivery_dining_rounded,
         'repartidor_cerca' => Icons.near_me_rounded,
+        'pedido_sin_repartidor' => Icons.hourglass_bottom_rounded,
         'pedido_entregado' || 'pedido_recibido' => Icons.check_circle_rounded,
         'pedido_rechazado' || 'pedido_cancelado' => Icons.cancel_rounded,
         _ => Icons.notifications_rounded,
@@ -334,6 +335,7 @@ class Aviso {
   Color get color => switch (tipo) {
         'pedido_rechazado' || 'pedido_cancelado' => AppTheme.errorColor,
         'pedido_nuevo' => AppTheme.accentColor,
+        'pedido_sin_repartidor' => AppTheme.warningColor,
         'pedido_entregado' || 'pedido_recibido' => AppTheme.successColor,
         _ => AppTheme.infoColor,
       };
