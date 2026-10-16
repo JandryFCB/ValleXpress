@@ -265,7 +265,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
             children: [
               Icon(Icons.timer_outlined, size: 18, color: c.textoSuave),
               const SizedBox(width: 6),
-              Text('Llega en unos ${n.tiempoPreparacion + 15} min', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+              Expanded(child: Text('Llega en unos ${n.tiempoPreparacion + 15} min', style: tema.bodySmall?.copyWith(color: c.textoSuave))),
             ],
           ),
 

@@ -183,8 +183,8 @@ class TarjetaPedidoNegocio extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              InsigniaValle(_etiquetaNegocio(p), color: p.estado.color, icono: p.estado.icono),
-              const Spacer(),
+              Expanded(child: Align(alignment: Alignment.centerLeft, child: InsigniaValle(_etiquetaNegocio(p), color: p.estado.color, icono: p.estado.icono))),
+              const SizedBox(width: 8),
               if (p.fecha != null) Text(Formato.hace(p.fecha!), style: tema.labelSmall?.copyWith(color: c.textoSuave)),
             ],
           ),

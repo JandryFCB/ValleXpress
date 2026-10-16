@@ -200,7 +200,7 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
               Row(children: [
                 Icon(Icons.payments_outlined, color: c.textoSuave, size: 20),
                 const SizedBox(width: 10),
-                Text('${MetodoPago.nombre(p.metodoPago)} · ${p.pagado ? 'pagado' : 'se cobra al entregar'}', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                Expanded(child: Text('${MetodoPago.nombre(p.metodoPago)} · ${p.pagado ? 'pagado' : 'se cobra al entregar'}', style: tema.bodySmall?.copyWith(color: c.textoSuave))),
               ]),
             ],
           ),

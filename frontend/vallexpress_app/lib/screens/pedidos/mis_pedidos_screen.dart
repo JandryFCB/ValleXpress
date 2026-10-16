@@ -198,8 +198,7 @@ class TarjetaPedido extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              InsigniaValle(p.estado.etiqueta, color: p.estado.color, icono: p.estado.icono),
-              const Spacer(),
+              Expanded(child: Align(alignment: Alignment.centerLeft, child: InsigniaValle(p.estado.etiqueta, color: p.estado.color, icono: p.estado.icono))),
               if (p.puedeCalificar)
                 Text('Califica', style: tema.labelLarge?.copyWith(color: AppTheme.accentColor))
               else if (p.calificacion != null)

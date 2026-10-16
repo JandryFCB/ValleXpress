@@ -321,7 +321,7 @@ class TarjetaNegocio extends StatelessWidget {
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          Text(n.categoria.descripcion, style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                          Flexible(child: Text(n.categoria.descripcion, style: tema.bodySmall?.copyWith(color: c.textoSuave), maxLines: 1, overflow: TextOverflow.ellipsis)),
                           if (n.numeroCalificaciones > 0) ...[
                             const SizedBox(width: 8),
                             const Icon(Icons.star_rounded, size: 16, color: AppTheme.accentColor),
