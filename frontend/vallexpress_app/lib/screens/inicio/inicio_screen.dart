@@ -55,12 +55,14 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
   void initState() {
     super.initState();
     TiempoReal.instancia.iniciar();
-    _subs.add(TiempoReal.instancia.avisos.listen((a) {
-      if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() => _noLeidos++);
-      mostrarMensaje(context, a.titulo, tipo: a.tipo == 'pedido_rechazado' ? TipoMensaje.error : TipoMensaje.info);
-    }));
+    _subs.add(
+      TiempoReal.instancia.avisos.listen((a) {
+        if (!mounted) return;
+        HapticFeedback.mediumImpact();
+        setState(() => _noLeidos++);
+        mostrarMensaje(context, a.titulo, tipo: a.tipo == 'pedido_rechazado' ? TipoMensaje.error : TipoMensaje.info);
+      }),
+    );
     _subs.add(TiempoReal.instancia.cambios().listen((_) => _cargarEnCurso()));
     _refrescar();
   }
@@ -103,38 +105,45 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
     final carrito = context.watch<CarritoProvider>();
     final c = context.colores;
 
-    return Scaffold(
-      body: PestanasAnimadas(
-        indice: _pestana,
-        children: [
-          NegociosScreen(
-            alRefrescar: _refrescar,
-            cabecera: _Cabecera(noLeidos: _noLeidos, enCurso: _enCurso, onAvisos: _abrirAvisos, onCarrito: _abrirCarrito, carrito: carrito),
-          ),
-          const MisPedidosScreen(conFlechaAtras: false),
-          const PerfilScreen(),
-        ],
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          BarraDeslizante(visible: _pestana == 0 && !carrito.vacio, child: BarraCarrito(key: const ValueKey('carrito'), carrito: carrito, onTap: _abrirCarrito)),
-          NavigationBar(
-            selectedIndex: _pestana,
-            backgroundColor: c.tarjeta,
-            indicatorColor: c.primario.withValues(alpha: 0.18),
-            onDestinationSelected: (i) => setState(() => _pestana = i),
-            destinations: [
-              const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Inicio'),
-              NavigationDestination(
-                icon: Badge(isLabelVisible: _enCurso.isNotEmpty, label: Text('${_enCurso.length}'), child: const Icon(Icons.receipt_long_outlined)),
-                selectedIcon: const Icon(Icons.receipt_long_rounded),
-                label: 'Pedidos',
-              ),
-              const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
-            ],
-          ),
-        ],
+    return AtrasEnPestanas(
+      pestana: _pestana,
+      irAPrimera: () => setState(() => _pestana = 0),
+      child: Scaffold(
+        body: PestanasAnimadas(
+          indice: _pestana,
+          children: [
+            NegociosScreen(
+              alRefrescar: _refrescar,
+              cabecera: _Cabecera(noLeidos: _noLeidos, enCurso: _enCurso, onAvisos: _abrirAvisos, onCarrito: _abrirCarrito, carrito: carrito),
+            ),
+            const MisPedidosScreen(conFlechaAtras: false),
+            const PerfilScreen(),
+          ],
+        ),
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            BarraDeslizante(
+              visible: _pestana == 0 && !carrito.vacio,
+              child: BarraCarrito(key: const ValueKey('carrito'), carrito: carrito, onTap: _abrirCarrito),
+            ),
+            NavigationBar(
+              selectedIndex: _pestana,
+              backgroundColor: c.tarjeta,
+              indicatorColor: c.primario.withValues(alpha: 0.18),
+              onDestinationSelected: (i) => setState(() => _pestana = i),
+              destinations: [
+                const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Inicio'),
+                NavigationDestination(
+                  icon: Badge(isLabelVisible: _enCurso.isNotEmpty, label: Text('${_enCurso.length}'), child: const Icon(Icons.receipt_long_outlined)),
+                  selectedIcon: const Icon(Icons.receipt_long_rounded),
+                  label: 'Pedidos',
+                ),
+                const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -182,12 +191,22 @@ class _Cabecera extends StatelessWidget {
               IconButton(
                 tooltip: 'Avisos',
                 onPressed: onAvisos,
-                icon: Rebote(valor: noLeidos, child: Badge(isLabelVisible: noLeidos > 0, label: Text(noLeidos > 9 ? '9+' : '$noLeidos'), child: const Icon(Icons.notifications_none_rounded))),
+                icon: Rebote(
+                  valor: noLeidos,
+                  child: Badge(
+                    isLabelVisible: noLeidos > 0,
+                    label: Text(noLeidos > 9 ? '9+' : '$noLeidos'),
+                    child: const Icon(Icons.notifications_none_rounded),
+                  ),
+                ),
               ),
               IconButton(
                 tooltip: 'Carrito',
                 onPressed: onCarrito,
-                icon: Rebote(valor: carrito.cantidadTotal, child: Badge(isLabelVisible: !carrito.vacio, label: Text('${carrito.cantidadTotal}'), child: const Icon(Icons.shopping_cart_outlined))),
+                icon: Rebote(
+                  valor: carrito.cantidadTotal,
+                  child: Badge(isLabelVisible: !carrito.vacio, label: Text('${carrito.cantidadTotal}'), child: const Icon(Icons.shopping_cart_outlined)),
+                ),
               ),
             ],
           ),
@@ -200,7 +219,11 @@ class _Cabecera extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 8),
                 itemCount: enCurso.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (_, i) => Aparecer(key: ValueKey('en-curso-${enCurso[i].id}'), indice: i, child: _PedidoEnCurso(pedido: enCurso[i], ancho: enCurso.length == 1 ? MediaQuery.of(context).size.width - 32 : 280)),
+                itemBuilder: (_, i) => Aparecer(
+                  key: ValueKey('en-curso-${enCurso[i].id}'),
+                  indice: i,
+                  child: _PedidoEnCurso(pedido: enCurso[i], ancho: enCurso.length == 1 ? MediaQuery.of(context).size.width - 32 : 280),
+                ),
               ),
             ),
           ],
@@ -227,7 +250,12 @@ class _PedidoEnCurso extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         color: e.color.withValues(alpha: 0.14),
         colorBorde: e.color.withValues(alpha: 0.6),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido))),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido),
+          ),
+        ),
         child: Row(
           children: [
             // Late mientras el pedido está en marcha
@@ -238,7 +266,12 @@ class _PedidoEnCurso extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(e.etiqueta, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    e.etiqueta,
+                    style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   Text('${pedido.negocioNombre} · #${pedido.id}', style: tema.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ),

@@ -37,33 +37,37 @@ class _InicioAdminScreenState extends State<InicioAdminScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colores;
-    return Scaffold(
-      body: PestanasAnimadas(
-        indice: _pestana,
-        children: [
-          _Resumen(alPendientes: (n) => setState(() => _pendientes = n), irAAprobaciones: () => setState(() => _pestana = 1)),
-          AprobacionesScreen(alCambiar: () => setState(() => _pendientes = (_pendientes - 1).clamp(0, 999))),
-          const PedidosAdminScreen(),
-          const UsuariosAdminScreen(),
-          const PerfilScreen(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _pestana,
-        backgroundColor: c.tarjeta,
-        indicatorColor: c.primario.withValues(alpha: 0.18),
-        onDestinationSelected: (i) => setState(() => _pestana = i),
-        destinations: [
-          const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_rounded), label: 'Resumen'),
-          NavigationDestination(
-            icon: Badge(isLabelVisible: _pendientes > 0, label: Text('$_pendientes'), child: const Icon(Icons.fact_check_outlined)),
-            selectedIcon: const Icon(Icons.fact_check_rounded),
-            label: 'Gestión',
-          ),
-          const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_rounded), label: 'Pedidos'),
-          const NavigationDestination(icon: Icon(Icons.group_outlined), selectedIcon: Icon(Icons.group_rounded), label: 'Usuarios'),
-          const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
-        ],
+    return AtrasEnPestanas(
+      pestana: _pestana,
+      irAPrimera: () => setState(() => _pestana = 0),
+      child: Scaffold(
+        body: PestanasAnimadas(
+          indice: _pestana,
+          children: [
+            _Resumen(alPendientes: (n) => setState(() => _pendientes = n), irAAprobaciones: () => setState(() => _pestana = 1)),
+            AprobacionesScreen(alCambiar: () => setState(() => _pendientes = (_pendientes - 1).clamp(0, 999))),
+            const PedidosAdminScreen(),
+            const UsuariosAdminScreen(),
+            const PerfilScreen(),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _pestana,
+          backgroundColor: c.tarjeta,
+          indicatorColor: c.primario.withValues(alpha: 0.18),
+          onDestinationSelected: (i) => setState(() => _pestana = i),
+          destinations: [
+            const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_rounded), label: 'Resumen'),
+            NavigationDestination(
+              icon: Badge(isLabelVisible: _pendientes > 0, label: Text('$_pendientes'), child: const Icon(Icons.fact_check_outlined)),
+              selectedIcon: const Icon(Icons.fact_check_rounded),
+              label: 'Gestión',
+            ),
+            const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_rounded), label: 'Pedidos'),
+            const NavigationDestination(icon: Icon(Icons.group_outlined), selectedIcon: Icon(Icons.group_rounded), label: 'Usuarios'),
+            const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
+          ],
+        ),
       ),
     );
   }
@@ -138,8 +142,15 @@ class _ResumenState extends State<_Resumen> {
     return FondoValle(
       child: r == null
           ? (_error != null
-              ? EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar el resumen', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar)
-              : const EsqueletoLista(cantidad: 4, conImagen: false))
+                ? EstadoVacio(
+                    icono: Icons.cloud_off_rounded,
+                    color: AppTheme.errorColor,
+                    titulo: 'No pudimos cargar el resumen',
+                    mensaje: _error,
+                    textoAccion: 'Reintentar',
+                    onAccion: _cargar,
+                  )
+                : const EsqueletoLista(cantidad: 4, conImagen: false))
           : RefreshIndicator(
               onRefresh: _cargar,
               child: ListView(
@@ -152,22 +163,27 @@ class _ResumenState extends State<_Resumen> {
                       child: TarjetaValle(
                         color: AppTheme.errorColor.withValues(alpha: 0.1),
                         colorBorde: AppTheme.errorColor.withValues(alpha: 0.5),
-                        child: const Row(children: [
-                          Icon(Icons.mail_lock_rounded, color: AppTheme.errorColor),
-                          SizedBox(width: 10),
-                          Expanded(child: Text('Los correos no están saliendo: falta configurar BREVO_API_KEY y SMTP_FROM en el servidor')),
-                        ]),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.mail_lock_rounded, color: AppTheme.errorColor),
+                            SizedBox(width: 10),
+                            Expanded(child: Text('Los correos no están saliendo: falta configurar BREVO_API_KEY y SMTP_FROM en el servidor')),
+                          ],
+                        ),
                       ),
                     ),
-                  if (r.pendientes > 0) Aparecer(child: _AvisoPendientes(cantidad: r.pendientes, onTap: widget.irAAprobaciones)),
+                  if (r.pendientes > 0)
+                    Aparecer(
+                      child: _AvisoPendientes(cantidad: r.pendientes, onTap: widget.irAAprobaciones),
+                    ),
                   const SizedBox(height: 14),
                   _Cifras(r: r),
                   const EncabezadoSeccion('Ventas de la semana', subtitulo: 'Pedidos entregados en los últimos 7 días'),
-                  Aparecer(indice: 2, child: TarjetaValle(child: _GraficaSemana(r: r))),
-                  if (r.enCurso.isNotEmpty) ...[
-                    const EncabezadoSeccion('Pedidos en curso ahora'),
-                    _EnCurso(enCurso: r.enCurso),
-                  ],
+                  Aparecer(
+                    indice: 2,
+                    child: TarjetaValle(child: _GraficaSemana(r: r)),
+                  ),
+                  if (r.enCurso.isNotEmpty) ...[const EncabezadoSeccion('Pedidos en curso ahora'), _EnCurso(enCurso: r.enCurso)],
                   if (r.mejores.isNotEmpty) ...[
                     const EncabezadoSeccion('Negocios que más venden', subtitulo: 'Últimos 30 días'),
                     Aparecer(indice: 3, child: _Mejores(mejores: r.mejores)),
@@ -182,9 +198,11 @@ class _ResumenState extends State<_Resumen> {
                       onChanged: _guardando ? null : _cambiarAutomatica,
                       secondary: const Icon(Icons.auto_mode_rounded),
                       title: const Text('Aprobación automática'),
-                      subtitle: Text(r.aprobacionAutomatica
-                          ? 'Los negocios y repartidores nuevos se aprueban solos (útil para demostraciones)'
-                          : 'Los negocios y repartidores nuevos esperan tu revisión'),
+                      subtitle: Text(
+                        r.aprobacionAutomatica
+                            ? 'Los negocios y repartidores nuevos se aprueban solos (útil para demostraciones)'
+                            : 'Los negocios y repartidores nuevos esperan tu revisión',
+                      ),
                     ),
                   ),
                 ],
@@ -247,7 +265,10 @@ class _AvisoPendientes extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(cantidad == 1 ? '1 cuenta espera tu revisión' : '$cantidad cuentas esperan tu revisión', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(
+                    cantidad == 1 ? '1 cuenta espera tu revisión' : '$cantidad cuentas esperan tu revisión',
+                    style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
                   Text('Negocios y repartidores nuevos', style: tema.bodySmall),
                 ],
               ),
@@ -270,10 +291,34 @@ class _Cifras extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colores;
     final tarjetas = [
-      _Cifra(icono: Icons.receipt_long_rounded, color: AppTheme.infoColor, titulo: 'Pedidos hoy', valor: Text('${r.pedidosHoy}'), detalle: '${r.entregadosHoy} entregados'),
-      _Cifra(icono: Icons.payments_rounded, color: c.primario, titulo: 'Ventas hoy', valor: DineroAnimado(r.ventasHoy), detalle: 'Semana: ${Formato.dinero(r.ventasSemana)}'),
-      _Cifra(icono: Icons.local_fire_department_rounded, color: AppTheme.accentColor, titulo: 'En curso', valor: Text('${r.totalEnCurso}'), detalle: 'pedidos ahora mismo'),
-      _Cifra(icono: Icons.two_wheeler_rounded, color: AppTheme.successColor, titulo: 'En línea', valor: Text('${r.repartidoresEnLinea}'), detalle: 'repartidores'),
+      _Cifra(
+        icono: Icons.receipt_long_rounded,
+        color: AppTheme.infoColor,
+        titulo: 'Pedidos hoy',
+        valor: Text('${r.pedidosHoy}'),
+        detalle: '${r.entregadosHoy} entregados',
+      ),
+      _Cifra(
+        icono: Icons.payments_rounded,
+        color: c.primario,
+        titulo: 'Ventas hoy',
+        valor: DineroAnimado(r.ventasHoy),
+        detalle: 'Semana: ${Formato.dinero(r.ventasSemana)}',
+      ),
+      _Cifra(
+        icono: Icons.local_fire_department_rounded,
+        color: AppTheme.accentColor,
+        titulo: 'En curso',
+        valor: Text('${r.totalEnCurso}'),
+        detalle: 'pedidos ahora mismo',
+      ),
+      _Cifra(
+        icono: Icons.two_wheeler_rounded,
+        color: AppTheme.successColor,
+        titulo: 'En línea',
+        valor: Text('${r.repartidoresEnLinea}'),
+        detalle: 'repartidores',
+      ),
     ];
     return GridView.count(
       crossAxisCount: 2,
@@ -314,11 +359,25 @@ class _Cifra extends StatelessWidget {
                 child: Icon(icono, color: color, size: 18),
               ),
               const SizedBox(width: 8),
-              Expanded(child: Text(titulo, style: tema.labelLarge?.copyWith(color: c.textoSuave), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                child: Text(
+                  titulo,
+                  style: tema.labelLarge?.copyWith(color: c.textoSuave),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
-          DefaultTextStyle.merge(style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800), child: valor),
-          Text(detalle, style: tema.bodySmall?.copyWith(color: c.textoSuave), maxLines: 1, overflow: TextOverflow.ellipsis),
+          DefaultTextStyle.merge(
+            style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+            child: valor,
+          ),
+          Text(
+            detalle,
+            style: tema.bodySmall?.copyWith(color: c.textoSuave),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -362,14 +421,18 @@ class _GraficaSemana extends StatelessWidget {
                         gradient: LinearGradient(
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
-                          colors: i == r.semana.length - 1 ? [c.primario, AppTheme.accentColor] : [c.primario.withValues(alpha: 0.35), c.primario.withValues(alpha: 0.7)],
+                          colors: i == r.semana.length - 1
+                              ? [c.primario, AppTheme.accentColor]
+                              : [c.primario.withValues(alpha: 0.35), c.primario.withValues(alpha: 0.7)],
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(i == r.semana.length - 1 ? 'Hoy' : _dias[d.dia.weekday - 1],
-                      style: tema.labelMedium?.copyWith(fontWeight: i == r.semana.length - 1 ? FontWeight.w800 : FontWeight.w500)),
+                  Text(
+                    i == r.semana.length - 1 ? 'Hoy' : _dias[d.dia.weekday - 1],
+                    style: tema.labelMedium?.copyWith(fontWeight: i == r.semana.length - 1 ? FontWeight.w800 : FontWeight.w500),
+                  ),
                   Text('${d.pedidos}', style: tema.labelSmall?.copyWith(color: c.textoSuave)),
                 ],
               ),
@@ -391,9 +454,7 @@ class _EnCurso extends StatelessWidget {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: [
-        for (final e in estados) InsigniaValle('${e.etiqueta}: ${enCurso[e.codigo]}', color: e.color, icono: e.icono),
-      ],
+      children: [for (final e in estados) InsigniaValle('${e.etiqueta}: ${enCurso[e.codigo]}', color: e.color, icono: e.icono)],
     );
   }
 }
@@ -414,10 +475,16 @@ class _Mejores extends StatelessWidget {
         children: [
           for (final (i, m) in mejores.indexed)
             ListTile(
-              leading: SizedBox(width: 32, child: Center(child: Text(i < 3 ? medallas[i] : '${i + 1}', style: tema.titleLarge))),
+              leading: SizedBox(
+                width: 32,
+                child: Center(child: Text(i < 3 ? medallas[i] : '${i + 1}', style: tema.titleLarge)),
+              ),
               title: Text(m.nombre, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               subtitle: Text(m.pedidos == 1 ? '1 pedido' : '${m.pedidos} pedidos'),
-              trailing: Text(Formato.dinero(m.ventas), style: tema.titleSmall?.copyWith(color: c.primario, fontWeight: FontWeight.w800)),
+              trailing: Text(
+                Formato.dinero(m.ventas),
+                style: tema.titleSmall?.copyWith(color: c.primario, fontWeight: FontWeight.w800),
+              ),
             ),
         ],
       ),
@@ -435,16 +502,16 @@ class _Comunidad extends StatelessWidget {
     final tema = Theme.of(context).textTheme;
     final c = context.colores;
     Widget fila(IconData icono, String titulo, int total, String detalle) => ListTile(
-          leading: Icon(icono, color: c.primario),
-          title: Text(titulo),
-          subtitle: detalle.isEmpty ? null : Text(detalle),
-          trailing: Text('$total', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-        );
+      leading: Icon(icono, color: c.primario),
+      title: Text(titulo),
+      subtitle: detalle.isEmpty ? null : Text(detalle),
+      trailing: Text('$total', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+    );
     String porAprobacion(Map<String, int> m) => [
-          if ((m['pendiente'] ?? 0) > 0) '${m['pendiente']} pendientes',
-          if ((m['suspendido'] ?? 0) > 0) '${m['suspendido']} suspendidos',
-          if ((m['rechazado'] ?? 0) > 0) '${m['rechazado']} rechazados',
-        ].join(' · ');
+      if ((m['pendiente'] ?? 0) > 0) '${m['pendiente']} pendientes',
+      if ((m['suspendido'] ?? 0) > 0) '${m['suspendido']} suspendidos',
+      if ((m['rechazado'] ?? 0) > 0) '${m['rechazado']} rechazados',
+    ].join(' · ');
     return TarjetaValle(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(

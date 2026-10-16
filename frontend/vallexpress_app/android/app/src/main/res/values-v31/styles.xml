@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 o más: pantalla de arranque del sistema con el fondo y el logo de la marca -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/splash_fondo</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icono</item>
+        <item name="android:windowBackground">@color/splash_fondo</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@color/splash_fondo</item>
+    </style>
+</resources>

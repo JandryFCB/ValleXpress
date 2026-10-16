@@ -1,6 +1,7 @@
 // Sistema de diseño de ValleXpress: un solo import para las piezas reutilizables.
 //     import '../../widgets/ui/ui.dart';
 export 'animaciones.dart';
+export 'atras_en_pestanas.dart';
 export 'avatar_valle.dart';
 export 'boton_valle.dart';
 export 'campo_valle.dart';

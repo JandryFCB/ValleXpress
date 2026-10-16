@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#000000</color>
+    <!-- Azul noche de la marca (AppTheme.backgroundColor): fondo del arranque en modo claro y oscuro -->
+    <color name="splash_fondo">#0B1A2B</color>
 </resources>

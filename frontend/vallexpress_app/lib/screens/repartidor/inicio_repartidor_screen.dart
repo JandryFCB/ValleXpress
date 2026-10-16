@@ -49,18 +49,22 @@ class _InicioRepartidorScreenState extends State<InicioRepartidorScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colores;
-    return Scaffold(
-      body: PestanasAnimadas(indice: _pestana, children: const [_Entregas(), _Historial(), PerfilScreen()]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _pestana,
-        backgroundColor: c.tarjeta,
-        indicatorColor: c.primario.withValues(alpha: 0.18),
-        onDestinationSelected: (i) => setState(() => _pestana = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.delivery_dining_outlined), selectedIcon: Icon(Icons.delivery_dining_rounded), label: 'Entregas'),
-          NavigationDestination(icon: Icon(Icons.history_rounded), label: 'Historial'),
-          NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
-        ],
+    return AtrasEnPestanas(
+      pestana: _pestana,
+      irAPrimera: () => setState(() => _pestana = 0),
+      child: Scaffold(
+        body: PestanasAnimadas(indice: _pestana, children: const [_Entregas(), _Historial(), PerfilScreen()]),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _pestana,
+          backgroundColor: c.tarjeta,
+          indicatorColor: c.primario.withValues(alpha: 0.18),
+          onDestinationSelected: (i) => setState(() => _pestana = i),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.delivery_dining_outlined), selectedIcon: Icon(Icons.delivery_dining_rounded), label: 'Entregas'),
+            NavigationDestination(icon: Icon(Icons.history_rounded), label: 'Historial'),
+            NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
+          ],
+        ),
       ),
     );
   }
@@ -162,7 +166,12 @@ class _EntregasState extends State<_Entregas> {
       final pedido = await PedidosService.aceptarPedido(p.id);
       HapticFeedback.heavyImpact();
       if (!mounted) return;
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedidoId: pedido.id, inicial: pedido)));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EntregaScreen(pedidoId: pedido.id, inicial: pedido),
+        ),
+      );
       _cargar();
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
@@ -178,7 +187,13 @@ class _EntregasState extends State<_Entregas> {
       appBar: AppBar(
         title: const Text('Entregas'),
         automaticallyImplyLeading: false,
-        actions: [IconButton(tooltip: 'Avisos', icon: const Icon(Icons.notifications_none_rounded), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AvisosScreen())))],
+        actions: [
+          IconButton(
+            tooltip: 'Avisos',
+            icon: const Icon(Icons.notifications_none_rounded),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AvisosScreen())),
+          ),
+        ],
       ),
       child: _contenido(),
     );
@@ -199,7 +214,14 @@ class _EntregasState extends State<_Entregas> {
       );
     }
     if (_error != null && _perfil == null) {
-      return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tus entregas', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
+      return EstadoVacio(
+        icono: Icons.cloud_off_rounded,
+        color: AppTheme.errorColor,
+        titulo: 'No pudimos cargar tus entregas',
+        mensaje: _error,
+        textoAccion: 'Reintentar',
+        onAccion: _cargar,
+      );
     }
     final perfil = _perfil!;
     final c = context.colores;
@@ -219,14 +241,21 @@ class _EntregasState extends State<_Entregas> {
               children: [
                 Row(
                   children: [
-                    Icon(perfil.disponible ? Icons.wifi_tethering_rounded : Icons.portable_wifi_off_rounded, color: perfil.disponible ? c.primario : c.textoSuave, size: 30),
+                    Icon(
+                      perfil.disponible ? Icons.wifi_tethering_rounded : Icons.portable_wifi_off_rounded,
+                      color: perfil.disponible ? c.primario : c.textoSuave,
+                      size: 30,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(perfil.disponible ? 'Estás en línea' : 'Estás fuera de línea', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                          Text(perfil.disponible ? 'Te avisaremos cuando haya un pedido listo' : 'Conéctate para recibir pedidos', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                          Text(
+                            perfil.disponible ? 'Te avisaremos cuando haya un pedido listo' : 'Conéctate para recibir pedidos',
+                            style: tema.bodySmall?.copyWith(color: c.textoSuave),
+                          ),
                         ],
                       ),
                     ),
@@ -250,7 +279,11 @@ class _EntregasState extends State<_Entregas> {
           ),
           if (!perfil.aprobado) ...[
             const SizedBox(height: 12),
-            const InsigniaValle('Tu cuenta está en revisión: cuando la aprueben podrás conectarte', color: AppTheme.warningColor, icono: Icons.hourglass_top_rounded),
+            const InsigniaValle(
+              'Tu cuenta está en revisión: cuando la aprueben podrás conectarte',
+              color: AppTheme.warningColor,
+              icono: Icons.hourglass_top_rounded,
+            ),
           ],
 
           // Entrega en curso
@@ -260,7 +293,12 @@ class _EntregasState extends State<_Entregas> {
               colorBorde: AppTheme.infoColor,
               color: AppTheme.infoColor.withValues(alpha: 0.1),
               onTap: () async {
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedidoId: _enCurso!.id, inicial: _enCurso)));
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EntregaScreen(pedidoId: _enCurso!.id, inicial: _enCurso),
+                  ),
+                );
                 _cargar();
               },
               child: Row(
@@ -271,10 +309,18 @@ class _EntregasState extends State<_Entregas> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_enCurso!.estado == EstadoPedido.enCamino ? 'Ve a recoger a ${_enCurso!.negocioNombre}' : 'Lleva el pedido a ${_enCurso!.cliente?.nombre ?? 'tu cliente'}',
-                            style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                        Text('#${_enCurso!.id} · ${_enCurso!.estado == EstadoPedido.enCamino ? _enCurso!.negocioDireccion ?? '' : _enCurso!.direccionEntrega}',
-                            style: tema.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          _enCurso!.estado == EstadoPedido.enCamino
+                              ? 'Ve a recoger a ${_enCurso!.negocioNombre}'
+                              : 'Lleva el pedido a ${_enCurso!.cliente?.nombre ?? 'tu cliente'}',
+                          style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          '#${_enCurso!.id} · ${_enCurso!.estado == EstadoPedido.enCamino ? _enCurso!.negocioDireccion ?? '' : _enCurso!.direccionEntrega}',
+                          style: tema.bodySmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),
@@ -300,7 +346,14 @@ class _EntregasState extends State<_Entregas> {
             if (_libres.proximos.isNotEmpty) ...[
               const EncabezadoSeccion('Se están preparando', subtitulo: 'Podrás aceptarlos cuando el negocio los deje listos'),
               for (final (i, p) in _libres.proximos.indexed)
-                Aparecer(key: ValueKey('proximo-${p.id}'), indice: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: _TarjetaLibre(pedido: p))),
+                Aparecer(
+                  key: ValueKey('proximo-${p.id}'),
+                  indice: i,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _TarjetaLibre(pedido: p),
+                  ),
+                ),
             ],
           ],
           if (!perfil.disponible && _enCurso == null && perfil.aprobado)
@@ -330,7 +383,12 @@ class _Dato extends StatelessWidget {
         children: [
           Icon(icono, size: 20, color: c.primario),
           const SizedBox(height: 4),
-          Text(valor, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+            valor,
+            style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           Text(etiqueta, style: tema.labelSmall?.copyWith(color: c.textoSuave)),
         ],
       ),
@@ -366,14 +424,20 @@ class _TarjetaLibre extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(p.negocioNombre, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                    Text('#${p.id} · ${p.cantidadProductos} producto${p.cantidadProductos == 1 ? '' : 's'}', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                    Text(
+                      '#${p.id} · ${p.cantidadProductos} producto${p.cantidadProductos == 1 ? '' : 's'}',
+                      style: tema.bodySmall?.copyWith(color: c.textoSuave),
+                    ),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(Formato.dinero(p.costoEnvio), style: tema.titleLarge?.copyWith(color: c.primario, fontWeight: FontWeight.w800)),
+                  Text(
+                    Formato.dinero(p.costoEnvio),
+                    style: tema.titleLarge?.copyWith(color: c.primario, fontWeight: FontWeight.w800),
+                  ),
                   Text('ganas', style: tema.labelSmall?.copyWith(color: c.textoSuave)),
                 ],
               ),
@@ -390,7 +454,12 @@ class _TarjetaLibre extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text('Entrega: ${p.direccionEntrega}', maxLines: 1, overflow: TextOverflow.ellipsis, style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+          Text(
+            'Entrega: ${p.direccionEntrega}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tema.bodySmall?.copyWith(color: c.textoSuave),
+          ),
           if (listo) ...[
             const SizedBox(height: 12),
             BotonValle(texto: 'Aceptar pedido', icono: Icons.check_rounded, cargando: aceptando, onPressed: onAceptar),
@@ -410,11 +479,14 @@ class _Etiqueta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colores;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icono, size: 16, color: c.textoSuave),
-      const SizedBox(width: 4),
-      Text(texto, style: Theme.of(context).textTheme.bodySmall),
-    ]);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icono, size: 16, color: c.textoSuave),
+        const SizedBox(width: 4),
+        Text(texto, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
   }
 }
 
@@ -465,20 +537,35 @@ class _HistorialState extends State<_Historial> {
           : RefreshIndicator(
               onRefresh: _cargar,
               child: _pedidos.isEmpty
-                  ? ListView(physics: const AlwaysScrollableScrollPhysics(), children: const [
-                      SizedBox(height: 420, child: EstadoVacio(icono: Icons.history_rounded, titulo: 'Aún no tienes entregas', mensaje: 'Aquí verás cada pedido que entregues y lo que ganaste.')),
-                    ])
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        SizedBox(
+                          height: 420,
+                          child: EstadoVacio(
+                            icono: Icons.history_rounded,
+                            titulo: 'Aún no tienes entregas',
+                            mensaje: 'Aquí verás cada pedido que entregues y lo que ganaste.',
+                          ),
+                        ),
+                      ],
+                    )
                   : ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                       children: [
                         TarjetaValle(
-                          child: Row(children: [
-                            Icon(Icons.savings_rounded, color: context.colores.primario, size: 30),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text('Ganado en envíos', style: Theme.of(context).textTheme.titleSmall)),
-                            DineroAnimado(ganado, estilo: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: context.colores.primario)),
-                          ]),
+                          child: Row(
+                            children: [
+                              Icon(Icons.savings_rounded, color: context.colores.primario, size: 30),
+                              const SizedBox(width: 12),
+                              Expanded(child: Text('Ganado en envíos', style: Theme.of(context).textTheme.titleSmall)),
+                              DineroAnimado(
+                                ganado,
+                                estilo: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, color: context.colores.primario),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 12),
                         for (final p in _pedidos)
@@ -486,7 +573,12 @@ class _HistorialState extends State<_Historial> {
                             padding: const EdgeInsets.only(bottom: 10),
                             child: TarjetaPedido(
                               pedido: p,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EntregaScreen(pedidoId: p.id, inicial: p))),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => EntregaScreen(pedidoId: p.id, inicial: p),
+                                ),
+                              ),
                             ),
                           ),
                       ],
