@@ -86,7 +86,13 @@ const CLAVEADMIN = 'admin-secreta-1';
     r = await api('POST', '/api/mi-negocio/revision', null, L);
     check('corrige y pide una nueva revisión: vuelve a pendiente sin motivo', r.status === 200 && r.body.negocio.aprobacion === 'pendiente' && r.body.negocio.motivoAprobacion === null, JSON.stringify(r.body));
     check('el motivo queda en el historial (versión cerrada)', (await q("SELECT 1 FROM tnegocios WHERE cnegocio=$1 AND motivoaprobacion='Falta el RUC del local' AND fhasta < '2999-01-01'", [negocioId])).length === 1);
-    check('y la solicitud queda en la auditoría', (await q("SELECT 1 FROM tauditoria WHERE accion='REVISIONSOLICITADA' AND entidad='NEGOCIOS'")).length === 1);
+    // La auditoría se escribe sin hacer esperar la respuesta: se le da un momento
+    let auditada = false;
+    for (let i = 0; i < 20 && !auditada; i++) {
+      auditada = (await q("SELECT 1 FROM tauditoria WHERE accion='REVISIONSOLICITADA' AND entidad='NEGOCIOS'")).length === 1;
+      if (!auditada) await new Promise((res) => setTimeout(res, 100));
+    }
+    check('y la solicitud queda en la auditoría', auditada);
     const sL = await t.conectar(L);
     const avisoNegocio = t.esperar(sL, 'notificacion');
     r = await api('PATCH', `/api/admin/negocios/${negocioId}/aprobacion`, { estado: 'aprobado' }, A);

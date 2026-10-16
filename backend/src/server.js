@@ -238,6 +238,9 @@ async function startServer() {
 
 
     // Iniciar servidor
+    // Vigilante de vencimientos: cancela los pedidos que quedan varados (sin repartidor o sin respuesta del negocio)
+    require('./modules/pedidos/vencimiento.service').iniciar(io);
+
     httpServer.listen(PORT, () => {
       console.log('========================================');
       console.log('ValleXpress Backend');

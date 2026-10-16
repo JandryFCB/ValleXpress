@@ -358,25 +358,36 @@ async function listarTodos(query, req) {
   return listar(where, query, req, 'administrador');
 }
 
-// Administrador: cancela un pedido en curso (disputa). Devuelve el stock y avisa al cliente, al negocio y al
-// repartidor (que queda libre para otra entrega).
-async function cancelarComoAdmin(admin, id, { motivo }, req) {
+// Cancela un pedido en curso FUERA del flujo normal: el administrador (disputa) o el vigilante de vencimientos.
+// Devuelve el stock y avisa al cliente, al negocio y al repartidor (que queda libre para otra entrega).
+// Con "soloSi" solo cancela si el pedido sigue en uno de esos estados (el vigilante no pisa a un repartidor que
+// justo lo recogió); si no, devuelve null.
+async function cancelarEnCurso(id, { motivoGuardado, motivoAviso, usuarioId, io, soloSi }) {
   const pedido = await withTransaction(async (t) => {
     const p = await Pedido.findOne({ where: { id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!p) throw noEncontrado();
+    if (soloSi && !soloSi.includes(p.estado)) return null;
     validarCancelacionAdmin(p.estado);
     await devolverStock(p.id, t);
-    await p.update({ estado: E.CANCELADO, motivoCancelacion: `Cancelado por ValleXpress: ${motivo.trim()}` }, { transaction: t });
+    await p.update({ estado: E.CANCELADO, motivoCancelacion: motivoGuardado }, { transaction: t });
     return p;
-  }, { usuarioId: admin.id });
+  }, { usuarioId });
+  if (!pedido) return null;
 
-  auditar({ usuarioId: admin.id, accion: 'PEDIDOCANCELADOADMIN', entidad: 'PEDIDOS', entidadId: id, detalle: { motivo }, req });
   const negocio = await Negocio.findOne({ where: { id: pedido.negocioId }, attributes: ['id', 'duenoId'] });
-  const aviso = { io: req.io, tipo: 'pedido_cancelado', titulo: 'Pedido cancelado', pedidoId: pedido.id, datos: { estado: 'cancelado' } };
-  await NotificacionService.notificar({ ...aviso, usuarioId: pedido.clienteId, mensaje: `ValleXpress canceló tu pedido #${pedido.id}: ${motivo.trim()}` });
-  await NotificacionService.notificar({ ...aviso, usuarioId: negocio?.duenoId, mensaje: `ValleXpress canceló el pedido #${pedido.id}: ${motivo.trim()}` });
+  const aviso = { io, tipo: 'pedido_cancelado', titulo: 'Pedido cancelado', pedidoId: pedido.id, datos: { estado: 'cancelado' } };
+  await NotificacionService.notificar({ ...aviso, usuarioId: pedido.clienteId, mensaje: `ValleXpress canceló tu pedido #${pedido.id}: ${motivoAviso}` });
+  await NotificacionService.notificar({ ...aviso, usuarioId: negocio?.duenoId, mensaje: `ValleXpress canceló el pedido #${pedido.id}: ${motivoAviso}` });
   if (pedido.repartidorId) await NotificacionService.notificar({ ...aviso, usuarioId: pedido.repartidorId, mensaje: `El pedido #${pedido.id} fue cancelado. Ya puedes tomar otro` });
-  avisarCambio(req.io, pedido, negocio?.duenoId, { repartidores: true });
+  avisarCambio(io, pedido, negocio?.duenoId, { repartidores: true });
+  return pedido;
+}
+
+// Administrador: cancela un pedido en curso (disputa)
+async function cancelarComoAdmin(admin, id, { motivo }, req) {
+  const m = motivo.trim();
+  await cancelarEnCurso(id, { motivoGuardado: `Cancelado por ValleXpress: ${m}`, motivoAviso: m, usuarioId: admin.id, io: req.io });
+  auditar({ usuarioId: admin.id, accion: 'PEDIDOCANCELADOADMIN', entidad: 'PEDIDOS', entidadId: id, detalle: { motivo }, req });
   return aApi(await cargar(id), req, { rol: 'administrador', detalle: true });
 }
 
@@ -596,6 +607,6 @@ module.exports = {
   libresParaRepartidor, listarDelRepartidor, aceptar,
   recoger: (usuario, id, req) => pasoRepartidor(usuario, id, E.RECOGIDO, req),
   entregar: (usuario, id, req) => pasoRepartidor(usuario, id, E.ENTREGADO, req),
-  listarTodos, cancelarComoAdmin,
+  listarTodos, cancelarComoAdmin, cancelarEnCurso, avisarRepartidores,
   aApi, cargar, distanciaKm,
 };
