@@ -34,6 +34,12 @@ Plan completo y checklist: [ROADMAP_TOP.md](ROADMAP_TOP.md).
 | App: panel del administrador (5 pestañas) y foto de perfil para todos los roles | **Hecho**, compila (falta probar en el móvil) |
 | Antes de producción (claves, HTTPS, almacenamiento de imágenes) y reglas de negocio (IVA, comisión, envío) | Pendiente |
 
+### Bloque 19 (2026-10-15): bloqueo claro y correos reales
+- Login: avisa los intentos que quedan (3.º y 4.º fallo) y al 5.º muestra "Cuenta bloqueada por seguridad" con cuenta regresiva en vivo, recuperar contraseña (desbloquea al instante) y contactar a soporte. Cuenta bloqueada o dada de baja por el admin: lo dice con el correo de soporte.
+- Correos reales por Brevo (plan gratis, 300/día; la clave anterior estaba vencida y faltaba en `.env`; se desactivó en Brevo el bloqueo por IP). Plantilla con los colores de la marca. Nuevos: bienvenida con usuario y contraseña temporal (cuentas creadas por el admin), aviso de bloqueo por intentos y avisos de bloqueo, baja, reactivación y contraseña nueva.
+- Probado en el móvil con un Gmail real: bloqueo, recuperación y entrada con la contraseña nueva. 465 pruebas del backend.
+- **Pendiente detectado:** con la aprobación automática apagada, el vendedor y el repartidor solo ven una insignia pequeña de "en revisión"; falta una pantalla clara por estado (pendiente / rechazado / suspendido con su motivo), el aviso al terminar el registro y el correo al aprobar o rechazar.
+
 ### Bloque 18 (2026-10-15): flujo Administrador, tiempo real y diseño
 - **Tiempo real** (consejos del usuario): geocerca en el servidor (a menos de 150 m de la entrega el cliente recibe "¡Tu repartidor está cerca!", una sola vez); el GPS del repartidor no envía nada detenido (latido cada 30 s) e ignora los saltos con mala señal; al volver la app del segundo plano se reconecta y las pantallas se recargan; la moto se desliza durante el intervalo real entre posiciones.
 - **Diseño interactivo**: tarjetas y botones que se hunden y vibran, esqueletos de carga, listas escalonadas, la portada del negocio "vuela" a su pantalla, carrito que rebota y cuenta el total, confeti al pedir y al recibir, transiciones al estilo Android moderno.
