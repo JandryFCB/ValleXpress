@@ -112,9 +112,25 @@ class AdminService {
     return RepartidorAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo guardar el vehículo')['repartidor']));
   }
 
-  // --- Configuración ---
-  static Future<bool> cambiarAprobacionAutomatica(bool activa) async {
-    final res = await http.put(_url('/configuracion'), headers: await _cabeceras(), body: jsonEncode({'aprobacionAutomatica': activa}));
-    return _json(res, 'No se pudo guardar la configuración')['aprobacionAutomatica'] == true;
+  // --- Perfiles y permisos ---
+  static Future<List<PerfilPermisos>> perfiles() async {
+    final res = await http.get(_url('/perfiles'), headers: await _cabeceras());
+    return (_json(res, 'No se pudieron cargar los perfiles')['perfiles'] as List).map((p) => PerfilPermisos.desdeJson(Map<String, dynamic>.from(p))).toList();
+  }
+
+  /// Cambia los permisos de un perfil. Con [aprobarPendientes] también aprueba las solicitudes que esperaban
+  /// (cada una recibe su aviso y su correo); devuelve cuántas aprobó.
+  static Future<({PerfilPermisos perfil, int aprobados})> cambiarPerfil(String rol, {bool? registroAbierto, bool? aprobacionAutomatica, bool aprobarPendientes = false}) async {
+    final res = await http.patch(
+      _url('/perfiles/$rol'),
+      headers: await _cabeceras(),
+      body: jsonEncode({
+        if (registroAbierto != null) 'registroAbierto': registroAbierto,
+        if (aprobacionAutomatica != null) 'aprobacionAutomatica': aprobacionAutomatica,
+        if (aprobarPendientes) 'aprobarPendientes': true,
+      }),
+    );
+    final datos = _json(res, 'No se pudo guardar el permiso');
+    return (perfil: PerfilPermisos.desdeJson(Map<String, dynamic>.from(datos['perfil'])), aprobados: (datos['aprobados'] as num?)?.toInt() ?? 0);
   }
 }

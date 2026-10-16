@@ -19,6 +19,11 @@ class RegistroController extends ChangeNotifier {
 
   int paso = 0;
   String? rol; // 'cliente' | 'vendedor' | 'repartidor'
+
+  /// Qué perfiles tienen el registro abierto (lo decide el administrador). null = aún no se sabe: se muestran
+  /// todos y el servidor vuelve a validar al registrar.
+  Map<String, bool>? perfilesAbiertos;
+  bool registroAbierto(String valor) => perfilesAbiertos?[valor] ?? true;
   String? vehiculo;
   bool aceptaTerminos = false;
 
@@ -72,7 +77,8 @@ class RegistroController extends ChangeNotifier {
   String? validarPaso() {
     switch (paso) {
       case 0:
-        return rol == null ? 'Elige cómo vas a usar la app' : null;
+        if (rol == null) return 'Elige cómo vas a usar la app';
+        return registroAbierto(rol!) ? null : 'Por ahora no estamos recibiendo este tipo de cuenta';
       case 1:
         if (nombre.text.trim().length < 2) return 'Escribe tu nombre';
         if (apellido.text.trim().isEmpty) return 'Escribe tu apellido';
@@ -116,7 +122,16 @@ class RegistroController extends ChangeNotifier {
   }
 
   void elegirRol(String valor) {
+    if (!registroAbierto(valor)) return;
     rol = valor;
+    _avisar();
+  }
+
+  Future<void> cargarPerfiles() async {
+    final perfiles = await _servicio.perfilesRegistro();
+    if (perfiles == null || _liberado) return;
+    perfilesAbiertos = perfiles;
+    if (rol != null && !registroAbierto(rol!)) rol = null;
     _avisar();
   }
 

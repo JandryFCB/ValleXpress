@@ -264,6 +264,19 @@ class AuthService {
     }
   }
 
+  /// Perfiles con el registro abierto ({cliente: true, vendedor: true, repartidor: false}). El administrador puede
+  /// cerrar uno desde "Perfiles y permisos". Sin conexión devuelve null (el servidor vuelve a validar al registrar).
+  Future<Map<String, bool>?> perfilesRegistro() async {
+    try {
+      final res = await http.get(Uri.parse('${AppConstants.baseUrl}/auth/registro/perfiles'), headers: {'Content-Type': 'application/json'});
+      if (res.statusCode != 200) return null;
+      final perfiles = Map<String, dynamic>.from(json.decode(res.body)['perfiles'] as Map);
+      return perfiles.map((rol, abierto) => MapEntry(rol, abierto == true));
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ✅ Verificar si cédula ya existe (validación en tiempo real)
   Future<Map<String, dynamic>> checkCedula(String cedula) async {
     try {

@@ -29,7 +29,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void initState() {
     super.initState();
-    _c = RegistroController(servicio: widget.servicio)..addListener(_alCambiar);
+    _c = RegistroController(servicio: widget.servicio)
+      ..addListener(_alCambiar)
+      ..cargarPerfiles();
   }
 
   void _alCambiar() {
@@ -294,37 +296,47 @@ class _TarjetaRol extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final seleccionado = controlador.rol == valor;
+    final abierto = controlador.registroAbierto(valor);
     final tema = Theme.of(context).textTheme;
-    return TarjetaValle(
-      onTap: () => controlador.elegirRol(valor),
-      colorBorde: seleccionado ? color : null,
-      color: seleccionado ? color.withValues(alpha: 0.10) : null,
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(16)),
-            child: Icon(icono, color: color, size: 30),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(titulo, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(descripcion, style: tema.bodySmall?.copyWith(color: context.colores.textoSuave)),
-              ],
+    // Registro cerrado por el administrador: se ve apagado y no se puede elegir
+    return Opacity(
+      opacity: abierto ? 1 : 0.5,
+      child: TarjetaValle(
+        onTap: () => controlador.elegirRol(valor),
+        colorBorde: seleccionado ? color : null,
+        color: seleccionado ? color.withValues(alpha: 0.10) : null,
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(16)),
+              child: Icon(icono, color: color, size: 30),
             ),
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: seleccionado
-                ? Icon(Icons.check_circle, key: const ValueKey('si'), color: color)
-                : Icon(Icons.radio_button_unchecked, key: const ValueKey('no'), color: context.colores.borde),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(titulo, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(
+                    abierto ? descripcion : 'Por ahora no estamos recibiendo nuevas cuentas de este tipo.',
+                    style: tema.bodySmall?.copyWith(color: context.colores.textoSuave),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: !abierto
+                  ? Icon(Icons.lock_clock_rounded, key: const ValueKey('cerrado'), color: context.colores.textoSuave)
+                  : seleccionado
+                      ? Icon(Icons.check_circle, key: const ValueKey('si'), color: color)
+                      : Icon(Icons.radio_button_unchecked, key: const ValueKey('no'), color: context.colores.borde),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -16,6 +16,10 @@ class _FalsoAuth extends AuthService {
   bool emailExiste = false;
   int envios = 0;
   String codigoCorrecto = '123456';
+  Map<String, bool>? perfiles; // null = sin conexión (se muestran todos)
+
+  @override
+  Future<Map<String, bool>?> perfilesRegistro() async => perfiles;
 
   @override
   Future<Map<String, dynamic>> checkCedula(String cedula) async => {'exists': cedulaExiste};
@@ -110,6 +114,22 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('un perfil con el registro cerrado se ve apagado y no se puede elegir', (tester) async {
+    _pantallaChica(tester);
+    final falso = _FalsoAuth()..perfiles = {'cliente': true, 'vendedor': true, 'repartidor': false};
+    await tester.pumpWidget(_app(falso, ThemeMode.dark));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Por ahora no estamos recibiendo nuevas cuentas de este tipo.'), findsOneWidget);
+    await tester.tap(find.text('Repartidor'));
+    await _continuar(tester);
+    expect(find.text('Elige cómo vas a usar la app'), findsOneWidget, reason: 'no quedó elegido');
+    await tester.tap(find.text('Vendedor'));
+    await _continuar(tester);
+    expect(find.text('Cuéntanos de ti'), findsOneWidget, reason: 'los abiertos sí se pueden elegir');
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('flujo completo de un vendedor hasta el último paso', (tester) async {
     _pantallaChica(tester);

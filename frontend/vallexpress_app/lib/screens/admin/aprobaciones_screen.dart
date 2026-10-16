@@ -16,19 +16,26 @@ import 'usuarios_admin_screen.dart';
 /// Gestión de negocios y repartidores: revisar los nuevos (aprobar o rechazar), suspender o reactivar, editar un
 /// negocio completo (datos, horario, local, imágenes y productos) y el vehículo de un repartidor.
 class AprobacionesScreen extends StatelessWidget {
-  const AprobacionesScreen({super.key, this.alCambiar});
+  const AprobacionesScreen({super.key, this.alCambiar, this.pestanaInicial = 0, this.conAtras = false});
 
   /// Avisa al inicio del admin que cambió algo (para refrescar el contador de pendientes)
   final VoidCallback? alCambiar;
+
+  /// 0 = negocios, 1 = repartidores (desde "Perfiles y permisos" se abre en la del perfil elegido)
+  final int pestanaInicial;
+
+  /// Abierta como página aparte (con flecha para volver), no como pestaña del inicio
+  final bool conAtras;
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: pestanaInicial,
       child: FondoValle(
         appBar: AppBar(
-          title: const Text('Gestión'),
-          automaticallyImplyLeading: false,
+          title: Text(conAtras ? 'Solicitudes' : 'Gestión'),
+          automaticallyImplyLeading: conAtras,
           bottom: const TabBar(tabs: [
             Tab(icon: Icon(Icons.storefront_rounded), text: 'Negocios'),
             Tab(icon: Icon(Icons.two_wheeler_rounded), text: 'Repartidores'),

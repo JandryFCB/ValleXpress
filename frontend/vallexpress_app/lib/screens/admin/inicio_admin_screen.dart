@@ -12,6 +12,7 @@ import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import '../profile/perfil_screen.dart';
 import 'aprobaciones_screen.dart';
+import 'perfiles_screen.dart';
 import 'pedidos_admin_screen.dart';
 import 'usuarios_admin_screen.dart';
 
@@ -89,7 +90,6 @@ class _Resumen extends StatefulWidget {
 class _ResumenState extends State<_Resumen> {
   ResumenAdmin? _r;
   String? _error;
-  bool _guardando = false;
   StreamSubscription? _vivo;
   Timer? _espera;
 
@@ -122,17 +122,9 @@ class _ResumenState extends State<_Resumen> {
     }
   }
 
-  Future<void> _cambiarAutomatica(bool activa) async {
-    setState(() => _guardando = true);
-    try {
-      await AdminService.cambiarAprobacionAutomatica(activa);
-      await _cargar();
-      if (mounted) mostrarExito(context, activa ? 'Las cuentas nuevas se aprobarán solas' : 'Las cuentas nuevas esperarán tu revisión');
-    } catch (e) {
-      if (mounted) mostrarError(context, textoDeError(e));
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
+  Future<void> _abrirPerfiles() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const PerfilesScreen()));
+    _cargar(); // pudo aprobar pendientes desde allí
   }
 
   @override
@@ -192,17 +184,25 @@ class _ResumenState extends State<_Resumen> {
                   _Comunidad(r: r),
                   const EncabezadoSeccion('Configuración'),
                   TarjetaValle(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: SwitchListTile(
-                      value: r.aprobacionAutomatica,
-                      onChanged: _guardando ? null : _cambiarAutomatica,
-                      secondary: const Icon(Icons.auto_mode_rounded),
-                      title: const Text('Aprobación automática'),
-                      subtitle: Text(
-                        r.aprobacionAutomatica
-                            ? 'Los negocios y repartidores nuevos se aprueban solos (útil para demostraciones)'
-                            : 'Los negocios y repartidores nuevos esperan tu revisión',
-                      ),
+                    onTap: _abrirPerfiles,
+                    child: Row(
+                      children: [
+                        Icon(Icons.manage_accounts_rounded, color: context.colores.primario),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Perfiles y permisos', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                              Text(
+                                'Quién puede registrarse y quién necesita tu aprobación',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colores.textoSuave),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded),
+                      ],
                     ),
                   ),
                 ],
@@ -508,9 +508,9 @@ class _Comunidad extends StatelessWidget {
       trailing: Text('$total', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
     );
     String porAprobacion(Map<String, int> m) => [
-      if ((m['pendiente'] ?? 0) > 0) '${m['pendiente']} pendientes',
-      if ((m['suspendido'] ?? 0) > 0) '${m['suspendido']} suspendidos',
-      if ((m['rechazado'] ?? 0) > 0) '${m['rechazado']} rechazados',
+      if ((m['pendiente'] ?? 0) > 0) '${m['pendiente']} ${m['pendiente'] == 1 ? 'pendiente' : 'pendientes'}',
+      if ((m['suspendido'] ?? 0) > 0) '${m['suspendido']} ${m['suspendido'] == 1 ? 'suspendido' : 'suspendidos'}',
+      if ((m['rechazado'] ?? 0) > 0) '${m['rechazado']} ${m['rechazado'] == 1 ? 'rechazado' : 'rechazados'}',
     ].join(' · ');
     return TarjetaValle(
       padding: const EdgeInsets.symmetric(vertical: 6),

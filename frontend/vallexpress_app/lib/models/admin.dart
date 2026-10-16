@@ -38,7 +38,6 @@ class ResumenAdmin {
     required this.repartidores,
     required this.repartidoresEnLinea,
     required this.pendientes,
-    required this.aprobacionAutomatica,
     this.correoConfigurado = true,
   });
 
@@ -53,7 +52,6 @@ class ResumenAdmin {
   final Map<String, int> repartidores;
   final int repartidoresEnLinea;
   final int pendientes;
-  final bool aprobacionAutomatica;
   final bool correoConfigurado;
 
   int get totalEnCurso => enCurso.values.fold(0, (a, b) => a + b);
@@ -81,8 +79,34 @@ class ResumenAdmin {
       repartidores: _conteo(Map.of(rep)..remove('enLinea')),
       repartidoresEnLinea: (rep['enLinea'] as num?)?.toInt() ?? 0,
       pendientes: (j['pendientes'] as num?)?.toInt() ?? 0,
-      aprobacionAutomatica: j['aprobacionAutomatica'] == true,
       correoConfigurado: j['correoConfigurado'] != false,
+    );
+  }
+}
+
+/// Permisos de un perfil (cliente, vendedor, repartidor): si puede registrarse desde la app y, para vendedor y
+/// repartidor, si nace aprobado o espera la revisión. Con sus cuentas y las solicitudes que esperan.
+class PerfilPermisos {
+  const PerfilPermisos({required this.rol, required this.registroAbierto, this.aprobacionAutomatica, this.cuentas = 0, this.activas = 0, this.pendientes = 0});
+
+  final String rol;
+  final bool registroAbierto;
+  final bool? aprobacionAutomatica; // null = el perfil no pasa por aprobación (cliente)
+  final int cuentas;
+  final int activas;
+  final int pendientes;
+
+  bool get conAprobacion => aprobacionAutomatica != null;
+
+  factory PerfilPermisos.desdeJson(Map<String, dynamic> j) {
+    final cuentas = Map<String, dynamic>.from(j['cuentas'] ?? {});
+    return PerfilPermisos(
+      rol: '${j['rol']}',
+      registroAbierto: j['registroAbierto'] == true,
+      aprobacionAutomatica: j['aprobacionAutomatica'] is bool ? j['aprobacionAutomatica'] as bool : null,
+      cuentas: (cuentas['total'] as num?)?.toInt() ?? 0,
+      activas: (cuentas['activos'] as num?)?.toInt() ?? 0,
+      pendientes: (j['pendientes'] as num?)?.toInt() ?? 0,
     );
   }
 }
