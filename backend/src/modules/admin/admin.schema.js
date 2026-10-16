@@ -2,6 +2,7 @@ const { body, param, query } = require('express-validator');
 const { APROBACIONAAPI, ESTADOPEDIDOAAPI, ROLAAPI, CATEGORIA } = require('../../shared/constants/codigos');
 const { validarEmail, validarCedula, validarTelefono } = require('../../shared/utils/validators');
 const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
+const { ROLESPERFIL } = require('../../shared/services/perfiles.service');
 
 // Reglas de validación de /api/admin.
 const APROBACIONES = Object.values(APROBACIONAAPI);
@@ -79,9 +80,18 @@ const editarRepartidor = [
   body('color').optional({ values: 'null' }).isString().isLength({ max: 30 }).withMessage('Color demasiado largo'),
 ];
 
-const configuracion = [body('aprobacionAutomatica').isBoolean().withMessage('aprobacionAutomatica debe ser true o false').toBoolean()];
+// Permisos de un perfil: al menos un cambio; aprobarPendientes solo acompaña a la aprobación automática
+const booleanoOpcional = (campo) => body(campo).optional().isBoolean().withMessage(`${campo} debe ser true o false`).toBoolean();
+const perfil = [
+  param('rol').isIn(ROLESPERFIL).withMessage(`El perfil debe ser: ${ROLESPERFIL.join(', ')}`),
+  booleanoOpcional('registroAbierto'),
+  booleanoOpcional('aprobacionAutomatica'),
+  booleanoOpcional('aprobarPendientes'),
+  body().custom((b) => b.registroAbierto !== undefined || b.aprobacionAutomatica !== undefined || b.aprobarPendientes === true)
+    .withMessage('Indica qué permiso cambiar'),
+];
 
 module.exports = {
-  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, configuracion,
+  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil,
   crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, negocioGestion, editarRepartidor,
 };

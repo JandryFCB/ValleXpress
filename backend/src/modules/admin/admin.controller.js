@@ -30,7 +30,8 @@ const bajaUsuario = asyncHandler(async (req, res) => res.json({ usuario: await s
 const editarRepartidor = asyncHandler(async (req, res) => res.json({ repartidor: await service.editarRepartidor(req.usuario, req.params.usuario, req.body, req) }));
 const resolverDueno = asyncHandler(async (req, res, next) => { await service.resolverDueno(req); next(); });
 
-const configuracion = asyncHandler(async (req, res) => res.json(await service.cambiarAprobacionAutomatica(req.usuario, req.body.aprobacionAutomatica, req)));
+const perfiles = asyncHandler(async (req, res) => res.json({ perfiles: await service.perfiles() }));
+const cambiarPerfil = asyncHandler(async (req, res) => res.json(await service.cambiarPerfil(req.usuario, req.params.rol, req.body, req)));
 
-module.exports = { resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, configuracion,
+module.exports = { resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

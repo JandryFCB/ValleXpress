@@ -78,8 +78,11 @@ const checkEmail = asyncHandler(async (req, res) => {
   res.json({ exists, message: exists ? 'Este email ya está registrado' : 'Email disponible' });
 });
 
+// Perfiles con el registro abierto: { cliente: true, vendedor: true, repartidor: false }
+const perfilesRegistro = asyncHandler(async (req, res) => res.json({ perfiles: await authService.perfilesRegistro() }));
+
 module.exports = {
-  register, login, refresh, logout, logoutAll, getProfile, updateProfile, changePassword,
+  register, perfilesRegistro, login, refresh, logout, logoutAll, getProfile, updateProfile, changePassword,
   forgotPassword, verifyResetCode, resetPassword,
   sendEmailVerification, verifyEmailCode,
   checkCedula, checkEmail,

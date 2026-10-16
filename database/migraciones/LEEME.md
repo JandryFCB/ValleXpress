@@ -15,6 +15,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `007_pedidos.sql` | Estatus de pedido, métodos de pago, pedidos (histórica = línea de tiempo), detalles, calificaciones y notificaciones |
 | `008_repartidores.sql` | Tipos de vehículo, perfil del repartidor (histórica), estado en línea y ubicaciones del recorrido |
 | `009_motivo_aprobacion.sql` | Motivo del rechazo o la suspensión en negocios y repartidores |
+| `010_perfiles.sql` | Perfiles y permisos: registro abierto por perfil y aprobación automática por separado para vendedor y repartidor (reemplaza a `APROBACIONAUTOMATICA`) |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

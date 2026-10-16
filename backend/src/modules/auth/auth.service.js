@@ -9,6 +9,7 @@ const TokenService = require('../../shared/services/token.service');
 const SesionService = require('../../shared/services/sesion.service');
 const CodigoService = require('../../shared/services/codigo.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
+const PerfilesService = require('../../shared/services/perfiles.service');
 const ArchivoService = require('../../shared/services/archivo.service');
 const NegocioService = require('../negocios/negocio.service');
 const RepartidorService = require('../repartidores/repartidor.service');
@@ -101,7 +102,7 @@ async function enviarCorreoCodigo(tipo, { email, codigo, nombre }, req) {
 // El perfil de negocio (vendedor) o de reparto (repartidor) se completa en sus propios módulos.
 // Crea persona, cuenta, teléfono principal y, según el rol, el negocio o el perfil de reparto, dentro de la
 // transacción "t". La usan el registro público (con el correo ya verificado) y el administrador.
-// Si el negocio o el repartidor nacen aprobados lo decide APROBACIONAUTOMATICA, salvo que se indique "aprobado".
+// Si el negocio o el repartidor nacen aprobados lo decide el permiso de su perfil, salvo que se indique "aprobado".
 async function crearCuenta(tipo, datos, t, { correoVerificadoEn = new Date(), aprobado } = {}) {
   const email = normalizarEmail(datos.email);
   const telefono = normalizarTelefono(datos.telefono);
@@ -143,9 +144,22 @@ async function crearCuenta(tipo, datos, t, { correoVerificadoEn = new Date(), ap
   return nueva;
 }
 
+// El administrador puede cerrar el registro de un perfil (Perfiles y permisos): la app ya no lo ofrece y el
+// servidor lo rechaza. Las cuentas que crea el administrador no pasan por aquí.
+const PLURAL = { cliente: 'clientes', vendedor: 'negocios', repartidor: 'repartidores' };
+async function exigirRegistroAbierto(tipo) {
+  if (!(await PerfilesService.registroAbierto(tipo))) {
+    throw AppError.forbidden(`Por ahora no estamos recibiendo nuevos ${PLURAL[tipo]}. Vuelve a intentarlo más adelante`, 'REGISTROCERRADO');
+  }
+}
+
+// Qué perfiles puede elegir la pantalla de registro
+const perfilesRegistro = async () => Object.fromEntries((await PerfilesService.permisos()).map((p) => [p.rol, p.registroAbierto]));
+
 async function registrar(datos, req) {
   const tipo = datos.tipoUsuario || 'cliente';
   if (!ROLESREGISTRABLES.includes(tipo)) throw AppError.badRequest('Tipo de usuario inválido', 'TIPOUSUARIOINVALIDO');
+  await exigirRegistroAbierto(tipo);
   const email = normalizarEmail(datos.email);
 
   const cuenta = await withTransaction(async (t) => {
@@ -390,7 +404,7 @@ const existeEmail = async (email) => (await Persona.count({ where: { correo: nor
 
 module.exports = {
   ROLES,
-  registrar, crearCuenta, usuarioPerfil, login, refrescar, cerrarSesion, cerrarTodasLasSesiones,
+  registrar, perfilesRegistro, crearCuenta, usuarioPerfil, login, refrescar, cerrarSesion, cerrarTodasLasSesiones,
   obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave,
   solicitarCodigoReset, verificarCodigoReset, restablecerClave,
   enviarCodigoEmail, verificarCodigoEmail,

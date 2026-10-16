@@ -9,6 +9,7 @@ const { verificarToken } = require('../../middlewares/auth.middleware');
 // Cada ruta lista, en orden: límite de peticiones -> reglas de validación -> validar -> controller.
 
 // --- Públicas ---
+router.get('/registro/perfiles', limite.consultas(), controller.perfilesRegistro);
 router.post('/register', limite.registro(), schema.registro, validar, controller.register);
 router.post('/login', limite.login(), schema.login, validar, controller.login);
 

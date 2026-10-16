@@ -3,7 +3,7 @@ const { Repartidor, RepartidorEstado, Ubicacion } = require('./repartidor.model'
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const { datosAprobacion, pedirRevision: pedirRevisionDe } = require('../../shared/helpers/aprobacion');
-const ConfiguracionService = require('../../shared/services/configuracion.service');
+const PerfilesService = require('../../shared/services/perfiles.service');
 const { auditar, logMensaje } = require('../../shared/services/log.service');
 const { normalizarPlaca } = require('../../shared/utils/normalizers');
 const { distanciaKm } = require('../../shared/utils/geo');
@@ -77,12 +77,12 @@ function exigirAprobado(r) {
 // Perfil
 // ---------------------------------------------------------------------------------------------
 // Lo usa el registro (dentro de su transacción) y POST /api/repartidor. Mientras no haya panel de administración,
-// nace aprobado si APROBACIONAUTOMATICA está activa (igual que los negocios).
+// nace aprobado si el perfil repartidor tiene la aprobación automática (igual que los negocios).
 async function crearPerfil(usuarioId, datos, opciones = {}) {
   const vehiculo = vehiculoDe(datos.vehiculo) || (datos.placa ? TIPOVEHICULO.MOTOCICLETA : TIPOVEHICULO.APIE);
   const placa = placaPara(vehiculo, datos.placa);
   await exigirPlacaLibre(placa, usuarioId, opciones);
-  const automatica = datos.aprobado ?? (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true;
+  const automatica = datos.aprobado ?? (await PerfilesService.aprobacionAutomatica('repartidor'));
   return Repartidor.create({
     usuarioId,
     vehiculo,

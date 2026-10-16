@@ -17,6 +17,7 @@ const RepartidorService = require('../repartidores/repartidor.service');
 const NotificacionService = require('../notificaciones/notificacion.service');
 const SesionService = require('../../shared/services/sesion.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
+const PerfilesService = require('../../shared/services/perfiles.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const { auditar } = require('../../shared/services/log.service');
@@ -89,7 +90,6 @@ async function resumen() {
     negocios: negociosPor,
     repartidores: { ...repartidoresPor, enLinea: Number(enLinea.total) },
     pendientes: (negociosPor.pendiente || 0) + (repartidoresPor.pendiente || 0),
-    aprobacionAutomatica: (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true,
     correoConfigurado: Correo.configurado(),
   };
 }
@@ -394,22 +394,63 @@ async function editarRepartidor(admin, usuarioId, datos, req) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Configuración
+// Perfiles y permisos
 // ---------------------------------------------------------------------------------------------
-// Aprobación automática: con ella, los negocios y repartidores nuevos nacen aprobados (útil para demos);
-// sin ella, esperan a que el administrador los revise.
-async function cambiarAprobacionAutomatica(admin, activa, req) {
-  await withTransaction((t) => sequelize.query(
-    `UPDATE tconfiguraciones SET valor = CAST(:valor AS jsonb) WHERE cconfiguracion = 'APROBACIONAUTOMATICA' AND fhasta = ${VIGENTE}`,
-    { replacements: { valor: JSON.stringify(activa) }, transaction: t },
-  ), { usuarioId: admin.id });
+// Por perfil (cliente, vendedor, repartidor): si puede registrarse desde la app y, para vendedor y repartidor,
+// si nace aprobado o espera la revisión. Con cuántas cuentas tiene y cuántas solicitudes esperan.
+async function perfiles() {
+  const filas = await sequelize.query(
+    `SELECT crol, COUNT(*) AS total, COUNT(*) FILTER (WHERE cestatususuario = :activo) AS activos
+       FROM tusuarios WHERE fhasta = ${VIGENTE} GROUP BY crol`,
+    { replacements: { activo: ESTATUS.activo }, type: QueryTypes.SELECT },
+  );
+  const cuentas = Object.fromEntries(filas.map((f) => [ROLAAPI[f.crol], { total: Number(f.total), activos: Number(f.activos) }]));
+  const pendientes = {
+    vendedor: await Negocio.count({ where: { aprobacion: APROBACION.PENDIENTE } }),
+    repartidor: await Repartidor.count({ where: { aprobacion: APROBACION.PENDIENTE } }),
+  };
+  return (await PerfilesService.permisos()).map((p) => ({
+    ...p,
+    cuentas: cuentas[p.rol] || { total: 0, activos: 0 },
+    ...(PerfilesService.conAprobacion(p.rol) && { pendientes: pendientes[p.rol] }),
+  }));
+}
+
+const perfil = async (rol) => (await perfiles()).find((p) => p.rol === rol);
+
+// Cambia los permisos de un perfil. Con aprobarPendientes, además aprueba las solicitudes que estaban esperando
+// (cada una recibe su aviso y su correo, igual que si se aprobara a mano).
+async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica, aprobarPendientes }, req) {
+  if (aprobacionAutomatica !== undefined && !PerfilesService.conAprobacion(rol)) {
+    throw AppError.badRequest('Este perfil no pasa por aprobación', 'SINAPROBACION');
+  }
+  const cambios = await withTransaction((t) => PerfilesService.fijar(rol, { registroAbierto, aprobacionAutomatica }, { transaction: t }), { usuarioId: admin.id });
   ConfiguracionService.limpiarCache();
-  auditar({ usuarioId: admin.id, accion: 'CONFIGURACIONCAMBIADA', entidad: 'CONFIGURACIONES', entidadId: 'APROBACIONAUTOMATICA', detalle: { valor: activa }, req });
-  return { aprobacionAutomatica: (await ConfiguracionService.obtener('APROBACIONAUTOMATICA', true)) === true };
+  if (Object.keys(cambios).length) {
+    auditar({ usuarioId: admin.id, accion: 'PERFILCAMBIADO', entidad: 'CONFIGURACIONES', entidadId: rol, detalle: cambios, req });
+  }
+
+  let aprobados = 0;
+  if (aprobarPendientes && PerfilesService.conAprobacion(rol)) {
+    if (rol === 'vendedor') {
+      const lista = await Negocio.findAll({ where: { aprobacion: APROBACION.PENDIENTE }, attributes: ['id'], order: [['id', 'ASC']] });
+      for (const n of lista) {
+        await cambiarAprobacionNegocio(admin, n.id, { estado: 'aprobado' }, req);
+        aprobados += 1;
+      }
+    } else {
+      const lista = await Repartidor.findAll({ where: { aprobacion: APROBACION.PENDIENTE }, attributes: ['usuarioId'], order: [['usuarioId', 'ASC']] });
+      for (const r of lista) {
+        await cambiarAprobacionRepartidor(admin, r.usuarioId, { estado: 'aprobado' }, req);
+        aprobados += 1;
+      }
+    }
+  }
+  return { perfil: await perfil(rol), aprobados };
 }
 
 module.exports = {
   resumen, negocios, cambiarAprobacionNegocio, repartidores, cambiarAprobacionRepartidor,
   usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
-  resolverDueno, editarRepartidor, cambiarAprobacionAutomatica,
+  resolverDueno, editarRepartidor, perfiles, cambiarPerfil,
 };

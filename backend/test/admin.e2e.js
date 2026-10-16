@@ -33,8 +33,23 @@ const CLAVEADMIN = 'admin-secreta-1';
     check('sin sesión: 401', r.status === 401);
 
     seccion('2. Sin aprobación automática: los nuevos esperan revisión');
-    r = await api('PUT', '/api/admin/configuracion', { aprobacionAutomatica: false }, A);
-    check('se apaga la aprobación automática', r.status === 200 && r.body.aprobacionAutomatica === false);
+    r = await api('GET', '/api/admin/perfiles', null, A);
+    const porRol = Object.fromEntries((r.body.perfiles || []).map((p) => [p.rol, p]));
+    check('perfiles: cliente, vendedor y repartidor con su registro abierto', r.status === 200 && ['cliente', 'vendedor', 'repartidor'].every((rol) => porRol[rol]?.registroAbierto === true), JSON.stringify(r.body));
+    check('el cliente no tiene aprobación; vendedor y repartidor sí', !('aprobacionAutomatica' in porRol.cliente) && typeof porRol.vendedor.aprobacionAutomatica === 'boolean' && typeof porRol.repartidor.pendientes === 'number');
+    check('cuenta las cuentas por perfil', porRol.cliente.cuentas.total === 1 && porRol.cliente.cuentas.activos === 1);
+    r = await api('PATCH', '/api/admin/perfiles/cliente', { aprobacionAutomatica: true }, A);
+    check('al cliente no se le pone aprobación: 400 SINAPROBACION', r.status === 400 && r.body.code === 'SINAPROBACION');
+    r = await api('PATCH', '/api/admin/perfiles/administrador', { registroAbierto: true }, A);
+    check('el perfil administrador no se maneja aquí: 400', r.status === 400);
+    r = await api('PATCH', '/api/admin/perfiles/vendedor', {}, A);
+    check('sin ningún cambio: 400', r.status === 400);
+    r = await api('PATCH', '/api/admin/perfiles/cliente', { registroAbierto: false }, cliente.token);
+    check('un cliente no cambia permisos: 403', r.status === 403);
+    for (const rol of ['vendedor', 'repartidor']) {
+      r = await api('PATCH', `/api/admin/perfiles/${rol}`, { aprobacionAutomatica: false }, A);
+      check(`aprobación manual para ${rol}`, r.status === 200 && r.body.perfil.aprobacionAutomatica === false, JSON.stringify(r.body));
+    }
     const luis = await t.registrar('luis@test.com', 'Luis', 'Mora', 'vendedor', { nombreNegocio: 'Pizzería Luis' });
     const L = luis.token;
     r = await api('GET', '/api/mi-negocio', null, L);
@@ -52,7 +67,7 @@ const CLAVEADMIN = 'admin-secreta-1';
     const res = r.body;
     check('resumen: 2 pendientes de revisión', r.status === 200 && res.pendientes === 2, JSON.stringify(res));
     check('usuarios por rol (incluye al admin)', res.usuarios.cliente === 1 && res.usuarios.vendedor === 1 && res.usuarios.repartidor === 1 && res.usuarios.administrador === 1, JSON.stringify(res.usuarios));
-    check('7 días en la gráfica de ventas, hoy sin ventas', res.ultimos7Dias.length === 7 && res.hoy.ventas === 0 && res.aprobacionAutomatica === false);
+    check('7 días en la gráfica de ventas, hoy sin ventas', res.ultimos7Dias.length === 7 && res.hoy.ventas === 0);
 
     seccion('4. Aprobar negocios');
     r = await api('GET', '/api/admin/negocios?aprobacion=pendiente', null, A);
@@ -159,17 +174,37 @@ const CLAVEADMIN = 'admin-secreta-1';
     r = await api('PATCH', '/api/admin/usuarios/admin/estado', { activo: false, motivo: 'Prueba' }, A);
     check('al administrador no se le bloquea: 403', r.status === 403 && r.body.code === 'ADMINPROTEGIDO');
 
-    seccion('8. Auditoría y aprobación automática');
+    seccion('8. Auditoría, perfiles y permisos');
     const acciones = (await q("SELECT DISTINCT accion FROM tauditoria WHERE cusuario='admin'")).map((f) => f.accion);
-    check('todo queda en la auditoría', ['NEGOCIOAPROBACION', 'REPARTIDORAPROBACION', 'PEDIDOCANCELADOADMIN', 'USUARIOBLOQUEADO', 'USUARIOREACTIVADO', 'CONFIGURACIONCAMBIADA'].every((a) => acciones.includes(a)), acciones.join());
-    check('el historial de la configuración guarda el valor anterior', (await q("SELECT 1 FROM tconfiguraciones WHERE cconfiguracion='APROBACIONAUTOMATICA'")).length === 2);
-    r = await api('PUT', '/api/admin/configuracion', { aprobacionAutomatica: true }, A);
+    check('todo queda en la auditoría', ['NEGOCIOAPROBACION', 'REPARTIDORAPROBACION', 'PEDIDOCANCELADOADMIN', 'USUARIOBLOQUEADO', 'USUARIOREACTIVADO', 'PERFILCAMBIADO'].every((a) => acciones.includes(a)), acciones.join());
+    check('el historial de la configuración guarda el valor anterior', (await q("SELECT 1 FROM tconfiguraciones WHERE cconfiguracion='APROBACIONAUTOREPARTIDOR'")).length === 2);
+    // Registro cerrado: la app no lo ofrece y el servidor lo rechaza
+    r = await api('PATCH', '/api/admin/perfiles/repartidor', { registroAbierto: false }, A);
+    check('cerrar el registro de repartidores', r.status === 200 && r.body.perfil.registroAbierto === false);
+    r = await api('GET', '/api/auth/registro/perfiles');
+    check('la pantalla de registro (sin sesión) sabe que está cerrado', r.status === 200 && r.body.perfiles.repartidor === false && r.body.perfiles.cliente === true, JSON.stringify(r.body));
+    const cerrado = await t.registrar('tito@test.com', 'Tito', 'Lara', 'repartidor', { vehiculo: 'Bicicleta' });
+    check('registrarse como repartidor con el registro cerrado: no crea la cuenta', !cerrado.token);
+    check('y no queda ninguna persona creada', (await q("SELECT 1 FROM tpersonas WHERE correo='tito@test.com'")).length === 0);
+    const otroCliente = await t.registrar('lola@test.com', 'Lola', 'Vega', 'cliente');
+    check('los clientes siguen pudiendo registrarse', !!otroCliente.token);
+    r = await api('PATCH', '/api/admin/perfiles/repartidor', { registroAbierto: true }, A);
+    // Aprobación manual: el nuevo espera; al pasar a automática se aprueban los que esperaban
     const rosa = await t.registrar('rosa@test.com', 'Rosa', 'Paz', 'repartidor', { vehiculo: 'Bicicleta' });
     r = await api('GET', '/api/repartidor', null, rosa.token);
+    check('con el registro abierto de nuevo y aprobación manual, nace pendiente', r.body.repartidor?.aprobacion === 'pendiente', JSON.stringify(r.body));
+    r = await api('GET', '/api/admin/perfiles', null, A);
+    check('el perfil repartidor muestra 1 pendiente', r.body.perfiles.find((p) => p.rol === 'repartidor').pendientes === 1);
+    r = await api('PATCH', '/api/admin/perfiles/repartidor', { aprobacionAutomatica: true, aprobarPendientes: true }, A);
+    check('automática + aprobar pendientes: aprueba 1', r.status === 200 && r.body.aprobados === 1 && r.body.perfil.pendientes === 0 && r.body.perfil.aprobacionAutomatica === true, JSON.stringify(r.body));
+    check('y Rosa recibe su aviso de aprobada', (await q("SELECT 1 FROM tnotificaciones WHERE cusuario=$1 AND tipo='repartidor_aprobado'", [rosa.usuario.id])).length === 1);
+    const nico = await t.registrar('nico@test.com', 'Nico', 'Paz', 'repartidor', { vehiculo: 'Bicicleta' });
+    r = await api('GET', '/api/repartidor', null, nico.token);
     check('con la aprobación automática encendida, el nuevo nace aprobado', r.body.repartidor?.aprobacion === 'aprobado');
+    check('la aprobación del vendedor sigue manual (cada perfil por separado)', (await api('GET', '/api/admin/perfiles', null, A)).body.perfiles.find((p) => p.rol === 'vendedor').aprobacionAutomatica === false);
 
     seccion('9. Crear, editar y dar de baja cuentas');
-    await api('PUT', '/api/admin/configuracion', { aprobacionAutomatica: false }, A);
+    await api('PATCH', '/api/admin/perfiles/repartidor', { aprobacionAutomatica: false }, A);
     const nuevo = (rol, n, extra = {}) => api('POST', '/api/admin/usuarios', {
       nombre: 'Nuevo', apellido: `Rol${n}`, email: `nuevo${n}@test.com`, cedula: t.cedula(9, 5000 + n), telefono: `098800000${n}`, password: 'secreto1', rol, ...extra,
     }, A);
