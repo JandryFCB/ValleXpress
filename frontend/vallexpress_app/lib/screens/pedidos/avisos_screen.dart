@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../models/pedido.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_error.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
 import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
+import '../repartidor/entrega_screen.dart';
+import '../vendedor/pedido_negocio_screen.dart';
 import 'pedido_detalle_screen.dart';
 
 /// Avisos (notificaciones): lo que pasó con tus pedidos. Los nuevos llegan en vivo. Tocar uno lo marca como leído
@@ -71,7 +75,15 @@ class _AvisosScreenState extends State<AvisosScreen> {
       });
       PedidosService.marcarAvisoLeido(a.id).catchError((_) {});
     }
-    if (a.pedidoId != null) await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: a.pedidoId!)));
+    if (a.pedidoId == null) return;
+    // Cada rol ve el pedido en su propia pantalla (con sus acciones)
+    final id = a.pedidoId!;
+    final pantalla = switch (context.read<AuthProvider>().usuario?['tipoUsuario']) {
+      'vendedor' => PedidoNegocioScreen(pedidoId: id),
+      'repartidor' => EntregaScreen(pedidoId: id),
+      _ => PedidoDetalleScreen(pedidoId: id),
+    };
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
   }
 
   Future<void> _leerTodos() async {

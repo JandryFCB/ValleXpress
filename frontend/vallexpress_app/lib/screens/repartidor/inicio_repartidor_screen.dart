@@ -11,8 +11,8 @@ import '../../services/tiempo_real.dart';
 import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
 import '../../widgets/panel_aprobacion.dart';
+import '../../widgets/campana_avisos.dart';
 import '../../widgets/ui/ui.dart';
-import '../pedidos/avisos_screen.dart';
 import '../pedidos/mis_pedidos_screen.dart' show TarjetaPedido;
 import '../profile/perfil_screen.dart';
 import 'entrega_screen.dart';
@@ -200,13 +200,7 @@ class _EntregasState extends State<_Entregas> {
       appBar: AppBar(
         title: const Text('Entregas'),
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            tooltip: 'Avisos',
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AvisosScreen())),
-          ),
-        ],
+        actions: const [CampanaAvisos()],
       ),
       child: _contenido(),
     );

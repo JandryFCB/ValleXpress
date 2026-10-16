@@ -7,6 +7,7 @@ import '../../services/api_error.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
 import '../../utils/formato.dart';
+import '../../widgets/campana_avisos.dart';
 import '../../widgets/ui/ui.dart';
 import 'pedido_negocio_screen.dart';
 
@@ -25,6 +26,7 @@ class PedidosNegocioScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Pedidos'),
           automaticallyImplyLeading: conFlechaAtras,
+          actions: const [CampanaAvisos()],
           bottom: const TabBar(tabs: [Tab(text: 'En curso'), Tab(text: 'Anteriores')]),
         ),
         child: const TabBarView(children: [_Lista(estado: 'activos'), _Lista(estado: 'historial')]),
