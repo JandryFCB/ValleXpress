@@ -6,7 +6,12 @@
     <!-- 📍 PERMISOS DE UBICACIÓN -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <!-- <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/> -->
+    <!-- Repartidor: el GPS sigue con la app minimizada gracias a un servicio en primer plano (notificación fija
+         "Estás en línea"). Se inicia con la app abierta, así basta el permiso "mientras se usa la app": NO se pide
+         ACCESS_BACKGROUND_LOCATION (evita la revisión de ubicación en segundo plano de Google Play). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:enableOnBackInvokedCallback="true"
@@ -36,6 +41,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Ícono y color de las notificaciones push (silueta: Android la pinta de un solo color) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notificacion" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notificacion" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="general" />
 
         <!-- Flutter embedding -->
         <meta-data

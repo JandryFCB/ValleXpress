@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show Color;
 import 'package:geolocator/geolocator.dart';
 import '../models/pedido.dart';
 import 'pedidos_service.dart';
@@ -12,6 +13,8 @@ import 'tiempo_real.dart';
 ///   * Detenido (semáforo, esperando en el local) no manda nada: solo un latido cada 30 s para seguir "visible".
 ///   * Los saltos del GPS con mala señal (se "mueve" menos que su propio margen de error) se ignoran.
 ///   * Si el socket no está conectado, usa el respaldo por HTTP (como máximo cada 15 s).
+///   * En Android sigue funcionando con la app minimizada o la pantalla apagada: corre como servicio en primer plano
+///     con una notificación fija ("Estás en línea"), igual que Uber o Rappi. Al desconectarse desaparece.
 class GpsRepartidor {
   GpsRepartidor._();
   static final GpsRepartidor instancia = GpsRepartidor._();
@@ -49,7 +52,7 @@ class GpsRepartidor {
     final problema = await verificarPermiso();
     if (problema != null) return problema;
 
-    _gps = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10)).listen(
+    _gps = Geolocator.getPositionStream(locationSettings: _ajustes()).listen(
       _alMoverse,
       onError: (e) => debugPrint('GPS repartidor: $e'),
     );
@@ -66,6 +69,26 @@ class GpsRepartidor {
       // la primera posición llegará con el flujo del GPS
     }
     return null;
+  }
+
+  // En Android el flujo del GPS corre como servicio en primer plano: Android no lo corta al minimizar la app
+  static LocationSettings _ajustes() {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10);
+    }
+    return AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
+        notificationTitle: 'Estás en línea en ValleXpress',
+        notificationText: 'Compartimos tu ubicación para asignarte pedidos y que tu cliente siga su entrega',
+        notificationChannelName: 'Ubicación del repartidor',
+        notificationIcon: AndroidResource(name: 'ic_notificacion', defType: 'drawable'),
+        color: Color(0xFF35B35A),
+        enableWakeLock: true, // con la pantalla apagada el GPS sigue
+        setOngoing: true, // no se puede deslizar para quitarla mientras esté en línea
+      ),
+    );
   }
 
   void _alMoverse(Position p) {

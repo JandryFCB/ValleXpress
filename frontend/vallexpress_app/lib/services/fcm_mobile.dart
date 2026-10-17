@@ -17,7 +17,8 @@ import '../utils/abrir_pedido.dart';
 const _canalPedidos = AndroidNotificationChannel(
   'pedidos',
   'Pedidos y entregas',
-  description: 'Pedidos nuevos, cambios de estado y tu repartidor: suenan y aparecen arriba de la pantalla',
+  description:
+      'Pedidos nuevos, cambios de estado y tu repartidor: suenan y aparecen arriba de la pantalla',
   importance: Importance.max,
   playSound: true,
   enableVibration: true,
@@ -30,7 +31,9 @@ const _canalGeneral = AndroidNotificationChannel(
   playSound: true,
 );
 
-bool _esDePedido(String? tipo) => RegExp(r'^(pedido|repartidor_cerca|repartidor_asignado)').hasMatch(tipo ?? '');
+bool _esDePedido(String? tipo) => RegExp(
+  r'^(pedido|repartidor_cerca|repartidor_asignado)',
+).hasMatch(tipo ?? '');
 
 /// Abre el pedido de una notificación tocada (cuando la app ya tiene a dónde navegar)
 void _abrirDesdeNotificacion(Map<String, dynamic> data) {
@@ -42,7 +45,10 @@ void _abrirDesdeNotificacion(Map<String, dynamic> data) {
       abrirPedido(ctx, id);
     } else if (vez < 20) {
       // Al abrir la app desde cero, la sesión tarda un instante en restaurarse
-      Future.delayed(const Duration(milliseconds: 300), () => intentar(vez + 1));
+      Future.delayed(
+        const Duration(milliseconds: 300),
+        () => intentar(vez + 1),
+      );
     }
   }
 
@@ -52,11 +58,12 @@ void _abrirDesdeNotificacion(Map<String, dynamic> data) {
 class LocalNotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
-  static int _siguienteId = DateTime.now().millisecondsSinceEpoch ~/ 1000 % 100000;
+  static int _siguienteId =
+      DateTime.now().millisecondsSinceEpoch ~/ 1000 % 100000;
 
   static Future<void> initialize() async {
     const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@drawable/ic_notificacion');
     const InitializationSettings settings = InitializationSettings(
       android: androidSettings,
     );
@@ -65,11 +72,16 @@ class LocalNotificationService {
       onDidReceiveNotificationResponse: (r) {
         if (r.payload == null) return;
         try {
-          _abrirDesdeNotificacion(Map<String, dynamic>.from(jsonDecode(r.payload!) as Map));
+          _abrirDesdeNotificacion(
+            Map<String, dynamic>.from(jsonDecode(r.payload!) as Map),
+          );
         } catch (_) {}
       },
     );
-    final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await android?.createNotificationChannel(_canalPedidos);
     await android?.createNotificationChannel(_canalGeneral);
   }
@@ -80,7 +92,9 @@ class LocalNotificationService {
     String? body,
     Map<String, dynamic>? data,
   }) async {
-    final canal = _esDePedido(data?['tipo']?.toString()) ? _canalPedidos : _canalGeneral;
+    final canal = _esDePedido(data?['tipo']?.toString())
+        ? _canalPedidos
+        : _canalGeneral;
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
         canal.id,
@@ -111,13 +125,18 @@ class NotificationService {
     if (jwt == null) return;
     final res = await http.post(
       Uri.parse('${AppConstants.baseUrl}/notificaciones/dispositivo'),
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $jwt'},
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $jwt',
+      },
       body: jsonEncode({'token': token, 'plataforma': platform}),
     );
     if (res.statusCode >= 200 && res.statusCode < 300) {
       _ultimoToken = token;
     } else {
-      debugPrint('No se registró el dispositivo: ${res.statusCode} ${res.body}');
+      debugPrint(
+        'No se registró el dispositivo: ${res.statusCode} ${res.body}',
+      );
     }
   }
 
@@ -128,7 +147,10 @@ class NotificationService {
     try {
       await http.delete(
         Uri.parse('${AppConstants.baseUrl}/notificaciones/dispositivo'),
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $jwt'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $jwt',
+        },
         body: jsonEncode({'token': token}),
       );
     } catch (_) {}
@@ -154,7 +176,8 @@ class FcmService {
   /// esperas crecientes (2, 4, 8, 16, 32 s) en vez de dejar al usuario sin notificaciones hasta reabrir la app.
   static Future<void> registrarDispositivo() async {
     if (kIsWeb) return;
-    final intento = ++_intento; // un login nuevo reinicia los reintentos del anterior
+    final intento =
+        ++_intento; // un login nuevo reinicia los reintentos del anterior
     for (var vez = 0; vez < 6 && intento == _intento; vez++) {
       try {
         final token = await FirebaseMessaging.instance.getToken();
@@ -206,7 +229,9 @@ class FcmService {
     });
 
     // Tocar una push con la app en segundo plano o cerrada abre ese pedido
-    FirebaseMessaging.onMessageOpenedApp.listen((m) => _abrirDesdeNotificacion(m.data));
+    FirebaseMessaging.onMessageOpenedApp.listen(
+      (m) => _abrirDesdeNotificacion(m.data),
+    );
     final inicial = await fm.getInitialMessage();
     if (inicial != null) _abrirDesdeNotificacion(inicial.data);
   }
