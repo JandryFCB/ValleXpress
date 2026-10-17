@@ -99,8 +99,9 @@ class _ResumenState extends State<_Resumen> {
   void initState() {
     super.initState();
     _cargar();
-    // Muchos cambios seguidos (un pedido que avanza rápido) se agrupan en una sola recarga
-    _vivo = TiempoReal.instancia.cambios().listen((_) {
+    // Muchos cambios seguidos (un pedido que avanza rápido) se agrupan en una sola recarga. Un comprobante nuevo
+    // también recarga, para que aparezca arriba el aviso de pagos por revisar.
+    _vivo = TiempoReal.instancia.cambios(tiposAviso: const {'comprobante_nuevo'}).listen((_) {
       _espera?.cancel();
       _espera = Timer(const Duration(milliseconds: 800), _cargar);
     });
@@ -122,6 +123,11 @@ class _ResumenState extends State<_Resumen> {
     } catch (e) {
       if (mounted) setState(() => _error = textoDeError(e));
     }
+  }
+
+  Future<void> _abrirCobros() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const CobrosScreen()));
+    _cargar();
   }
 
   Future<void> _abrirPerfiles() async {
@@ -168,7 +174,22 @@ class _ResumenState extends State<_Resumen> {
                     ),
                   if (r.pendientes > 0)
                     Aparecer(
-                      child: _AvisoPendientes(cantidad: r.pendientes, onTap: widget.irAAprobaciones),
+                      child: _AvisoPendientes(
+                        icono: Icons.fact_check_rounded,
+                        titulo: r.pendientes == 1 ? '1 cuenta espera tu revisión' : '${r.pendientes} cuentas esperan tu revisión',
+                        detalle: 'Negocios y repartidores nuevos',
+                        onTap: widget.irAAprobaciones,
+                      ),
+                    ),
+                  if (r.comprobantesPorRevisar > 0)
+                    Aparecer(
+                      child: _AvisoPendientes(
+                        icono: Icons.receipt_long_rounded,
+                        color: AppTheme.infoColor,
+                        titulo: r.comprobantesPorRevisar == 1 ? '1 comprobante de pago por revisar' : '${r.comprobantesPorRevisar} comprobantes de pago por revisar',
+                        detalle: 'Comisiones que los negocios ya transfirieron',
+                        onTap: _abrirCobros,
+                      ),
                     ),
                   const SizedBox(height: 14),
                   _Cifras(r: r),
@@ -195,10 +216,8 @@ class _ResumenState extends State<_Resumen> {
                     icono: Icons.savings_rounded,
                     titulo: 'Cobros a negocios',
                     detalle: 'Comisiones por cobrar cada semana y pagos recibidos',
-                    onTap: () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const CobrosScreen()));
-                      _cargar();
-                    },
+                    insignia: r.comprobantesPorRevisar,
+                    onTap: _abrirCobros,
                   ),
                   _AccesoConfig(
                     icono: Icons.manage_accounts_rounded,
@@ -243,10 +262,14 @@ class _Saludo extends StatelessWidget {
   }
 }
 
+/// Tarjeta llamativa arriba del resumen para lo que espera una acción del administrador
 class _AvisoPendientes extends StatelessWidget {
-  const _AvisoPendientes({required this.cantidad, required this.onTap});
+  const _AvisoPendientes({required this.icono, required this.titulo, required this.detalle, required this.onTap, this.color = AppTheme.warningColor});
 
-  final int cantidad;
+  final IconData icono;
+  final String titulo;
+  final String detalle;
+  final Color color;
   final VoidCallback onTap;
 
   @override
@@ -256,21 +279,18 @@ class _AvisoPendientes extends StatelessWidget {
       padding: const EdgeInsets.only(top: 14),
       child: TarjetaValle(
         onTap: onTap,
-        color: AppTheme.warningColor.withValues(alpha: 0.14),
-        colorBorde: AppTheme.warningColor.withValues(alpha: 0.6),
+        color: color.withValues(alpha: 0.14),
+        colorBorde: color.withValues(alpha: 0.6),
         child: Row(
           children: [
-            const IconoLatiendo(icono: Icons.fact_check_rounded, color: AppTheme.warningColor, tamano: 40),
+            IconoLatiendo(icono: icono, color: color, tamano: 40),
             const SizedBox(width: 6),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    cantidad == 1 ? '1 cuenta espera tu revisión' : '$cantidad cuentas esperan tu revisión',
-                    style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  Text('Negocios y repartidores nuevos', style: tema.bodySmall),
+                  Text(titulo, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(detalle, style: tema.bodySmall),
                 ],
               ),
             ),
@@ -543,8 +563,9 @@ class _Comunidad extends StatelessWidget {
 
 /// Una fila de la sección Configuración del resumen
 class _AccesoConfig extends StatelessWidget {
-  const _AccesoConfig({required this.icono, required this.titulo, required this.detalle, required this.onTap});
+  const _AccesoConfig({required this.icono, required this.titulo, required this.detalle, required this.onTap, this.insignia = 0});
 
+  final int insignia; // cuántas cosas esperan revisión ahí dentro
   final IconData icono;
   final String titulo;
   final String detalle;
@@ -559,7 +580,7 @@ class _AccesoConfig extends StatelessWidget {
         onTap: onTap,
         child: Row(
           children: [
-            Icon(icono, color: context.colores.primario),
+            Badge(isLabelVisible: insignia > 0, label: Text('$insignia'), child: Icon(icono, color: context.colores.primario)),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

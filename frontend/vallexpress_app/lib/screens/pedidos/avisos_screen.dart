@@ -71,8 +71,7 @@ class _AvisosScreenState extends State<AvisosScreen> {
       });
       PedidosService.marcarAvisoLeido(a.id).catchError((_) {});
     }
-    if (a.pedidoId == null) return;
-    await abrirPedido(context, a.pedidoId!); // cada rol lo ve en su pantalla
+    await abrirAviso(context, tipo: a.tipo, pedidoId: a.pedidoId); // cada rol lo ve en su pantalla
   }
 
   Future<void> _leerTodos() async {

@@ -33,7 +33,12 @@ class EstadoCuentaVista extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final debe = cuenta.saldoPendiente > 0;
-    final color = cuenta.bloqueado ? AppTheme.errorColor : (debe ? AppTheme.warningColor : AppTheme.successColor);
+    final soloRevision = debe && !cuenta.bloqueado && cuenta.saldoPorPagar <= 0; // todo lo que debe ya tiene comprobante
+    final color = cuenta.bloqueado
+        ? AppTheme.errorColor
+        : soloRevision
+            ? AppTheme.infoColor
+            : (debe ? AppTheme.warningColor : AppTheme.successColor);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -45,7 +50,7 @@ class EstadoCuentaVista extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(debe ? (paraAdmin ? 'Debe a ValleXpress' : 'Por pagar a ValleXpress') : 'Estás al día', style: tema.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w800)),
+              Text(soloRevision ? 'Comprobante en revisión' : debe ? (paraAdmin ? 'Debe a ValleXpress' : 'Por pagar a ValleXpress') : 'Estás al día', style: tema.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               DineroAnimado(cuenta.saldoPendiente, estilo: tema.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
@@ -54,8 +59,10 @@ class EstadoCuentaVista extends StatelessWidget {
                     ? (paraAdmin
                         ? 'Tiene una semana vencida: no está recibiendo pedidos hasta que pague'
                         : 'Tienes una semana vencida: no estás recibiendo pedidos. Transfiere y sube el comprobante')
+                    : soloRevision
+                        ? (paraAdmin ? 'Envió el comprobante: revísalo abajo para aprobarlo o rechazarlo' : 'Ya enviaste el comprobante. Te avisamos apenas lo revisemos')
                     : debe
-                        ? 'La comisión de cada semana se paga dentro de ${cuenta.diasGracia} días después de que termina'
+                        ? '${cuenta.saldoEnRevision > 0 ? '${Formato.dinero(cuenta.saldoEnRevision)} en revisión. ' : ''}La comisión de cada semana se paga dentro de ${cuenta.diasGracia} días después de que termina'
                         : 'No hay comisiones pendientes',
                 style: tema.bodySmall,
               ),

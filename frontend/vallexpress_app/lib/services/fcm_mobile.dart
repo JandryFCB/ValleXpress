@@ -35,14 +35,15 @@ bool _esDePedido(String? tipo) => RegExp(
   r'^(pedido|repartidor_cerca|repartidor_asignado)',
 ).hasMatch(tipo ?? '');
 
-/// Abre el pedido de una notificación tocada (cuando la app ya tiene a dónde navegar)
+/// Abre el pedido (o la pantalla de cuentas) de una notificación tocada, cuando la app ya tiene a dónde navegar
 void _abrirDesdeNotificacion(Map<String, dynamic> data) {
   final id = int.tryParse('${data['pedidoId'] ?? ''}');
-  if (id == null) return;
+  final tipo = data['tipo']?.toString();
+  if (id == null && !const {'comprobante_nuevo', 'liquidacion_pagada', 'comprobante_rechazado'}.contains(tipo)) return;
   void intentar(int vez) {
     final ctx = navigatorKey.currentContext;
     if (ctx != null && ctx.read<AuthProvider>().isAuthenticated) {
-      abrirPedido(ctx, id);
+      abrirAviso(ctx, tipo: tipo, pedidoId: id);
     } else if (vez < 20) {
       // Al abrir la app desde cero, la sesión tarda un instante en restaurarse
       Future.delayed(

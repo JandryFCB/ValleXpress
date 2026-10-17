@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../screens/admin/cobros_screen.dart';
 import '../screens/pedidos/pedido_detalle_screen.dart';
 import '../screens/repartidor/entrega_screen.dart';
+import '../screens/vendedor/mis_cuentas_screen.dart';
 import '../screens/vendedor/pedido_negocio_screen.dart';
 
 /// Abre un pedido en la pantalla de quien lo mira, con sus acciones: el vendedor en la de su negocio, el
@@ -15,4 +17,16 @@ Future<void> abrirPedido(BuildContext context, int pedidoId) {
     _ => PedidoDetalleScreen(pedidoId: pedidoId),
   };
   return Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
+}
+
+/// Abre lo que corresponde a un aviso: su pedido o, en los de cobros, la pantalla de cuentas (Cobros a negocios
+/// para el administrador, Mis cuentas para el negocio). Si el aviso no lleva a ningún lado no hace nada.
+Future<void> abrirAviso(BuildContext context, {String? tipo, int? pedidoId}) async {
+  if (pedidoId != null) return abrirPedido(context, pedidoId);
+  final Widget? pantalla = switch (tipo) {
+    'comprobante_nuevo' => const CobrosScreen(),
+    'liquidacion_pagada' || 'comprobante_rechazado' => const MisCuentasScreen(),
+    _ => null,
+  };
+  if (pantalla != null) await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
 }

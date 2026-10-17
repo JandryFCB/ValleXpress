@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../models/liquidacion.dart';
 import '../../services/api_error.dart';
 import '../../services/catalogo_service.dart';
+import '../../services/tiempo_real.dart';
 import '../../utils/formato.dart';
 import '../../utils/imagen.dart';
 import '../../widgets/estado_cuenta.dart';
@@ -86,8 +88,9 @@ class _MisCuentasScreenState extends State<MisCuentasScreen> {
   }
 }
 
-/// Aviso en el inicio del vendedor cuando debe comisiones (y más fuerte si ya está bloqueado). Si está al día no
-/// ocupa espacio.
+/// Aviso en el inicio del vendedor cuando debe comisiones (y más fuerte si ya está bloqueado). Si ya envió el
+/// comprobante muestra que está en revisión. Si está al día no ocupa espacio. Se recarga cuando el admin revisa un
+/// pago y al volver a la app.
 class AvisoCuenta extends StatefulWidget {
   const AvisoCuenta({super.key, this.margen = const EdgeInsets.fromLTRB(16, 12, 16, 0)});
 
@@ -99,11 +102,19 @@ class AvisoCuenta extends StatefulWidget {
 
 class _AvisoCuentaState extends State<AvisoCuenta> {
   EstadoDeCuenta? _cuenta;
+  StreamSubscription? _vivo;
 
   @override
   void initState() {
     super.initState();
     _cargar();
+    _vivo = TiempoReal.instancia.cambios(tiposAviso: const {'liquidacion_pagada', 'comprobante_rechazado'}, sinPedidos: true).listen((_) => _cargar());
+  }
+
+  @override
+  void dispose() {
+    _vivo?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargar() async {
@@ -120,7 +131,19 @@ class _AvisoCuentaState extends State<AvisoCuenta> {
     final c = _cuenta;
     final tema = Theme.of(context).textTheme;
     if (c == null || c.saldoPendiente <= 0) return const SizedBox(width: double.infinity);
-    final color = c.bloqueado ? AppTheme.errorColor : AppTheme.warningColor;
+    final soloRevision = !c.bloqueado && c.saldoPorPagar <= 0; // todo lo que debía ya tiene comprobante
+    final color = c.bloqueado ? AppTheme.errorColor : (soloRevision ? AppTheme.infoColor : AppTheme.warningColor);
+    final (icono, titulo, detalle) = c.bloqueado
+        ? (Icons.block_rounded, 'No estás recibiendo pedidos', 'Tienes ${Formato.dinero(c.saldoPorPagar)} vencidos. Toca para ver cómo pagar')
+        : soloRevision
+            ? (Icons.hourglass_top_rounded, 'Comprobante en revisión', 'Recibimos tu pago de ${Formato.dinero(c.saldoEnRevision)}. Te avisamos cuando lo revisemos')
+            : (
+                Icons.account_balance_wallet_rounded,
+                'Comisión por pagar: ${Formato.dinero(c.saldoPorPagar)}',
+                c.saldoEnRevision > 0
+                    ? '${Formato.dinero(c.saldoEnRevision)} ya están en revisión. Toca para ver el detalle'
+                    : 'Toca para ver el detalle y a dónde transferir',
+              );
     return Padding(
       padding: widget.margen,
       child: TarjetaValle(
@@ -132,14 +155,14 @@ class _AvisoCuentaState extends State<AvisoCuenta> {
         colorBorde: color.withValues(alpha: 0.6),
         child: Row(
           children: [
-            Icon(c.bloqueado ? Icons.block_rounded : Icons.account_balance_wallet_rounded, color: color),
+            Icon(icono, color: color),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(c.bloqueado ? 'No estás recibiendo pedidos' : 'Comisión por pagar: ${Formato.dinero(c.saldoPendiente)}', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                  Text(c.bloqueado ? 'Tienes ${Formato.dinero(c.saldoPendiente)} vencidos. Toca para ver cómo pagar' : 'Toca para ver el detalle y a dónde transferir', style: tema.bodySmall),
+                  Text(titulo, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(detalle, style: tema.bodySmall),
                 ],
               ),
             ),

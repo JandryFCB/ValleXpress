@@ -137,17 +137,24 @@ class SemanaLiquidacion {
 
 /// Estado de cuenta de un negocio con ValleXpress
 class EstadoDeCuenta {
-  const EstadoDeCuenta({required this.semanas, required this.saldoPendiente, required this.bloqueado, required this.diasGracia, required this.cuenta});
+  const EstadoDeCuenta({required this.semanas, required this.saldoPendiente, required this.bloqueado, required this.diasGracia, required this.cuenta, this.saldoEnRevision = 0, this.semanasEnRevision = 0});
 
   final List<SemanaLiquidacion> semanas;
   final double saldoPendiente;
+  final double saldoEnRevision; // de lo pendiente, lo que ya tiene comprobante enviado
+  final int semanasEnRevision;
   final bool bloqueado; // tiene una semana vencida: no recibe pedidos
   final int diasGracia;
   final CuentaCobro cuenta; // a dónde transferir
 
+  /// Lo que todavía falta pagar o comprobar (sin contar lo que está en revisión)
+  double get saldoPorPagar => double.parse((saldoPendiente - saldoEnRevision).toStringAsFixed(2));
+
   factory EstadoDeCuenta.desdeJson(Map<String, dynamic> j) => EstadoDeCuenta(
         semanas: (j['semanas'] as List? ?? []).map((s) => SemanaLiquidacion.desdeJson(Map<String, dynamic>.from(s))).toList(),
         saldoPendiente: _num(j['saldoPendiente']),
+        saldoEnRevision: _num(j['saldoEnRevision']),
+        semanasEnRevision: (j['semanasEnRevision'] as num?)?.toInt() ?? 0,
         bloqueado: j['bloqueado'] == true,
         diasGracia: (j['diasGracia'] as num?)?.toInt() ?? 7,
         cuenta: CuentaCobro.desdeJson(j['cuenta']),

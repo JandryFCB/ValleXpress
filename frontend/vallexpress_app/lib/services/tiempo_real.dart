@@ -35,12 +35,15 @@ class TiempoReal {
 
   /// Cuándo recargar una pantalla: un cambio de estado (de ese pedido, o de cualquiera si no se indica) o el
   /// regreso de la app desde segundo plano, porque lo que pasó mientras el socket dormía no llegó por él.
-  Stream<void> cambios({int? pedidoId}) {
+  /// Con [tiposAviso] también recarga cuando llega un aviso de esos tipos (p. ej. un comprobante nuevo).
+  /// Con [sinPedidos] ignora los cambios de estado de pedidos.
+  Stream<void> cambios({int? pedidoId, Set<String> tiposAviso = const {}, bool sinPedidos = false}) {
     final subs = <StreamSubscription>[];
     late final StreamController<void> c;
     c = StreamController<void>(
       onListen: () {
-        subs.add(pedidos.where((e) => pedidoId == null || e.pedidoId == pedidoId).listen((_) => c.add(null)));
+        if (!sinPedidos) subs.add(pedidos.where((e) => pedidoId == null || e.pedidoId == pedidoId).listen((_) => c.add(null)));
+        if (tiposAviso.isNotEmpty) subs.add(avisos.where((a) => tiposAviso.contains(a.tipo)).listen((_) => c.add(null)));
         subs.add(_reanudado.stream.listen((_) => c.add(null)));
       },
       onCancel: () {

@@ -40,6 +40,7 @@ class ResumenAdmin {
     required this.repartidores,
     required this.repartidoresEnLinea,
     required this.pendientes,
+    this.comprobantesPorRevisar = 0,
     this.correoConfigurado = true,
   });
 
@@ -56,6 +57,7 @@ class ResumenAdmin {
   final Map<String, int> repartidores;
   final int repartidoresEnLinea;
   final int pendientes;
+  final int comprobantesPorRevisar; // pagos de comisión que esperan tu revisión
   final bool correoConfigurado;
 
   int get totalEnCurso => enCurso.values.fold(0, (a, b) => a + b);
@@ -86,6 +88,7 @@ class ResumenAdmin {
       repartidores: _conteo(Map.of(rep)..remove('enLinea')),
       repartidoresEnLinea: (rep['enLinea'] as num?)?.toInt() ?? 0,
       pendientes: (j['pendientes'] as num?)?.toInt() ?? 0,
+      comprobantesPorRevisar: (j['comprobantesPorRevisar'] as num?)?.toInt() ?? 0,
       correoConfigurado: j['correoConfigurado'] != false,
     );
   }
