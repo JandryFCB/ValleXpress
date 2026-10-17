@@ -120,7 +120,10 @@ class ProfileService {
     final token = await _getToken();
     final response = await http.post(
       Uri.parse('${AppConstants.baseUrl}/usuarios/foto-perfil'),
-      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
       body: jsonEncode({'foto': base64Image}),
     );
     if (response.statusCode != 200) {

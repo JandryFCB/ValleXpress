@@ -11,10 +11,13 @@ import '../../services/tiempo_real.dart';
 import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
 import '../../widgets/panel_aprobacion.dart';
+import '../../services/permisos_celular.dart';
+import '../../widgets/aviso_permisos.dart';
 import '../../widgets/campana_avisos.dart';
 import '../../widgets/ui/ui.dart';
 import '../pedidos/mis_pedidos_screen.dart' show TarjetaPedido;
 import '../profile/perfil_screen.dart';
+import '../profile/permisos_screen.dart';
 import 'entrega_screen.dart';
 import 'vehiculo_screen.dart';
 
@@ -157,9 +160,11 @@ class _EntregasState extends State<_Entregas> {
   }
 
   Future<void> _cambiarLinea(bool enLinea) async {
-    if (enLinea) {
-      final problema = await GpsRepartidor.verificarPermiso();
-      if (problema != null) return mounted ? mostrarError(context, problema) : null;
+    // Para conectarse hacen falta la ubicación precisa y las notificaciones: si falta algo, se le guía paso a paso
+    if (enLinea && !await PermisosCelular.listoParaRepartir()) {
+      if (!mounted) return;
+      final listo = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const PermisosScreen(rol: 'repartidor')));
+      if (listo != true) return mounted ? mostrarError(context, 'Sin ubicación y notificaciones no podemos asignarte pedidos') : null;
     }
     setState(() => _cambiandoLinea = true);
     try {
@@ -258,6 +263,7 @@ class _EntregasState extends State<_Entregas> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
+          const AvisoPermisos(rol: 'repartidor'),
           // En línea
           TarjetaValle(
             color: perfil.disponible ? c.primario.withValues(alpha: 0.12) : null,

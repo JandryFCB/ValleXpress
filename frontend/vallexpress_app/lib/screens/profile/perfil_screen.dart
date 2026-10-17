@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/constants.dart';
@@ -13,6 +14,7 @@ import '../../utils/formato.dart';
 import '../../utils/imagen.dart';
 import '../../widgets/ui/ui.dart';
 import 'addresses_screen.dart';
+import 'permisos_screen.dart';
 import 'settings_screen.dart';
 import 'telefonos_screen.dart';
 import '../../services/pedidos_service.dart';
@@ -51,14 +53,20 @@ class _PerfilScreenState extends State<PerfilScreen> {
       // El perfil es obligatorio; teléfonos y direcciones son un resumen: si fallan, el perfil igual se muestra
       final resultados = await Future.wait<Object?>([
         ProfileService.obtenerPerfil(),
-        TelefonoService.listar().then<Object?>((v) => v).catchError((_) => <Telefono>[]),
-        AddressService.listar().then<Object?>((v) => v).catchError((_) => <dynamic>[]),
+        TelefonoService.listar()
+            .then<Object?>((v) => v)
+            .catchError((_) => <Telefono>[]),
+        AddressService.listar()
+            .then<Object?>((v) => v)
+            .catchError((_) => <dynamic>[]),
       ]);
       if (!mounted) return;
       setState(() {
         _usuario = resultados[0] as Map<String, dynamic>;
         _telefonos = resultados[1] as List<Telefono>;
-        _direcciones = (resultados[2] as List<dynamic>).map((d) => Direccion.desdeJson(d as Map<String, dynamic>)).toList();
+        _direcciones = (resultados[2] as List<dynamic>)
+            .map((d) => Direccion.desdeJson(d as Map<String, dynamic>))
+            .toList();
         _cargando = false;
       });
     } catch (e) {
@@ -76,24 +84,34 @@ class _PerfilScreenState extends State<PerfilScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => _FormularioNombre(nombre: '${u['nombre'] ?? ''}', apellido: '${u['apellido'] ?? ''}'),
+      builder: (_) => _FormularioNombre(
+        nombre: '${u['nombre'] ?? ''}',
+        apellido: '${u['apellido'] ?? ''}',
+      ),
     );
     if (cambios == null || !mounted) return;
-    await context.read<AuthProvider>().actualizarUsuario(cambios); // el saludo del inicio cambia al instante
+    await context.read<AuthProvider>().actualizarUsuario(
+      cambios,
+    ); // el saludo del inicio cambia al instante
     if (!mounted) return;
     mostrarExito(context, 'Datos actualizados');
     await _cargar();
   }
 
   Future<void> _cambiarFoto() async {
-    final base64 = await elegirImagenBase64(context, titulo: 'Tu foto de perfil');
+    final base64 = await elegirImagenBase64(
+      context,
+      titulo: 'Tu foto de perfil',
+    );
     if (base64 == null || !mounted) return;
     setState(() => _subiendoFoto = true);
     try {
       final url = await ProfileService.subirFoto(base64);
       if (!mounted) return;
       setState(() => _usuario = {...?_usuario, 'fotoPerfil': url});
-      await context.read<AuthProvider>().actualizarUsuario({'fotoPerfil': url});   // el inicio la muestra al instante
+      await context.read<AuthProvider>().actualizarUsuario({
+        'fotoPerfil': url,
+      }); // el inicio la muestra al instante
       if (mounted) mostrarExito(context, '¡Foto actualizada! Te ves genial');
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
@@ -112,17 +130,28 @@ class _PerfilScreenState extends State<PerfilScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('¿Cerrar sesión?'),
-        content: const Text('Tendrás que escribir tu contraseña la próxima vez que quieras entrar.'),
+        content: const Text(
+          'Tendrás que escribir tu contraseña la próxima vez que quieras entrar.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor), child: const Text('Cerrar sesión')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Cerrar sesión'),
+          ),
         ],
       ),
     );
     if (confirmado != true || !mounted) return;
     await context.read<AuthProvider>().logout();
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(AppConstants.loginRoute, (_) => false);
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppConstants.loginRoute, (_) => false);
   }
 
   @override
@@ -133,21 +162,46 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Widget _contenido() {
     if (_cargando) return const EsqueletoLista(cantidad: 4, conImagen: false);
     if (_error != null || _usuario == null) {
-      return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tu perfil', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
+      return EstadoVacio(
+        icono: Icons.cloud_off_rounded,
+        color: AppTheme.errorColor,
+        titulo: 'No pudimos cargar tu perfil',
+        mensaje: _error,
+        textoAccion: 'Reintentar',
+        onAccion: _cargar,
+      );
     }
 
     final u = _usuario!;
     final c = context.colores;
     final rol = '${u['tipoUsuario'] ?? 'cliente'}';
     final (colorRol, etiquetaRol, iconoRol) = switch (rol) {
-      'vendedor' => (AppTheme.vendedorColor, 'Vendedor', Icons.storefront_rounded),
-      'repartidor' => (AppTheme.repartidorColor, 'Repartidor', Icons.two_wheeler_rounded),
-      'administrador' => (AppTheme.infoColor, 'Administrador', Icons.admin_panel_settings_rounded),
+      'vendedor' => (
+        AppTheme.vendedorColor,
+        'Vendedor',
+        Icons.storefront_rounded,
+      ),
+      'repartidor' => (
+        AppTheme.repartidorColor,
+        'Repartidor',
+        Icons.two_wheeler_rounded,
+      ),
+      'administrador' => (
+        AppTheme.infoColor,
+        'Administrador',
+        Icons.admin_panel_settings_rounded,
+      ),
       _ => (AppTheme.clienteColor, 'Cliente', Icons.favorite_rounded),
     };
-    final predeterminada = _direcciones.where((d) => d.esPredeterminada).firstOrNull ?? _direcciones.firstOrNull;
-    final principal = _telefonos.where((t) => t.principal).firstOrNull ?? _telefonos.firstOrNull;
-    final nombreCompleto = Formato.titulo('${u['nombre'] ?? ''} ${u['apellido'] ?? ''}');
+    final predeterminada =
+        _direcciones.where((d) => d.esPredeterminada).firstOrNull ??
+        _direcciones.firstOrNull;
+    final principal =
+        _telefonos.where((t) => t.principal).firstOrNull ??
+        _telefonos.firstOrNull;
+    final nombreCompleto = Formato.titulo(
+      '${u['nombre'] ?? ''} ${u['apellido'] ?? ''}',
+    );
 
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -177,11 +231,35 @@ class _PerfilScreenState extends State<PerfilScreen> {
             padding: EdgeInsets.zero,
             child: Column(
               children: [
-                _Fila(icono: Icons.person_outline, titulo: 'Nombre', valor: nombreCompleto, trailing: const Icon(Icons.edit_outlined, size: 20), onTap: _editarNombre),
+                _Fila(
+                  icono: Icons.person_outline,
+                  titulo: 'Nombre',
+                  valor: nombreCompleto,
+                  trailing: const Icon(Icons.edit_outlined, size: 20),
+                  onTap: _editarNombre,
+                ),
                 const _Separador(),
-                _Fila(icono: Icons.badge_outlined, titulo: 'Cédula', valor: '${u['cedula'] ?? '—'}', trailing: Icon(Icons.lock_outline, size: 18, color: c.textoSuave)),
+                _Fila(
+                  icono: Icons.badge_outlined,
+                  titulo: 'Cédula',
+                  valor: '${u['cedula'] ?? '—'}',
+                  trailing: Icon(
+                    Icons.lock_outline,
+                    size: 18,
+                    color: c.textoSuave,
+                  ),
+                ),
                 const _Separador(),
-                _Fila(icono: Icons.alternate_email, titulo: 'Correo', valor: '${u['email'] ?? '—'}', trailing: Icon(Icons.lock_outline, size: 18, color: c.textoSuave)),
+                _Fila(
+                  icono: Icons.alternate_email,
+                  titulo: 'Correo',
+                  valor: '${u['email'] ?? '—'}',
+                  trailing: Icon(
+                    Icons.lock_outline,
+                    size: 18,
+                    color: c.textoSuave,
+                  ),
+                ),
               ],
             ),
           ),
@@ -196,7 +274,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 _Fila(
                   icono: Icons.phone_iphone_outlined,
                   titulo: 'Mis teléfonos',
-                  valor: principal == null ? 'Agrega tu primer teléfono' : '${Formato.telefono(principal.numero)}${_telefonos.length > 1 ? '  ·  +${_telefonos.length - 1}' : ''}',
+                  valor: principal == null
+                      ? 'Agrega tu primer teléfono'
+                      : '${Formato.telefono(principal.numero)}${_telefonos.length > 1 ? '  ·  +${_telefonos.length - 1}' : ''}',
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => _abrir(const TelefonosScreen()),
                 ),
@@ -204,7 +284,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 _Fila(
                   icono: Icons.location_on_outlined,
                   titulo: 'Mis direcciones',
-                  valor: predeterminada == null ? 'Agrega tu primera dirección' : '${predeterminada.titulo}: ${predeterminada.direccion}',
+                  valor: predeterminada == null
+                      ? 'Agrega tu primera dirección'
+                      : '${predeterminada.titulo}: ${predeterminada.direccion}',
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => _abrir(const AddressesScreen()),
                 ),
@@ -223,7 +305,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 valor: 'Tipo, placa y color',
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () async {
-                  final perfil = await PedidosService.miPerfilRepartidor().catchError((_) => null);
+                  final perfil = await PedidosService.miPerfilRepartidor()
+                      .catchError((_) => null);
                   if (mounted) _abrir(VehiculoScreen(actual: perfil));
                 },
               ),
@@ -250,16 +333,35 @@ class _PerfilScreenState extends State<PerfilScreen> {
           const EncabezadoSeccion('Cuenta'),
           TarjetaValle(
             padding: EdgeInsets.zero,
-            child: _Fila(
-              icono: Icons.settings_outlined,
-              titulo: 'Configuración',
-              valor: 'Apariencia, contraseña, notificaciones y más',
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => _abrir(const SettingsScreen()),
+            child: Column(
+              children: [
+                if (!kIsWeb && rol != 'administrador') ...[
+                  _Fila(
+                    icono: Icons.phonelink_setup_rounded,
+                    titulo: 'Permisos del celular',
+                    valor: rol == 'repartidor' ? 'Ubicación, notificaciones y batería' : 'Notificaciones',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(PermisosScreen(rol: rol)),
+                  ),
+                  const _Separador(),
+                ],
+                _Fila(
+                  icono: Icons.settings_outlined,
+                  titulo: 'Configuración',
+                  valor: 'Apariencia, contraseña, notificaciones y más',
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _abrir(const SettingsScreen()),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 24),
-          BotonValle(texto: 'Cerrar sesión', icono: Icons.logout_rounded, tipo: TipoBoton.secundario, onPressed: _cerrarSesion),
+          BotonValle(
+            texto: 'Cerrar sesión',
+            icono: Icons.logout_rounded,
+            tipo: TipoBoton.secundario,
+            onPressed: _cerrarSesion,
+          ),
         ],
       ),
     );
@@ -317,23 +419,63 @@ class _CabeceraPerfil extends StatelessWidget {
                         Positioned.fill(
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(colors: [color, Color.lerp(color, AppTheme.accentColor, 0.45)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                              gradient: LinearGradient(
+                                colors: [
+                                  color,
+                                  Color.lerp(
+                                    color,
+                                    AppTheme.accentColor,
+                                    0.45,
+                                  )!,
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
                             ),
                           ),
                         ),
-                        Positioned(right: -30, top: -40, child: _Burbuja(tamano: 150, color: Colors.white.withValues(alpha: 0.12))),
-                        Positioned(left: 30, bottom: -60, child: _Burbuja(tamano: 120, color: Colors.white.withValues(alpha: 0.08))),
+                        Positioned(
+                          right: -30,
+                          top: -40,
+                          child: _Burbuja(
+                            tamano: 150,
+                            color: Colors.white.withValues(alpha: 0.12),
+                          ),
+                        ),
+                        Positioned(
+                          left: 30,
+                          bottom: -60,
+                          child: _Burbuja(
+                            tamano: 120,
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                        ),
                         Positioned(
                           right: 14,
                           top: 14,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
-                            child: Row(mainAxisSize: MainAxisSize.min, children: [
-                              Icon(iconoRol, size: 16, color: Colors.white),
-                              const SizedBox(width: 6),
-                              Text(etiquetaRol, style: tema.labelLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
-                            ]),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(iconoRol, size: 16, color: Colors.white),
+                                const SizedBox(width: 6),
+                                Text(
+                                  etiquetaRol,
+                                  style: tema.labelLarge?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -356,19 +498,44 @@ class _CabeceraPerfil extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: c.tarjeta,
                                 shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6))],
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: color.withValues(alpha: 0.35),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
                               ),
                               child: AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 400),
-                                child: AvatarValle(key: ValueKey(foto), nombre: iniciales.$1, apellido: iniciales.$2, fotoUrl: foto, tamano: 104, color: color),
+                                child: AvatarValle(
+                                  key: ValueKey(foto),
+                                  nombre: iniciales.$1,
+                                  apellido: iniciales.$2,
+                                  fotoUrl: foto,
+                                  tamano: 104,
+                                  color: color,
+                                ),
                               ),
                             ),
                             if (subiendo)
                               Positioned.fill(
                                 child: Container(
                                   margin: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                                  child: const Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black45,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 28,
+                                      height: 28,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 3,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             Positioned(
@@ -377,8 +544,19 @@ class _CabeceraPerfil extends StatelessWidget {
                               child: Container(
                                 width: 36,
                                 height: 36,
-                                decoration: BoxDecoration(color: c.primario, shape: BoxShape.circle, border: Border.all(color: c.tarjeta, width: 3)),
-                                child: const Icon(Icons.photo_camera_rounded, size: 18, color: Colors.white),
+                                decoration: BoxDecoration(
+                                  color: c.primario,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: c.tarjeta,
+                                    width: 3,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.photo_camera_rounded,
+                                  size: 18,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -394,9 +572,20 @@ class _CabeceraPerfil extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             child: Column(
               children: [
-                Text(nombre, style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(
+                  nombre,
+                  style: tema.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
-                Text('@$usuario', style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
+                Text(
+                  '@$usuario',
+                  style: tema.bodyMedium?.copyWith(color: c.textoSuave),
+                ),
                 const SizedBox(height: 12),
                 Wrap(
                   alignment: WrapAlignment.center,
@@ -404,8 +593,18 @@ class _CabeceraPerfil extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     InsigniaValle(etiquetaRol, color: color, icono: iconoRol),
-                    if (verificado) const InsigniaValle('Correo verificado', color: AppTheme.successColor, icono: Icons.verified_rounded),
-                    if (foto == null) InsigniaValle('Toca la foto para agregar una', color: c.textoSuave, icono: Icons.add_a_photo_rounded),
+                    if (verificado)
+                      const InsigniaValle(
+                        'Correo verificado',
+                        color: AppTheme.successColor,
+                        icono: Icons.verified_rounded,
+                      ),
+                    if (foto == null)
+                      InsigniaValle(
+                        'Toca la foto para agregar una',
+                        color: c.textoSuave,
+                        icono: Icons.add_a_photo_rounded,
+                      ),
                   ],
                 ),
               ],
@@ -424,11 +623,21 @@ class _Burbuja extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Container(width: tamano, height: tamano, decoration: BoxDecoration(shape: BoxShape.circle, color: color));
+  Widget build(BuildContext context) => Container(
+    width: tamano,
+    height: tamano,
+    decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+  );
 }
 
 class _Fila extends StatelessWidget {
-  const _Fila({required this.icono, required this.titulo, required this.valor, this.trailing, this.onTap});
+  const _Fila({
+    required this.icono,
+    required this.titulo,
+    required this.valor,
+    this.trailing,
+    this.onTap,
+  });
 
   final IconData icono;
   final String titulo;
@@ -449,7 +658,10 @@ class _Fila extends StatelessWidget {
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(color: c.primario.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: c.primario.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Icon(icono, size: 20, color: c.primario),
             ),
             const SizedBox(width: 14),
@@ -457,13 +669,27 @@ class _Fila extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(titulo, style: tema.labelMedium?.copyWith(color: c.textoSuave)),
+                  Text(
+                    titulo,
+                    style: tema.labelMedium?.copyWith(color: c.textoSuave),
+                  ),
                   const SizedBox(height: 2),
-                  Text(valor, style: tema.bodyLarge?.copyWith(fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    valor,
+                    style: tema.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
-            if (trailing != null) IconTheme(data: IconThemeData(color: c.textoSuave), child: trailing!),
+            if (trailing != null)
+              IconTheme(
+                data: IconThemeData(color: c.textoSuave),
+                child: trailing!,
+              ),
           ],
         ),
       ),
@@ -475,7 +701,8 @@ class _Separador extends StatelessWidget {
   const _Separador();
 
   @override
-  Widget build(BuildContext context) => Divider(height: 1, indent: 70, color: context.colores.borde);
+  Widget build(BuildContext context) =>
+      Divider(height: 1, indent: 70, color: context.colores.borde);
 }
 
 /// Hoja inferior para editar nombre y apellido
@@ -490,8 +717,12 @@ class _FormularioNombre extends StatefulWidget {
 }
 
 class _FormularioNombreState extends State<_FormularioNombre> {
-  late final TextEditingController _nombre = TextEditingController(text: widget.nombre);
-  late final TextEditingController _apellido = TextEditingController(text: widget.apellido);
+  late final TextEditingController _nombre = TextEditingController(
+    text: widget.nombre,
+  );
+  late final TextEditingController _apellido = TextEditingController(
+    text: widget.apellido,
+  );
   bool _guardando = false;
   String? _error;
 
@@ -515,7 +746,9 @@ class _FormularioNombreState extends State<_FormularioNombre> {
     });
     try {
       await ProfileService.actualizarPerfil(nombre: nombre, apellido: apellido);
-      if (mounted) Navigator.pop(context, {'nombre': nombre, 'apellido': apellido});
+      if (mounted) {
+        Navigator.pop(context, {'nombre': nombre, 'apellido': apellido});
+      }
     } catch (e) {
       if (mounted) setState(() => _error = textoDeError(e));
     } finally {
@@ -526,15 +759,29 @@ class _FormularioNombreState extends State<_FormularioNombre> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        MediaQuery.viewInsetsOf(context).bottom + 20,
+      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Editar mis datos', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Editar mis datos',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 16),
-            CampoValle(controller: _nombre, etiqueta: 'Nombres', icono: Icons.person_outline, mayusculas: TextCapitalization.words, maxLongitud: 100),
+            CampoValle(
+              controller: _nombre,
+              etiqueta: 'Nombres',
+              icono: Icons.person_outline,
+              mayusculas: TextCapitalization.words,
+              maxLongitud: 100,
+            ),
             const SizedBox(height: 14),
             CampoValle(
               controller: _apellido,
@@ -545,10 +792,17 @@ class _FormularioNombreState extends State<_FormularioNombre> {
               accion: TextInputAction.done,
               onSubmitted: (_) => _guardando ? null : _guardar(),
               estado: _error == null ? EstadoCampo.neutro : EstadoCampo.error,
-              ayuda: _error ?? 'Tu cédula y tu correo no se pueden cambiar desde aquí',
+              ayuda:
+                  _error ??
+                  'Tu cédula y tu correo no se pueden cambiar desde aquí',
             ),
             const SizedBox(height: 20),
-            BotonValle(texto: 'Guardar cambios', icono: Icons.check_rounded, cargando: _guardando, onPressed: _guardar),
+            BotonValle(
+              texto: 'Guardar cambios',
+              icono: Icons.check_rounded,
+              cargando: _guardando,
+              onPressed: _guardar,
+            ),
           ],
         ),
       ),
