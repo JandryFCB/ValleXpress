@@ -112,6 +112,19 @@ class AdminService {
     return RepartidorAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo guardar el vehículo')['repartidor']));
   }
 
+  // --- Tarifas: envío por distancia y comisión ---
+  static Future<Map<String, double>> tarifas() async {
+    final res = await http.get(_url('/tarifas'), headers: await _cabeceras());
+    return _aTarifas(_json(res, 'No se pudieron cargar las tarifas')['tarifas']);
+  }
+
+  static Future<Map<String, double>> guardarTarifas(Map<String, double> cambios) async {
+    final res = await http.put(_url('/tarifas'), headers: await _cabeceras(), body: jsonEncode(cambios));
+    return _aTarifas(_json(res, 'No se pudieron guardar las tarifas')['tarifas']);
+  }
+
+  static Map<String, double> _aTarifas(Object? j) => Map<String, dynamic>.from(j as Map).map((k, v) => MapEntry(k, (v as num).toDouble()));
+
   // --- Perfiles y permisos ---
   static Future<List<PerfilPermisos>> perfiles() async {
     final res = await http.get(_url('/perfiles'), headers: await _cabeceras());

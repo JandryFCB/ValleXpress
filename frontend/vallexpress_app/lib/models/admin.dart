@@ -30,6 +30,8 @@ class ResumenAdmin {
     required this.pedidosHoy,
     required this.entregadosHoy,
     required this.ventasHoy,
+    this.comisionesHoy = 0,
+    this.enviosHoy = 0,
     required this.semana,
     required this.enCurso,
     required this.mejores,
@@ -44,7 +46,9 @@ class ResumenAdmin {
   final int pedidosHoy;
   final int entregadosHoy;
   final double ventasHoy;
-  final List<({DateTime dia, int pedidos, double ventas})> semana;
+  final double comisionesHoy; // lo que ganó ValleXpress hoy (comisión de los negocios)
+  final double enviosHoy; // lo que ganaron los repartidores hoy
+  final List<({DateTime dia, int pedidos, double ventas, double comisiones})> semana;
   final Map<String, int> enCurso;
   final List<({int id, String nombre, int pedidos, double ventas})> mejores;
   final Map<String, int> usuarios;
@@ -57,6 +61,7 @@ class ResumenAdmin {
   int get totalEnCurso => enCurso.values.fold(0, (a, b) => a + b);
   int get totalUsuarios => usuarios.values.fold(0, (a, b) => a + b);
   double get ventasSemana => semana.fold(0, (a, d) => a + d.ventas);
+  double get comisionesSemana => semana.fold(0, (a, d) => a + d.comisiones);
 
   factory ResumenAdmin.desdeJson(Map<String, dynamic> j) {
     final hoy = Map<String, dynamic>.from(j['hoy'] ?? {});
@@ -65,9 +70,11 @@ class ResumenAdmin {
       pedidosHoy: (hoy['pedidos'] as num?)?.toInt() ?? 0,
       entregadosHoy: (hoy['entregados'] as num?)?.toInt() ?? 0,
       ventasHoy: _num(hoy['ventas']),
+      comisionesHoy: _num(hoy['comisiones']),
+      enviosHoy: _num(hoy['envios']),
       semana: [
         for (final d in (j['ultimos7Dias'] as List? ?? []))
-          (dia: DateTime.parse('${d['dia']}'), pedidos: (d['pedidos'] as num).toInt(), ventas: _num(d['ventas'])),
+          (dia: DateTime.parse('${d['dia']}'), pedidos: (d['pedidos'] as num).toInt(), ventas: _num(d['ventas']), comisiones: _num(d['comisiones'])),
       ],
       enCurso: _conteo(j['pedidosEnCurso']),
       mejores: [

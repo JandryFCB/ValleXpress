@@ -13,6 +13,7 @@ import '../../widgets/ui/ui.dart';
 import '../profile/perfil_screen.dart';
 import 'aprobaciones_screen.dart';
 import 'perfiles_screen.dart';
+import 'tarifas_screen.dart';
 import 'pedidos_admin_screen.dart';
 import 'usuarios_admin_screen.dart';
 
@@ -184,6 +185,26 @@ class _ResumenState extends State<_Resumen> {
                   _Comunidad(r: r),
                   const EncabezadoSeccion('Configuración'),
                   TarjetaValle(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TarifasScreen())),
+                    child: Row(
+                      children: [
+                        Icon(Icons.price_change_rounded, color: context.colores.primario),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Tarifas y comisión', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                              Text('Envío por distancia y lo que gana ValleXpress', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colores.textoSuave)),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TarjetaValle(
                     onTap: _abrirPerfiles,
                     child: Row(
                       children: [
@@ -304,6 +325,20 @@ class _Cifras extends StatelessWidget {
         titulo: 'Ventas hoy',
         valor: DineroAnimado(r.ventasHoy),
         detalle: 'Semana: ${Formato.dinero(r.ventasSemana)}',
+      ),
+      _Cifra(
+        icono: Icons.account_balance_wallet_rounded,
+        color: AppTheme.accentColor,
+        titulo: 'Ganancia ValleXpress',
+        valor: DineroAnimado(r.comisionesHoy),
+        detalle: 'Semana: ${Formato.dinero(r.comisionesSemana)}',
+      ),
+      _Cifra(
+        icono: Icons.delivery_dining_rounded,
+        color: AppTheme.repartidorColor,
+        titulo: 'Para repartidores',
+        valor: DineroAnimado(r.enviosHoy),
+        detalle: 'envíos de hoy',
       ),
       _Cifra(
         icono: Icons.local_fire_department_rounded,

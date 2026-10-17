@@ -335,7 +335,7 @@ class TarjetaNegocio extends StatelessWidget {
                         runSpacing: 4,
                         children: [
                           _Dato(Icons.timer_outlined, '${n.tiempoPreparacion} min'),
-                          _Dato(Icons.delivery_dining_outlined, n.costoEnvio == 0 ? 'Envío gratis' : 'Envío ${Formato.dinero(n.costoEnvio)}'),
+                          _Dato(Icons.delivery_dining_outlined, n.costoEnvio == 0 ? 'Envío gratis' : 'Envío ${n.envioEstimado ? '' : 'desde '}${Formato.dinero(n.costoEnvio)}'),
                           if (n.pedidoMinimo > 0) _Dato(Icons.shopping_bag_outlined, 'Mín. ${Formato.dinero(n.pedidoMinimo)}'),
                         ],
                       ),

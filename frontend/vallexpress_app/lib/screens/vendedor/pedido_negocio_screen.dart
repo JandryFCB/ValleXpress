@@ -152,6 +152,20 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
               Row(children: [Expanded(child: Text('Envío (para el repartidor)', style: tema.bodyMedium)), Text(Formato.dinero(p.costoEnvio))]),
               const SizedBox(height: 4),
               Row(children: [Expanded(child: Text('Total que paga el cliente', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))), Text(Formato.dinero(p.total), style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))]),
+              // Lo que es del negocio: los productos menos la comisión de ValleXpress (el envío es del repartidor)
+              if (p.recibeNegocio != null) ...[
+                const SizedBox(height: 10),
+                Divider(height: 1, color: c.borde),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(child: Text('Comisión ValleXpress (${(p.comisionPorcentaje ?? 0).toStringAsFixed((p.comisionPorcentaje ?? 0) % 1 == 0 ? 0 : 1)} %)', style: tema.bodyMedium?.copyWith(color: c.textoSuave))),
+                  Text('−${Formato.dinero(p.comision ?? 0)}', style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
+                ]),
+                Row(children: [
+                  Expanded(child: Text('Recibes por este pedido', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: AppTheme.successColor))),
+                  Text(Formato.dinero(p.recibeNegocio!), style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: AppTheme.successColor)),
+                ]),
+              ],
             ],
           ),
         ),

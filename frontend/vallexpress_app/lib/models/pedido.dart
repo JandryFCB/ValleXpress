@@ -199,6 +199,9 @@ class Pedido {
     this.entregaPunto,
     this.distanciaKm,
     this.distanciaAlNegocioKm,
+    this.comision,
+    this.comisionPorcentaje,
+    this.recibeNegocio,
   });
 
   final int id;
@@ -240,8 +243,13 @@ class Pedido {
   final String? negocioTelefono;
   final Punto? entregaPunto;
 
-  /// Del negocio a la entrega, en línea recta
+  /// Del negocio a la entrega: la ruta estimada con la que se cobró el envío
   final double? distanciaKm;
+
+  /// Comisión de ValleXpress y lo que recibe el negocio (solo los ven el negocio y el administrador)
+  final double? comision;
+  final double? comisionPorcentaje;
+  final double? recibeNegocio;
 
   /// Del repartidor al negocio (solo en la lista de pedidos libres)
   final double? distanciaAlNegocioKm;
@@ -301,6 +309,9 @@ class Pedido {
       entregaPunto: Punto.desdeJson(entrega),
       distanciaKm: j['distanciaKm'] == null ? null : _num(j['distanciaKm']),
       distanciaAlNegocioKm: j['distanciaAlNegocioKm'] == null ? null : _num(j['distanciaAlNegocioKm']),
+      comision: j['comision'] == null ? null : _num(j['comision']),
+      comisionPorcentaje: j['comisionPorcentaje'] == null ? null : _num(j['comisionPorcentaje']),
+      recibeNegocio: j['recibeNegocio'] == null ? null : _num(j['recibeNegocio']),
     );
   }
 }

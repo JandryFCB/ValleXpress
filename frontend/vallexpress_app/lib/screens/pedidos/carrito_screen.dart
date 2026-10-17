@@ -31,6 +31,10 @@ class _CarritoScreenState extends State<CarritoScreen> {
   bool _cargando = true;
   bool _enviando = false;
 
+  // Envío real a la dirección elegida (lo calcula ValleXpress por distancia); null mientras se cotiza
+  ({double costoEnvio, double? distanciaKm, bool fueraDeCobertura, double radioKm})? _envio;
+  bool _cotizando = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +58,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
         _metodos = r[1] as List<MetodoPago>;
         if (!_metodos.any((m) => m.codigo == _metodo) && _metodos.isNotEmpty) _metodo = _metodos.first.codigo;
       });
+      _cotizar();
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
     } finally {
@@ -107,12 +112,34 @@ class _CarritoScreenState extends State<CarritoScreen> {
       ),
     );
     if (!mounted) return;
-    if (elegida is Direccion) setState(() => _direccion = elegida);
+    if (elegida is Direccion) {
+      setState(() => _direccion = elegida);
+      _cotizar();
+    }
     if (elegida == 'gestionar') {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressesScreen()));
       await _cargar();
     }
   }
+
+  Future<void> _cotizar() async {
+    final negocio = context.read<CarritoProvider>().negocio;
+    final d = _direccion;
+    if (negocio == null || d == null) return;
+    setState(() => _cotizando = true);
+    try {
+      final e = await PedidosService.cotizar(negocioId: negocio.id, direccionId: int.parse(d.id));
+      if (mounted && _direccion?.id == d.id) setState(() => _envio = e);
+    } catch (_) {
+      if (mounted) setState(() => _envio = null); // sin conexión: se muestra la estimación del negocio
+    } finally {
+      if (mounted) setState(() => _cotizando = false);
+    }
+  }
+
+  double _costoEnvio(CarritoProvider carrito) => _envio?.costoEnvio ?? carrito.costoEnvio;
+  double _total(CarritoProvider carrito) => carrito.subtotal + _costoEnvio(carrito);
+  bool get _fuera => _envio?.fueraDeCobertura == true;
 
   Future<void> _pedir(CarritoProvider carrito) async {
     if (_direccion == null) return _elegirDireccion();
@@ -199,10 +226,14 @@ class _CarritoScreenState extends State<CarritoScreen> {
                   ),
                 ),
               BotonValle(
-                texto: _direccion == null && !_cargando ? 'Elige a dónde llevarlo' : 'Hacer pedido · ${Formato.dinero(carrito.total)}',
+                texto: _direccion == null && !_cargando
+                    ? 'Elige a dónde llevarlo'
+                    : _fuera
+                        ? 'Fuera del área de entrega'
+                        : 'Hacer pedido · ${Formato.dinero(_total(carrito))}',
                 icono: Icons.check_rounded,
                 cargando: _enviando,
-                onPressed: (_cargando || falta > 0 || !recibe) ? null : () => _pedir(carrito),
+                onPressed: (_cargando || _cotizando || _fuera || falta > 0 || !recibe) ? null : () => _pedir(carrito),
               ),
             ],
           ),
@@ -260,6 +291,14 @@ class _CarritoScreenState extends State<CarritoScreen> {
               ],
             ),
           ),
+          if (_fuera) ...[
+            const SizedBox(height: 10),
+            InsigniaValle(
+              'Esta dirección está fuera del área de entrega de ${n.nombre} (hasta ${_envio!.radioKm.toStringAsFixed(0)} km). Elige otra dirección',
+              color: AppTheme.errorColor,
+              icono: Icons.wrong_location_outlined,
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -311,9 +350,14 @@ class _CarritoScreenState extends State<CarritoScreen> {
               children: [
                 _FilaMonto('Productos', carrito.subtotal),
                 const SizedBox(height: 8),
-                _FilaMonto('Envío', carrito.costoEnvio, gratis: carrito.costoEnvio == 0),
+                _FilaMonto(
+                  _envio?.distanciaKm != null ? 'Envío (${_envio!.distanciaKm!.toStringAsFixed(1)} km)' : 'Envío',
+                  _costoEnvio(carrito),
+                  gratis: _costoEnvio(carrito) == 0,
+                  cargando: _cotizando,
+                ),
                 Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1, color: c.borde)),
-                _FilaMonto('Total', carrito.total, destacado: true),
+                _FilaMonto('Total', _total(carrito), destacado: true),
               ],
             ),
           ),
@@ -390,12 +434,13 @@ class _LineaCarrito extends StatelessWidget {
 }
 
 class _FilaMonto extends StatelessWidget {
-  const _FilaMonto(this.etiqueta, this.monto, {this.destacado = false, this.gratis = false});
+  const _FilaMonto(this.etiqueta, this.monto, {this.destacado = false, this.gratis = false, this.cargando = false});
 
   final String etiqueta;
   final double monto;
   final bool destacado;
   final bool gratis;
+  final bool cargando; // calculando el envío
 
   @override
   Widget build(BuildContext context) {
@@ -404,7 +449,10 @@ class _FilaMonto extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: Text(etiqueta, style: estilo)),
-        Text(gratis ? 'Gratis' : Formato.dinero(monto), style: estilo?.copyWith(color: gratis ? AppTheme.successColor : null)),
+        if (cargando)
+          const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+        else
+          Text(gratis ? 'Gratis' : Formato.dinero(monto), style: estilo?.copyWith(color: gratis ? AppTheme.successColor : null)),
       ],
     );
   }

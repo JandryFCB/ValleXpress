@@ -77,6 +77,8 @@ class Negocio {
     this.logo,
     this.portada,
     this.costoEnvio = 0,
+    this.distanciaKm,
+    this.envioEstimado = false,
     this.pedidoMinimo = 0,
     this.tiempoPreparacion = 30,
     this.radioKm = 5,
@@ -100,7 +102,11 @@ class Negocio {
   final Categoria categoria;
   final String? logo;
   final String? portada;
+  /// Envío que calcula ValleXpress por distancia: estimado hasta la dirección predeterminada del cliente
+  /// (envioEstimado) o, si no tiene, la tarifa base ("desde")
   final double costoEnvio;
+  final double? distanciaKm;
+  final bool envioEstimado;
   final double pedidoMinimo;
   final int tiempoPreparacion;
   final double radioKm;
@@ -132,6 +138,8 @@ class Negocio {
         logo: _texto(j['logo']),
         portada: _texto(j['portada']),
         costoEnvio: _num(j['costoEnvio']),
+        distanciaKm: j['distanciaKm'] == null ? null : _num(j['distanciaKm']),
+        envioEstimado: j['envioEstimado'] == true,
         pedidoMinimo: _num(j['pedidoMinimo']),
         tiempoPreparacion: (j['tiempoPreparacion'] as num?)?.toInt() ?? 30,
         radioKm: _num(j['radioKm']),

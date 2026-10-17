@@ -277,7 +277,7 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
                 _Fila(
                   icono: Icons.delivery_dining_outlined,
                   titulo: 'Entrega',
-                  valor: 'Envío ${n.costoEnvio == 0 ? 'gratis' : Formato.dinero(n.costoEnvio)} · mínimo ${Formato.dinero(n.pedidoMinimo)} · ${n.tiempoPreparacion} min',
+                  valor: 'Pedido mínimo ${Formato.dinero(n.pedidoMinimo)} · ${n.tiempoPreparacion} min · hasta ${n.radioKm.toStringAsFixed(0)} km',
                   onTap: _editar,
                 ),
               ],
@@ -497,7 +497,6 @@ class _FormularioNegocioState extends State<_FormularioNegocio> {
   late final _nombre = TextEditingController(text: widget.negocio.nombre);
   late final _descripcion = TextEditingController(text: widget.negocio.descripcion ?? '');
   late final _ruc = TextEditingController(text: widget.negocio.ruc ?? '');
-  late final _envio = TextEditingController(text: widget.negocio.costoEnvio.toStringAsFixed(2));
   late final _minimo = TextEditingController(text: widget.negocio.pedidoMinimo.toStringAsFixed(2));
   late final _tiempo = TextEditingController(text: '${widget.negocio.tiempoPreparacion}');
   late final _radio = TextEditingController(text: widget.negocio.radioKm.toStringAsFixed(1));
@@ -507,7 +506,7 @@ class _FormularioNegocioState extends State<_FormularioNegocio> {
 
   @override
   void dispose() {
-    for (final c in [_nombre, _descripcion, _ruc, _envio, _minimo, _tiempo, _radio]) {
+    for (final c in [_nombre, _descripcion, _ruc, _minimo, _tiempo, _radio]) {
       c.dispose();
     }
     super.dispose();
@@ -517,14 +516,12 @@ class _FormularioNegocioState extends State<_FormularioNegocio> {
 
   Future<void> _guardar() async {
     FocusScope.of(context).unfocus();
-    final envio = _dec(_envio);
     final minimo = _dec(_minimo);
     final tiempo = int.tryParse(_tiempo.text.trim());
     final radio = _dec(_radio);
     String? error;
     if (_nombre.text.trim().length < 2) error = 'Escribe el nombre del negocio';
     if (_ruc.text.trim().isNotEmpty && !RegExp(r'^\d{13}$').hasMatch(_ruc.text.trim())) error = 'El RUC debe tener 13 dígitos';
-    if (envio == null || envio < 0) error = 'Costo de envío inválido';
     if (minimo == null || minimo < 0) error = 'Pedido mínimo inválido';
     if (tiempo == null || tiempo < 5 || tiempo > 240) error = 'El tiempo de preparación va de 5 a 240 minutos';
     if (radio == null || radio <= 0 || radio > 50) error = 'El radio de entrega va hasta 50 km';
@@ -540,7 +537,6 @@ class _FormularioNegocioState extends State<_FormularioNegocio> {
         'descripcion': _descripcion.text.trim(),
         'categoria': _categoria,
         'ruc': _ruc.text.trim(),
-        'costoEnvio': envio,
         'pedidoMinimo': minimo,
         'tiempoPreparacion': tiempo,
         'radioKm': radio,
@@ -580,13 +576,14 @@ class _FormularioNegocioState extends State<_FormularioNegocio> {
             const SizedBox(height: 20),
             Text('Entrega', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: CampoValle(controller: _envio, etiqueta: 'Envío \$', icono: Icons.delivery_dining_outlined, tipoTeclado: const TextInputType.numberWithOptions(decimal: true), formateadores: decimal)),
-                const SizedBox(width: 12),
-                Expanded(child: CampoValle(controller: _minimo, etiqueta: 'Mínimo \$', icono: Icons.shopping_bag_outlined, tipoTeclado: const TextInputType.numberWithOptions(decimal: true), formateadores: decimal)),
-              ],
+            // El envío ya no lo fija el negocio: lo calcula ValleXpress por distancia y es del repartidor
+            const InsigniaValle(
+              'El envío lo calcula ValleXpress según la distancia hasta el cliente y se lo lleva el repartidor',
+              color: AppTheme.infoColor,
+              icono: Icons.delivery_dining_outlined,
             ),
+            const SizedBox(height: 12),
+            CampoValle(controller: _minimo, etiqueta: 'Pedido mínimo \$', icono: Icons.shopping_bag_outlined, tipoTeclado: const TextInputType.numberWithOptions(decimal: true), formateadores: decimal),
             const SizedBox(height: 12),
             Row(
               children: [

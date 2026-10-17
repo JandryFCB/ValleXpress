@@ -185,7 +185,7 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
                           children: [
                             _Info(Icons.schedule_rounded, 'Hoy', n.horarioHoy?.texto ?? 'Sin horario'),
                             _Info(Icons.timer_outlined, 'Preparación', '${n.tiempoPreparacion} min'),
-                            _Info(Icons.delivery_dining_outlined, 'Envío', n.costoEnvio == 0 ? 'Gratis' : Formato.dinero(n.costoEnvio)),
+                            _Info(Icons.delivery_dining_outlined, n.envioEstimado ? 'Envío a tu casa' : 'Envío desde', n.costoEnvio == 0 ? 'Gratis' : Formato.dinero(n.costoEnvio)),
                             if (n.pedidoMinimo > 0) _Info(Icons.shopping_bag_outlined, 'Pedido mínimo', Formato.dinero(n.pedidoMinimo)),
                           ],
                         ),

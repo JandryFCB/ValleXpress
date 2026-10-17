@@ -35,6 +35,19 @@ class PedidosService {
     return lista.map((m) => MetodoPago.desdeJson(Map<String, dynamic>.from(m))).toList();
   }
 
+  /// Cuánto cuesta el envío de un negocio a una dirección (lo calcula ValleXpress por distancia) y si está dentro
+  /// de su área de entrega. El carrito lo muestra antes de pedir.
+  static Future<({double costoEnvio, double? distanciaKm, bool fueraDeCobertura, double radioKm})> cotizar({required int negocioId, required int direccionId}) async {
+    final res = await http.get(_url('/pedidos/cotizar', {'negocioId': '$negocioId', 'direccionId': '$direccionId'}), headers: await _cabeceras());
+    final j = _json(res, 200, 'No se pudo calcular el envío');
+    return (
+      costoEnvio: (j['costoEnvio'] as num).toDouble(),
+      distanciaKm: (j['distanciaKm'] as num?)?.toDouble(),
+      fueraDeCobertura: j['fueraDeCobertura'] == true,
+      radioKm: (j['radioKm'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
   /// Hace el pedido. Los precios y el total los calcula el servidor.
   static Future<Pedido> crear({
     required int negocioId,
