@@ -9,6 +9,7 @@ import '../../services/api_error.dart';
 import '../../services/profile_service.dart';
 import '../legal/documento_legal_screen.dart';
 import 'eliminar_cuenta_screen.dart';
+import '../../services/version_app.dart';
 import '../../widgets/ui/ui.dart';
 
 /// Configuración: apariencia, notificaciones, seguridad y legal.
@@ -191,7 +192,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => abrirDocumentoLegal(context, 'privacidad'),
                 ),
                 Divider(height: 1, color: context.colores.borde),
-                const ListTile(leading: Icon(Icons.info_outline), title: Text('Versión de la app'), trailing: Text('1.0.0')),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('Versión de la app'),
+                  trailing: FutureBuilder<String>(future: VersionApp.texto(), builder: (_, v) => Text(v.data ?? '')),
+                ),
               ],
             ),
           ),

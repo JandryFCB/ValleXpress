@@ -15,6 +15,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/inicio/inicio_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/version_app.dart';
 import 'services/fcm_mobile.dart'
     if (dart.library.html) 'providers/fcm_stub_import.dart';
 
@@ -35,6 +36,8 @@ void main() async {
   }
 
   runApp(const MyApp());
+  // Aviso de versión nueva (la app se reparte como APK): se revisa poco después de abrir
+  Future.delayed(const Duration(seconds: 3), VersionApp.revisar);
 }
 
 class MyApp extends StatelessWidget {

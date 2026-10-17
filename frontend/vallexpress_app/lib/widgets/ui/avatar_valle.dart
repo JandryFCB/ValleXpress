@@ -21,7 +21,11 @@ class AvatarValle extends StatelessWidget {
   Widget build(BuildContext context) {
     final tinte = color ?? context.colores.primario;
     final foto = (fotoUrl != null && fotoUrl!.isNotEmpty) ? fotoUrl : null;
-    return Container(
+    // Material propio: durante la animación Hero (lista -> detalle), o si se minimiza la app a mitad de ella, el
+    // avatar se dibuja fuera de la pantalla y las iniciales salían con el subrayado amarillo de "texto sin estilo".
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
       width: tamano,
       height: tamano,
       decoration: BoxDecoration(
@@ -31,8 +35,9 @@ class AvatarValle extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: foto == null
-          ? Text(_iniciales, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: tamano * 0.38))
+          ? Text(_iniciales, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: tamano * 0.38, decoration: TextDecoration.none))
           : null,
+      ),
     );
   }
 }
