@@ -32,6 +32,10 @@ class AdminService {
         total: (datos['pagination']?['total'] as num?)?.toInt() ?? 0,
       );
 
+  /// Movimientos detrás de una cifra del resumen (pedidos, ventas, ganancia, envios, encurso, enlinea)
+  static Future<DetalleCifra> detalleCifra(String tipo, {String rango = 'hoy'}) async =>
+      DetalleCifra.desdeJson(_json(await http.get(_url('/resumen/$tipo', {'rango': rango}), headers: await _cabeceras()), 'No se pudo cargar el detalle'));
+
   static Future<ResumenAdmin> resumen() async =>
       ResumenAdmin.desdeJson(_json(await http.get(_url('/resumen'), headers: await _cabeceras()), 'No se pudo cargar el resumen'));
 

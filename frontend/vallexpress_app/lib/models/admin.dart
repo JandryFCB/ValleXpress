@@ -41,6 +41,8 @@ class ResumenAdmin {
     required this.repartidoresEnLinea,
     required this.pendientes,
     this.comprobantesPorRevisar = 0,
+    this.cobradoHoy = 0,
+    this.cobradoSemana = 0,
     this.correoConfigurado = true,
   });
 
@@ -58,6 +60,8 @@ class ResumenAdmin {
   final int repartidoresEnLinea;
   final int pendientes;
   final int comprobantesPorRevisar; // pagos de comisión que esperan tu revisión
+  final double cobradoHoy; // comisiones que los negocios pagaron hoy (plata que entró)
+  final double cobradoSemana;
   final bool correoConfigurado;
 
   int get totalEnCurso => enCurso.values.fold(0, (a, b) => a + b);
@@ -89,6 +93,8 @@ class ResumenAdmin {
       repartidoresEnLinea: (rep['enLinea'] as num?)?.toInt() ?? 0,
       pendientes: (j['pendientes'] as num?)?.toInt() ?? 0,
       comprobantesPorRevisar: (j['comprobantesPorRevisar'] as num?)?.toInt() ?? 0,
+      cobradoHoy: _num((j['cobrado'] as Map?)?['hoy']),
+      cobradoSemana: _num((j['cobrado'] as Map?)?['semana']),
       correoConfigurado: j['correoConfigurado'] != false,
     );
   }
@@ -263,4 +269,62 @@ class Pagina<T> {
   final List<T> items;
   final bool hayMas;
   final int total;
+}
+
+/// Un valor del detalle de una cifra: dinero, número o entregas
+class ValorCifra {
+  const ValorCifra(this.etiqueta, this.valor, this.formato);
+
+  final String etiqueta;
+  final num valor;
+  final String formato; // dinero | numero | entregas
+
+  factory ValorCifra.desdeJson(Map<String, dynamic> j) => ValorCifra('${j['etiqueta'] ?? ''}', (j['valor'] as num?) ?? 0, '${j['formato'] ?? 'numero'}');
+}
+
+/// Un movimiento (un pedido, un pago) o un total agrupado (un local, un repartidor)
+class FilaCifra {
+  const FilaCifra({required this.titulo, required this.detalle, required this.valor, required this.formato, required this.icono, this.pedidoId, this.estado, this.fecha, this.ocupado = false});
+
+  final String titulo;
+  final String detalle;
+  final num valor;
+  final String formato;
+  final String icono; // pedido | local | repartidor | pago
+  final int? pedidoId; // tocarla abre el pedido
+  final String? estado;
+  final DateTime? fecha;
+  final bool ocupado; // repartidor llevando un pedido
+
+  factory FilaCifra.desdeJson(Map<String, dynamic> j) => FilaCifra(
+        titulo: '${j['titulo'] ?? ''}',
+        detalle: '${j['detalle'] ?? ''}',
+        valor: (j['valor'] as num?) ?? 0,
+        formato: '${j['formato'] ?? 'numero'}',
+        icono: '${j['icono'] ?? 'pedido'}',
+        pedidoId: (j['pedidoId'] as num?)?.toInt(),
+        estado: j['estado']?.toString(),
+        fecha: j['fecha'] == null ? null : DateTime.tryParse('${j['fecha']}')?.toLocal(),
+        ocupado: j['ocupado'] == true,
+      );
+}
+
+/// Detalle de una cifra del resumen del administrador: total, cifras secundarias y movimientos por sección
+class DetalleCifra {
+  const DetalleCifra({required this.rango, required this.total, required this.resumen, required this.secciones});
+
+  final String rango; // hoy | semana | mes | ahora
+  final ValorCifra total;
+  final List<ValorCifra> resumen;
+  final List<({String titulo, List<FilaCifra> filas})> secciones;
+
+  factory DetalleCifra.desdeJson(Map<String, dynamic> j) => DetalleCifra(
+        rango: '${j['rango'] ?? 'hoy'}',
+        total: ValorCifra.desdeJson(Map<String, dynamic>.from(j['total'] ?? {})),
+        resumen: [for (final r in (j['resumen'] as List? ?? [])) ValorCifra.desdeJson(Map<String, dynamic>.from(r))],
+        secciones: [
+          for (final s in (j['secciones'] as List? ?? []))
+            (titulo: '${s['titulo'] ?? ''}', filas: [for (final f in (s['filas'] as List? ?? [])) FilaCifra.desdeJson(Map<String, dynamic>.from(f))]),
+        ],
+      );
 }

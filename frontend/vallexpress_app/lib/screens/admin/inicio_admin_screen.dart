@@ -13,6 +13,7 @@ import '../../widgets/ui/ui.dart';
 import '../profile/perfil_screen.dart';
 import 'aprobaciones_screen.dart';
 import 'cobros_screen.dart';
+import 'detalle_cifra_screen.dart';
 import 'legal_admin_screen.dart';
 import 'perfiles_screen.dart';
 import 'tarifas_screen.dart';
@@ -322,6 +323,7 @@ class _Cifras extends StatelessWidget {
       _Cifra(
         icono: Icons.receipt_long_rounded,
         color: AppTheme.infoColor,
+        tipo: 'pedidos',
         titulo: 'Pedidos hoy',
         valor: Text('${r.pedidosHoy}'),
         detalle: '${r.entregadosHoy} entregados',
@@ -329,6 +331,7 @@ class _Cifras extends StatelessWidget {
       _Cifra(
         icono: Icons.payments_rounded,
         color: c.primario,
+        tipo: 'ventas',
         titulo: 'Ventas hoy',
         valor: DineroAnimado(r.ventasHoy),
         detalle: 'Semana: ${Formato.dinero(r.ventasSemana)}',
@@ -336,13 +339,16 @@ class _Cifras extends StatelessWidget {
       _Cifra(
         icono: Icons.account_balance_wallet_rounded,
         color: AppTheme.accentColor,
+        tipo: 'ganancia',
         titulo: 'Ganancia ValleXpress',
         valor: DineroAnimado(r.comisionesHoy),
-        detalle: 'Semana: ${Formato.dinero(r.comisionesSemana)}',
+        // La comisión se gana al entregar; el cobro llega cuando el negocio paga su semana
+        detalle: r.cobradoHoy > 0 ? 'Cobrado hoy: ${Formato.dinero(r.cobradoHoy)}' : 'Cobrado 7 días: ${Formato.dinero(r.cobradoSemana)}',
       ),
       _Cifra(
         icono: Icons.delivery_dining_rounded,
         color: AppTheme.repartidorColor,
+        tipo: 'envios',
         titulo: 'Para repartidores',
         valor: DineroAnimado(r.enviosHoy),
         detalle: 'envíos de hoy',
@@ -350,6 +356,7 @@ class _Cifras extends StatelessWidget {
       _Cifra(
         icono: Icons.local_fire_department_rounded,
         color: AppTheme.accentColor,
+        tipo: 'encurso',
         titulo: 'En curso',
         valor: Text('${r.totalEnCurso}'),
         detalle: 'pedidos ahora mismo',
@@ -357,6 +364,7 @@ class _Cifras extends StatelessWidget {
       _Cifra(
         icono: Icons.two_wheeler_rounded,
         color: AppTheme.successColor,
+        tipo: 'enlinea',
         titulo: 'En línea',
         valor: Text('${r.repartidoresEnLinea}'),
         detalle: 'repartidores',
@@ -375,8 +383,9 @@ class _Cifras extends StatelessWidget {
 }
 
 class _Cifra extends StatelessWidget {
-  const _Cifra({required this.icono, required this.color, required this.titulo, required this.valor, required this.detalle});
+  const _Cifra({required this.tipo, required this.icono, required this.color, required this.titulo, required this.valor, required this.detalle});
 
+  final String tipo; // qué detalle abre al tocarla
   final IconData icono;
   final Color color;
   final String titulo;
@@ -389,6 +398,8 @@ class _Cifra extends StatelessWidget {
     final c = context.colores;
     return TarjetaValle(
       padding: const EdgeInsets.all(14),
+      // Como en el banco: al tocar la cifra se ven sus movimientos
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetalleCifraScreen(tipo: tipo, titulo: titulo, icono: icono, color: color))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -408,6 +419,7 @@ class _Cifra extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              Icon(Icons.chevron_right_rounded, size: 18, color: c.textoSuave),
             ],
           ),
           DefaultTextStyle.merge(
