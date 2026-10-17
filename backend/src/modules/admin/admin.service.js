@@ -19,6 +19,8 @@ const SesionService = require('../../shared/services/sesion.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const PerfilesService = require('../../shared/services/perfiles.service');
 const TarifasService = require('../../shared/services/tarifas.service');
+const ZonaService = require('../../shared/services/zona.service');
+const LiquidacionService = require('../liquidaciones/liquidacion.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const { auditar } = require('../../shared/services/log.service');
@@ -406,6 +408,22 @@ async function cambiarTarifas(admin, cambios, req) {
   return TarifasService.tarifas();
 }
 
+// Cobro de comisiones: días de gracia y la cuenta donde transfieren los negocios
+async function cambiarConfigLiquidaciones(admin, cambios, req) {
+  const hechos = await withTransaction((t) => LiquidacionService.fijarConfig(cambios, { transaction: t }), { usuarioId: admin.id });
+  ConfiguracionService.limpiarCache();
+  if (Object.keys(hechos).length) auditar({ usuarioId: admin.id, accion: 'CONFIGLIQUIDACIONES', entidad: 'CONFIGURACIONES', entidadId: 'LIQUIDACIONES', detalle: hechos, req });
+  return LiquidacionService.config();
+}
+
+// Zona de servicio (por ahora una sola ciudad)
+async function cambiarZona(admin, cambios, req) {
+  const hechos = await withTransaction((t) => ZonaService.fijar(cambios, { transaction: t }), { usuarioId: admin.id });
+  ConfiguracionService.limpiarCache();
+  if (Object.keys(hechos).length) auditar({ usuarioId: admin.id, accion: 'ZONACAMBIADA', entidad: 'CONFIGURACIONES', entidadId: 'ZONA', detalle: hechos, req });
+  return ZonaService.zona();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Perfiles y permisos
 // ---------------------------------------------------------------------------------------------
@@ -467,4 +485,5 @@ module.exports = {
   usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
   resolverDueno, editarRepartidor, perfiles, cambiarPerfil, cambiarTarifas,
   tarifas: () => TarifasService.tarifas(),
+  zona: () => ZonaService.zona(), cambiarZona, cambiarConfigLiquidaciones,
 };

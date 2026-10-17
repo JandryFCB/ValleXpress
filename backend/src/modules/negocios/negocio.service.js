@@ -9,6 +9,8 @@ const ArchivoService = require('../../shared/services/archivo.service');
 const CatalogoService = require('../../shared/services/catalogo.service');
 const PerfilesService = require('../../shared/services/perfiles.service');
 const TarifasService = require('../../shared/services/tarifas.service');
+const ZonaService = require('../../shared/services/zona.service');
+const LiquidacionService = require('../liquidaciones/liquidacion.service');
 const { auditar } = require('../../shared/services/log.service');
 const { APROBACION, CATEGORIA, TIPODIRECCION } = require('../../shared/constants/codigos');
 
@@ -70,6 +72,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
   const categorias = await mapaCategorias();
   const tarifas = await TarifasService.tarifas();
   const desde = privado ? null : await direccionDe(req);
+  const conDeuda = await LiquidacionService.conDeudaVencida(lista.map((n) => Number(n.id)));
   const envioDe = (n) => {
     const local = n.local ? { lat: num(n.local.latitud), lng: num(n.local.longitud) } : null;
     const e = TarifasService.envioEntre(tarifas, local && desde ? local : null, local && desde ? desde : null);
@@ -93,7 +96,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
       radioKm: num(n.radioKm),
       abierto: e.abierto === true,
       abiertoAhora: e.abierto === true && dentroDeHorario(horarios),
-      aceptaPedidos: e.aceptaPedidos !== false,
+      aceptaPedidos: e.aceptaPedidos !== false && !conDeuda.has(String(n.id)),
       calificacion: num(e.calificacion) ?? 0,
       numeroCalificaciones: e.numeroCalificaciones ?? 0,
       numeroPedidos: e.numeroPedidos ?? 0,
@@ -101,7 +104,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
         ? { id: Number(n.local.id), direccion: n.local.direccion, referencia: n.local.referencia, latitud: num(n.local.latitud), longitud: num(n.local.longitud) }
         : null,
       horarios,
-      ...(privado && { ruc: n.ruc, ...datosAprobacion(n), duenoId: n.duenoId }),
+      ...(privado && { ruc: n.ruc, ...datosAprobacion(n), duenoId: n.duenoId, bloqueadoPorDeuda: conDeuda.has(String(n.id)) }),
     };
   });
   return Array.isArray(entrada) ? salida : salida[0];
@@ -218,6 +221,7 @@ async function pedirRevision(usuarioId, req) {
 // El local es una dirección (tipo 005) de la persona dueña. Si ya había uno, se actualiza (queda en el historial).
 async function fijarLocal(usuarioId, datos, req) {
   const n = await exigirMio(usuarioId);
+  await ZonaService.exigirDentro({ lat: Number(datos.latitud), lng: Number(datos.longitud) }, { paraNegocio: true });
   const dueno = await Usuario.findByPk(usuarioId, { attributes: ['id', 'personaId'] });
   await withTransaction(async (t) => {
     const valores = {

@@ -1,3 +1,4 @@
+const LiquidacionService = require('../liquidaciones/liquidacion.service');
 const asyncHandler = require('../../shared/helpers/asyncHandler');
 const service = require('./admin.service');
 const PedidoService = require('../pedidos/pedido.service');
@@ -32,8 +33,15 @@ const resolverDueno = asyncHandler(async (req, res, next) => { await service.res
 
 const tarifas = asyncHandler(async (req, res) => res.json({ tarifas: await service.tarifas() }));
 const cambiarTarifas = asyncHandler(async (req, res) => res.json({ tarifas: await service.cambiarTarifas(req.usuario, req.body, req) }));
+const liquidacionesPendientes = asyncHandler(async (req, res) => res.json({ pendientes: await LiquidacionService.pendientes(), config: await LiquidacionService.config() }));
+const liquidacionesNegocio = asyncHandler(async (req, res) => res.json(await LiquidacionService.estadoDeCuenta(Number(req.params.id))));
+const registrarLiquidacion = asyncHandler(async (req, res) => res.status(201).json(await LiquidacionService.registrarPago(req.usuario, Number(req.params.id), req.body, req)));
+const configLiquidaciones = asyncHandler(async (req, res) => res.json({ config: await service.cambiarConfigLiquidaciones(req.usuario, req.body, req) }));
+const zona = asyncHandler(async (req, res) => res.json({ zona: await service.zona() }));
+const cambiarZona = asyncHandler(async (req, res) => res.json({ zona: await service.cambiarZona(req.usuario, req.body, req) }));
 const perfiles = asyncHandler(async (req, res) => res.json({ perfiles: await service.perfiles() }));
 const cambiarPerfil = asyncHandler(async (req, res) => res.json(await service.cambiarPerfil(req.usuario, req.params.rol, req.body, req)));
 
-module.exports = { resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas,
+module.exports = { resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
+  liquidacionesPendientes, liquidacionesNegocio, registrarLiquidacion, configLiquidaciones,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

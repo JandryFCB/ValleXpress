@@ -1,6 +1,7 @@
 const { Op, Sequelize } = require('sequelize');
 const Direccion = require('./direccion.model');
 const Usuario = require('../auth/usuario.model');
+const ZonaService = require('../../shared/services/zona.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const CatalogoService = require('../../shared/services/catalogo.service');
@@ -74,6 +75,7 @@ async function crear(usuarioId, datos) {
   if (await Direccion.count({ where: { personaId, ...DELCLIENTE } }) >= MAXDIRECCIONES) {
     throw AppError.conflict(`Puedes guardar hasta ${MAXDIRECCIONES} direcciones`, 'LIMITEDIRECCIONES');
   }
+  await ZonaService.exigirDentro({ lat: Number(datos.latitud), lng: Number(datos.longitud) });
   const nueva = await withTransaction(async (t) => {
     if (datos.esPredeterminada === true) await quitarPredeterminada(personaId, null, t);
     return Direccion.create({
@@ -94,6 +96,9 @@ async function crear(usuarioId, datos) {
 async function actualizar(usuarioId, id, datos) {
   const personaId = await personaDe(usuarioId);
   const dir = await propia(personaId, id);
+  if (datos.latitud !== undefined || datos.longitud !== undefined) {
+    await ZonaService.exigirDentro({ lat: Number(datos.latitud ?? dir.latitud), lng: Number(datos.longitud ?? dir.longitud) });
+  }
   await withTransaction(async (t) => {
     if (datos.esPredeterminada === true) await quitarPredeterminada(personaId, dir.id, t);
     const cambios = {};

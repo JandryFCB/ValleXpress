@@ -108,6 +108,28 @@ const envioEsperado = ({ base, porKm, factor }, a, b) => {
     for (const paso of ['aceptar', 'recogido', 'entregado']) await api('PATCH', `/api/repartidor/pedidos/${p1.id}/${paso}`, null, pedro.token);
     r = await api('GET', '/api/admin/resumen', null, A);
     check('el resumen de hoy muestra lo que ganó ValleXpress (2.50)', r.body.hoy?.comisiones === 2.5 && r.body.ultimos7Dias.at(-1).comisiones === 2.5, JSON.stringify(r.body.hoy));
+
+    seccion('7. Zona de servicio');
+    r = await api('GET', '/api/negocios/zona', null, C);
+    check('la app conoce la zona (en las pruebas, sin límite)', r.status === 200 && r.body.zona.nombre === 'Yantzaza' && r.body.zona.radioKm === 0, JSON.stringify(r.body));
+    r = await api('PUT', '/api/admin/zona', { nombre: 'Quito Norte', latitud: LOCAL.lat, longitud: LOCAL.lng, radioKm: 3 }, A);
+    check('el admin fija la zona: Quito Norte, 3 km', r.status === 200 && r.body.zona.nombre === 'Quito Norte' && r.body.zona.radioKm === 3, JSON.stringify(r.body));
+    r = await api('PUT', '/api/admin/zona', { radioKm: 900 }, A);
+    check('radio fuera de rango: 400', r.status === 400);
+    r = await api('PUT', '/api/admin/zona', { radioKm: 5 }, L);
+    check('un vendedor no cambia la zona: 403', r.status === 403);
+    r = await api('POST', '/api/direcciones', { direccion: 'Cerca', latitud: CASA.lat, longitud: CASA.lng, tipo: 'FAM' }, C);
+    check('una dirección dentro de la zona se guarda', r.status === 201, JSON.stringify(r.body));
+    r = await api('POST', '/api/direcciones', { direccion: 'Cuenca', latitud: -2.9, longitud: -79.0, tipo: 'OTR' }, C);
+    check('una dirección fuera de la zona: 409 FUERADEZONA con mensaje amable', r.status === 409 && r.body.code === 'FUERADEZONA' && /Quito Norte/.test(r.body.error) && /todavía no llega/.test(r.body.error), JSON.stringify(r.body));
+    r = await api('PUT', `/api/direcciones/${dir.id}`, { latitud: -2.9, longitud: -79.0 }, C);
+    check('mover una dirección fuera de la zona: 409', r.status === 409 && r.body.code === 'FUERADEZONA');
+    r = await api('PUT', '/api/mi-negocio/local', { direccion: 'Lejos', latitud: -0.5, longitud: -78.9 }, L);
+    check('el local del negocio fuera de la zona: 409', r.status === 409 && r.body.code === 'FUERADEZONA' && /tu local/.test(r.body.error));
+    r = await api('POST', '/api/pedidos', { negocioId: pizza.negocioId, direccionId: lejos.id, metodoPago: 'efectivo', productos: [{ productoId: pizza.id, cantidad: 2 }] }, C);
+    check('pedir a una dirección guardada que quedó fuera de la zona: 409', r.status === 409 && r.body.code === 'FUERADEZONA');
+    r = await api('GET', '/api/negocios/zona', null, C);
+    check('la app ve la zona nueva', r.body.zona.nombre === 'Quito Norte' && r.body.zona.radioKm === 3);
   } catch (e) {
     return t.finalizar(e);
   }

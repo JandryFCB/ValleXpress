@@ -18,6 +18,8 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `010_perfiles.sql` | Perfiles y permisos: registro abierto por perfil y aprobación automática por separado para vendedor y repartidor (reemplaza a `APROBACIONAUTOMATICA`) |
 | `011_vencimiento_pedidos.sql` | Minutos para avisar y cancelar solos los pedidos sin repartidor (desde que quedan listos) o sin respuesta del negocio |
 | `012_tarifas.sql` | Envío por distancia (base + km de ruta) y comisión de ValleXpress; cada pedido guarda su distancia, % y comisión |
+| `013_zona_servicio.sql` | Zona de servicio (Yantzaza, centro y radio): direcciones y locales fuera de ella se rechazan |
+| `014_liquidaciones.sql` | Cobro semanal de la comisión a cada negocio: `TLIQUIDACIONES` (pagos), días de gracia y cuenta para transferir |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

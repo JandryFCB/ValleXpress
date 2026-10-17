@@ -16,6 +16,8 @@ const ArchivoService = require('../../shared/services/archivo.service');
 const { auditar } = require('../../shared/services/log.service');
 const { distanciaKm } = require('../../shared/utils/geo');
 const TarifasService = require('../../shared/services/tarifas.service');
+const ZonaService = require('../../shared/services/zona.service');
+const LiquidacionService = require('../liquidaciones/liquidacion.service');
 const {
   ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO, VEHICULOAAPI,
 } = require('../../shared/constants/codigos');
@@ -278,6 +280,13 @@ async function crear(cliente, datos, req) {
   if (items.some((i) => i.cantidad > 99)) throw AppError.badRequest('Máximo 99 unidades por producto', 'CANTIDADINVALIDA');
 
   const tarifas = await TarifasService.tarifas();
+  // Una dirección guardada antes de que se achicara la zona no sirve para pedir
+  const destino = await Direccion.findOne({ where: { id: datos.direccionId, personaId: cliente.personaId }, attributes: ['latitud', 'longitud'] });
+  if (destino) await ZonaService.exigirDentro({ lat: num(destino.latitud), lng: num(destino.longitud) });
+  // Un negocio con la comisión vencida sin pagar no recibe pedidos (al cliente no se le explica el motivo)
+  if ((await LiquidacionService.conDeudaVencida([Number(datos.negocioId)])).size) {
+    throw AppError.conflict('El negocio no está recibiendo pedidos ahora', 'NEGOCIOCONDEUDA');
+  }
   const { pedido, negocio } = await withTransaction(async (t) => {
     const negocio = await Negocio.findOne({
       where: { id: datos.negocioId },

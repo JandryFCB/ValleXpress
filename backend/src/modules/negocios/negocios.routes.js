@@ -9,6 +9,7 @@ const router = express.Router();
 router.use(verificarToken);
 
 router.get('/categorias', controller.categorias);                            // antes de /:id
+router.get('/zona', controller.zona);                                        // dónde funciona ValleXpress
 router.get('/', schema.listar, validar, controller.listar);
 router.get('/:id', schema.id, validar, controller.obtener);
 router.get('/:id/productos', schema.id, validar, controller.menu);
