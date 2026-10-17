@@ -3,13 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
+import '../../models/legal.dart';
 import '../../models/pedido.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/carrito_provider.dart';
+import '../../services/legal_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
 import '../../widgets/ui/ui.dart';
 import '../catalogo/negocio_detalle_screen.dart';
+import '../legal/aceptar_legal_screen.dart';
 import '../catalogo/negocios_screen.dart';
 import '../admin/inicio_admin_screen.dart';
 import '../repartidor/inicio_repartidor_screen.dart';
@@ -20,13 +23,39 @@ import '../pedidos/mis_pedidos_screen.dart';
 import '../pedidos/pedido_detalle_screen.dart';
 import '../profile/perfil_screen.dart';
 
-/// Primera pantalla con sesión: cada rol tiene su inicio.
-class InicioScreen extends StatelessWidget {
+/// Primera pantalla con sesión: cada rol tiene su inicio. Al entrar revisa si hay una versión nueva de los términos
+/// o de la privacidad por aceptar: si la hay, la pide antes de dejar usar la app.
+class InicioScreen extends StatefulWidget {
   const InicioScreen({super.key});
+
+  @override
+  State<InicioScreen> createState() => _InicioScreenState();
+}
+
+class _InicioScreenState extends State<InicioScreen> {
+  List<DocumentoLegal> _pendientes = const [];
+  String? _revisadoPara;
+
+  // Una vez por usuario. Sin conexión no se bloquea: se vuelve a revisar en la próxima entrada.
+  Future<void> _revisarLegal(String usuario) async {
+    _revisadoPara = usuario;
+    try {
+      final p = await LegalService.pendientes();
+      if (mounted && _revisadoPara == usuario) setState(() => _pendientes = p);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
     final rol = context.select<AuthProvider, String>((a) => '${a.usuario?['tipoUsuario'] ?? 'cliente'}');
+    final usuario = context.select<AuthProvider, String>((a) => '${a.usuario?['id'] ?? ''}');
+    if (usuario.isNotEmpty && _revisadoPara != usuario) {
+      _pendientes = const [];
+      _revisarLegal(usuario);
+    }
+    if (_pendientes.isNotEmpty) {
+      return AceptarLegalScreen(key: ValueKey(usuario), pendientes: _pendientes, alAceptar: () => setState(() => _pendientes = const []));
+    }
     return switch (rol) {
       'vendedor' => const InicioVendedorScreen(),
       'repartidor' => const InicioRepartidorScreen(),

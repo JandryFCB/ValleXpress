@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../config/theme.dart';
 import '../../services/permisos_celular.dart';
+import '../../widgets/aviso_ubicacion.dart';
 import '../../widgets/ui/ui.dart';
 
 /// "Prepara tu celular": los permisos que necesita cada rol, por qué, cómo están y un botón para resolverlos.
@@ -104,7 +105,10 @@ class _PermisosScreenState extends State<PermisosScreen> with WidgetsBindingObse
                         EstadoPermiso.ajustes => 'Abrir ajustes',
                         _ => 'Permitir ubicación',
                       },
-                      onResolver: () => _resolver(() => PermisosCelular.resolverUbicacion(_ubicacion!)),
+                      onResolver: () async {
+                        if (_esRepartidor && !await confirmarAvisoUbicacion(context)) return;
+                        await _resolver(() => PermisosCelular.resolverUbicacion(_ubicacion!));
+                      },
                     ),
                   ),
                 Aparecer(

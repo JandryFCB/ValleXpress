@@ -99,7 +99,7 @@ class RegistroController extends ChangeNotifier {
       default:
         if (clave.text.length < 6) return 'La contraseña debe tener al menos 6 caracteres';
         if (clave.text != confirmar.text) return 'Las contraseñas no coinciden';
-        if (!aceptaTerminos) return 'Debes aceptar los términos y condiciones';
+        if (!aceptaTerminos) return 'Debes aceptar los términos y condiciones y la política de privacidad';
         return null;
     }
   }

@@ -195,7 +195,7 @@ void main() {
     await _escribir(tester, 'Confirmar contraseña', 'Secreto123');
     expect(find.text('Las contraseñas coinciden'), findsOneWidget);
     await _continuar(tester, texto: 'Crear mi cuenta');
-    expect(find.text('Debes aceptar los términos y condiciones'), findsWidgets);
+    expect(find.text('Debes aceptar los términos y condiciones y la política de privacidad'), findsWidgets);
 
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); // libera los temporizadores

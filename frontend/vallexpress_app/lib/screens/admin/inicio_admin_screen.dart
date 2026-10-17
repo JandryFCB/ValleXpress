@@ -13,6 +13,7 @@ import '../../widgets/ui/ui.dart';
 import '../profile/perfil_screen.dart';
 import 'aprobaciones_screen.dart';
 import 'cobros_screen.dart';
+import 'legal_admin_screen.dart';
 import 'perfiles_screen.dart';
 import 'tarifas_screen.dart';
 import 'pedidos_admin_screen.dart';
@@ -218,6 +219,12 @@ class _ResumenState extends State<_Resumen> {
                     detalle: 'Comisiones por cobrar cada semana y pagos recibidos',
                     insignia: r.comprobantesPorRevisar,
                     onTap: _abrirCobros,
+                  ),
+                  _AccesoConfig(
+                    icono: Icons.gavel_rounded,
+                    titulo: 'Términos y privacidad',
+                    detalle: 'Versión vigente, quién la aceptó y enlaces para Google Play',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LegalAdminScreen())),
                   ),
                   _AccesoConfig(
                     icono: Icons.manage_accounts_rounded,

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../config/constants.dart';
 import '../models/admin.dart';
+import '../models/legal.dart';
 import '../models/liquidacion.dart';
 import '../models/pedido.dart';
 import 'api_error.dart';
@@ -114,6 +115,15 @@ class AdminService {
   }
 
   // --- Cobro de comisiones a los negocios ---
+  /// Documentos legales vigentes y cuántas cuentas activas ya aceptaron esa versión
+  static Future<List<({DocumentoLegal documento, int cuentas, int aceptaron})>> legal() async {
+    final j = _json(await http.get(_url('/legal'), headers: await _cabeceras()), 'No se pudieron cargar los documentos');
+    return [
+      for (final d in (j['documentos'] as List))
+        (documento: DocumentoLegal.desdeJson(Map<String, dynamic>.from(d)), cuentas: (d['cuentas'] as num?)?.toInt() ?? 0, aceptaron: (d['aceptaron'] as num?)?.toInt() ?? 0),
+    ];
+  }
+
   static Future<({List<DeudaNegocio> pendientes, int diasGracia, CuentaCobro cuenta})> liquidaciones() async {
     final j = _json(await http.get(_url('/liquidaciones'), headers: await _cabeceras()), 'No se pudieron cargar los cobros');
     final config = Map<String, dynamic>.from(j['config'] ?? {});

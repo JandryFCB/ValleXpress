@@ -84,6 +84,7 @@ class AuthService {
         'cedula': cedula,
         'password': password,
         'tipoUsuario': tipoUsuario,
+        'aceptaTerminos': true, // la pantalla no deja registrarse sin marcar "Acepto"; el servidor guarda la versión
         ...await datosDispositivo(),
       };
 
@@ -139,6 +140,18 @@ class AuthService {
       headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
     );
     if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudieron cerrar las sesiones'));
+  }
+
+  /// Elimina la cuenta (con la contraseña): el servidor borra los datos personales y cierra todas las sesiones
+  Future<void> eliminarCuenta(String password) async {
+    final token = await SessionStore.accessToken();
+    if (token == null) throw Exception('Tu sesión no está activa');
+    final res = await http.post(
+      Uri.parse('${AppConstants.baseUrl}/auth/eliminar-cuenta'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      body: json.encode({'password': password}),
+    );
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudo eliminar la cuenta'));
   }
 
   // Solicitar código de recuperación de contraseña

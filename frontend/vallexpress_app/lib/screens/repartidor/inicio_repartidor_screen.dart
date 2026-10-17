@@ -10,6 +10,7 @@ import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
 import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
+import '../../widgets/aviso_ubicacion.dart';
 import '../../widgets/panel_aprobacion.dart';
 import '../../services/permisos_celular.dart';
 import '../../widgets/aviso_permisos.dart';
@@ -160,6 +161,9 @@ class _EntregasState extends State<_Entregas> {
   }
 
   Future<void> _cambiarLinea(bool enLinea) async {
+    // Antes de usar su ubicación se le explica para qué (una sola vez por celular)
+    if (enLinea && !await confirmarAvisoUbicacion(context)) return;
+    if (!mounted) return;
     // Para conectarse hacen falta la ubicación precisa y las notificaciones: si falta algo, se le guía paso a paso
     if (enLinea && !await PermisosCelular.listoParaRepartir()) {
       if (!mounted) return;

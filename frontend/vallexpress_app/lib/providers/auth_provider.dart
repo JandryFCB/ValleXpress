@@ -192,6 +192,13 @@ class AuthProvider with ChangeNotifier {
     await logout();
   }
 
+  /// Elimina la cuenta: el servidor cierra todas las sesiones y saca de línea al repartidor; aquí se borra lo local
+  Future<void> eliminarCuenta(String password) async {
+    await _authService.eliminarCuenta(password);
+    await _limpiarLocal();
+    notifyListeners();
+  }
+
   Future<void> _limpiarLocal() async {
     // Lo de esta cuenta no debe pasar a la siguiente: avisos en vivo, GPS del repartidor y carrito
     TiempoReal.instancia.detener();

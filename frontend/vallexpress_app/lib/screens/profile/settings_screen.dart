@@ -7,7 +7,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/tema_provider.dart';
 import '../../services/api_error.dart';
 import '../../services/profile_service.dart';
-import '../../widgets/terms_and_conditions_modal.dart';
+import '../legal/documento_legal_screen.dart';
+import 'eliminar_cuenta_screen.dart';
 import '../../widgets/ui/ui.dart';
 
 /// Configuración: apariencia, notificaciones, seguridad y legal.
@@ -153,6 +154,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: _cerrarEnTodos,
                 ),
+                if (rol != 'administrador') ...[
+                  Divider(height: 1, color: context.colores.borde),
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever_outlined, color: AppTheme.errorColor),
+                    title: const Text('Eliminar mi cuenta', style: TextStyle(color: AppTheme.errorColor)),
+                    subtitle: const Text('Borra tus datos personales de ValleXpress'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EliminarCuentaScreen())),
+                  ),
+                ],
               ],
             ),
           ),
@@ -164,11 +175,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: EdgeInsets.zero,
             child: Column(
               children: [
+                if (rol != 'administrador') ...[
+                  ListTile(
+                    leading: const Icon(Icons.description_outlined),
+                    title: const Text('Términos y condiciones'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => abrirDocumentoLegal(context, 'terminos-$rol'),
+                  ),
+                  Divider(height: 1, color: context.colores.borde),
+                ],
                 ListTile(
-                  leading: const Icon(Icons.description_outlined),
-                  title: const Text('Términos y condiciones'),
+                  leading: const Icon(Icons.privacy_tip_outlined),
+                  title: const Text('Política de privacidad'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => showDialog(context: context, builder: (_) => TermsAndConditionsModal(userRole: rol)),
+                  onTap: () => abrirDocumentoLegal(context, 'privacidad'),
                 ),
                 Divider(height: 1, color: context.colores.borde),
                 const ListTile(leading: Icon(Icons.info_outline), title: Text('Versión de la app'), trailing: Text('1.0.0')),

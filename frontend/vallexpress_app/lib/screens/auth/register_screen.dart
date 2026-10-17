@@ -6,7 +6,7 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../../utils/validadores.dart';
-import '../../widgets/terms_and_conditions_modal.dart';
+import '../legal/documento_legal_screen.dart';
 import '../../widgets/ui/ui.dart';
 import 'registro/registro_controller.dart';
 
@@ -621,12 +621,21 @@ class _PasoClave extends StatelessWidget {
                           alignment: PlaceholderAlignment.baseline,
                           baseline: TextBaseline.alphabetic,
                           child: GestureDetector(
-                            onTap: () => showDialog(
-                              context: context,
-                              builder: (_) => TermsAndConditionsModal(userRole: c.rol ?? 'cliente'),
-                            ),
+                            onTap: () => abrirDocumentoLegal(context, 'terminos-${c.rol ?? 'cliente'}'),
                             child: Text(
                               'términos y condiciones',
+                              style: tema.bodySmall?.copyWith(color: colores.primario, fontWeight: FontWeight.w700, decoration: TextDecoration.underline),
+                            ),
+                          ),
+                        ),
+                        const TextSpan(text: ' y la '),
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.baseline,
+                          baseline: TextBaseline.alphabetic,
+                          child: GestureDetector(
+                            onTap: () => abrirDocumentoLegal(context, 'privacidad'),
+                            child: Text(
+                              'política de privacidad',
                               style: tema.bodySmall?.copyWith(color: colores.primario, fontWeight: FontWeight.w700, decoration: TextDecoration.underline),
                             ),
                           ),
