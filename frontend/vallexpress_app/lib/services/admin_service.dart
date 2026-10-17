@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../config/constants.dart';
 import '../models/admin.dart';
+import '../models/liquidacion.dart';
 import '../models/pedido.dart';
 import 'api_error.dart';
 import 'api_http.dart' as http;
@@ -111,6 +112,37 @@ class AdminService {
     final res = await http.put(_url('/repartidores/$usuario'), headers: await _cabeceras(), body: jsonEncode({'vehiculo': vehiculo, 'placa': placa, 'color': color}));
     return RepartidorAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo guardar el vehículo')['repartidor']));
   }
+
+  // --- Cobro de comisiones a los negocios ---
+  static Future<({List<DeudaNegocio> pendientes, int diasGracia, String cuenta})> liquidaciones() async {
+    final j = _json(await http.get(_url('/liquidaciones'), headers: await _cabeceras()), 'No se pudieron cargar los cobros');
+    final config = Map<String, dynamic>.from(j['config'] ?? {});
+    return (
+      pendientes: (j['pendientes'] as List).map((p) => DeudaNegocio.desdeJson(Map<String, dynamic>.from(p))).toList(),
+      diasGracia: (config['diasGracia'] as num?)?.toInt() ?? 7,
+      cuenta: '${config['cuenta'] ?? ''}',
+    );
+  }
+
+  static Future<EstadoDeCuenta> liquidacionesDe(int negocioId) async =>
+      EstadoDeCuenta.desdeJson(_json(await http.get(_url('/negocios/$negocioId/liquidaciones'), headers: await _cabeceras()), 'No se pudo cargar el estado de cuenta'));
+
+  static Future<EstadoDeCuenta> registrarPago(int negocioId, String semana, {String? referencia}) async {
+    final res = await http.post(_url('/negocios/$negocioId/liquidaciones'), headers: await _cabeceras(), body: jsonEncode({'semana': semana, if (referencia != null && referencia.trim().isNotEmpty) 'referencia': referencia.trim()}));
+    if (res.statusCode != 201) throw Exception(mensajeDeError(res, 'No se pudo registrar el pago'));
+    return EstadoDeCuenta.desdeJson(Map<String, dynamic>.from(jsonDecode(res.body) as Map));
+  }
+
+  static Future<void> guardarConfigCobro({int? diasGracia, String? cuenta}) async {
+    final res = await http.put(_url('/liquidaciones/config'), headers: await _cabeceras(), body: jsonEncode({if (diasGracia != null) 'diasGracia': diasGracia, if (cuenta != null) 'cuenta': cuenta}));
+    _json(res, 'No se pudo guardar la configuración del cobro');
+  }
+
+  // --- Zona de servicio ---
+  static Future<Map<String, dynamic>> zona() async => Map<String, dynamic>.from(_json(await http.get(_url('/zona'), headers: await _cabeceras()), 'No se pudo cargar la zona')['zona']);
+
+  static Future<Map<String, dynamic>> guardarZona(Map<String, Object> cambios) async =>
+      Map<String, dynamic>.from(_json(await http.put(_url('/zona'), headers: await _cabeceras(), body: jsonEncode(cambios)), 'No se pudo guardar la zona')['zona']);
 
   // --- Tarifas: envío por distancia y comisión ---
   static Future<Map<String, double>> tarifas() async {

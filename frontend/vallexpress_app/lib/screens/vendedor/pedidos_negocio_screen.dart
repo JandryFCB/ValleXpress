@@ -10,6 +10,7 @@ import '../../utils/formato.dart';
 import '../../widgets/aviso_permisos.dart';
 import '../../widgets/campana_avisos.dart';
 import '../../widgets/ui/ui.dart';
+import 'mis_cuentas_screen.dart';
 import 'pedido_negocio_screen.dart';
 
 /// Pedidos que recibe el negocio: "En curso" (con los botones del siguiente paso) y "Anteriores".
@@ -33,6 +34,7 @@ class PedidosNegocioScreen extends StatelessWidget {
         child: const Column(
           children: [
             AvisoPermisos(rol: 'vendedor', margen: EdgeInsets.fromLTRB(16, 12, 16, 0)),
+            AvisoCuenta(),
             Expanded(child: TabBarView(children: [_Lista(estado: 'activos'), _Lista(estado: 'historial')])),
           ],
         ),

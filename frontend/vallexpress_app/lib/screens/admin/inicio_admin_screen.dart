@@ -12,6 +12,7 @@ import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import '../profile/perfil_screen.dart';
 import 'aprobaciones_screen.dart';
+import 'cobros_screen.dart';
 import 'perfiles_screen.dart';
 import 'tarifas_screen.dart';
 import 'pedidos_admin_screen.dart';
@@ -184,47 +185,26 @@ class _ResumenState extends State<_Resumen> {
                   const EncabezadoSeccion('Comunidad'),
                   _Comunidad(r: r),
                   const EncabezadoSeccion('Configuración'),
-                  TarjetaValle(
+                  _AccesoConfig(
+                    icono: Icons.price_change_rounded,
+                    titulo: 'Tarifas, comisión y zona',
+                    detalle: 'Envío por distancia, lo que gana ValleXpress y dónde funciona',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TarifasScreen())),
-                    child: Row(
-                      children: [
-                        Icon(Icons.price_change_rounded, color: context.colores.primario),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Tarifas y comisión', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                              Text('Envío por distancia y lo que gana ValleXpress', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colores.textoSuave)),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded),
-                      ],
-                    ),
                   ),
-                  const SizedBox(height: 12),
-                  TarjetaValle(
+                  _AccesoConfig(
+                    icono: Icons.savings_rounded,
+                    titulo: 'Cobros a negocios',
+                    detalle: 'Comisiones por cobrar cada semana y pagos recibidos',
+                    onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const CobrosScreen()));
+                      _cargar();
+                    },
+                  ),
+                  _AccesoConfig(
+                    icono: Icons.manage_accounts_rounded,
+                    titulo: 'Perfiles y permisos',
+                    detalle: 'Quién puede registrarse y quién necesita tu aprobación',
                     onTap: _abrirPerfiles,
-                    child: Row(
-                      children: [
-                        Icon(Icons.manage_accounts_rounded, color: context.colores.primario),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Perfiles y permisos', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                              Text(
-                                'Quién puede registrarse y quién necesita tu aprobación',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colores.textoSuave),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -556,6 +536,43 @@ class _Comunidad extends StatelessWidget {
           fila(Icons.two_wheeler_rounded, 'Repartidores', r.repartidores.values.fold(0, (a, b) => a + b), porAprobacion(r.repartidores)),
           fila(Icons.groups_rounded, 'Cuentas en total', r.totalUsuarios, ''),
         ],
+      ),
+    );
+  }
+}
+
+/// Una fila de la sección Configuración del resumen
+class _AccesoConfig extends StatelessWidget {
+  const _AccesoConfig({required this.icono, required this.titulo, required this.detalle, required this.onTap});
+
+  final IconData icono;
+  final String titulo;
+  final String detalle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TarjetaValle(
+        onTap: onTap,
+        child: Row(
+          children: [
+            Icon(icono, color: context.colores.primario),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(titulo, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(detalle, style: tema.bodySmall?.copyWith(color: context.colores.textoSuave)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded),
+          ],
+        ),
       ),
     );
   }

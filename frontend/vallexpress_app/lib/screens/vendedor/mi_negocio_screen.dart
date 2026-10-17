@@ -10,6 +10,7 @@ import '../../utils/imagen.dart';
 import '../../widgets/ui/ui.dart';
 import '../profile/address_picker_screen.dart';
 import 'horarios_screen.dart';
+import 'mis_cuentas_screen.dart';
 import 'mis_productos_screen.dart';
 
 /// Mi negocio (vendedor): abrir/cerrar, datos, entrega, ubicación, horario, logo, portada y acceso a los productos.
@@ -270,6 +271,15 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
               children: [
                 _Fila(icono: Icons.restaurant_menu_rounded, titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos', valor: 'Menú, precios, stock e imágenes', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisProductosScreen()))),
                 Divider(height: 1, indent: 70, color: c.borde),
+                if (!CatalogoService.gestionandoComoAdmin) ...[
+                  _Fila(
+                    icono: Icons.account_balance_wallet_outlined,
+                    titulo: 'Mis cuentas con ValleXpress',
+                    valor: n.bloqueadoPorDeuda ? 'Tienes comisiones vencidas: no recibes pedidos' : 'Ventas por semana y comisión',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisCuentasScreen())),
+                  ),
+                  Divider(height: 1, indent: 70, color: c.borde),
+                ],
                 _Fila(icono: Icons.schedule_rounded, titulo: 'Horario', valor: n.horarios.isEmpty ? 'Sin horario: configúralo' : 'Hoy: ${n.horarioHoy?.texto ?? 'Cerrado'}', onTap: _horarios),
                 Divider(height: 1, indent: 70, color: c.borde),
                 _Fila(icono: Icons.location_on_outlined, titulo: 'Ubicación del local', valor: n.local?.direccion ?? 'Agrega dónde recogen los pedidos', onTap: _ubicacion),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../config/constants.dart';
+import '../models/liquidacion.dart';
 import '../models/negocio.dart';
 import '../models/producto.dart';
 import 'api_error.dart';
@@ -96,6 +97,10 @@ class CatalogoService {
         await http.post(_url(_base), headers: await _cabeceras(), body: jsonEncode({'nombre': nombre, 'categoria': categoria, 'descripcion': descripcion})),
         201,
       );
+
+  /// Mi estado de cuenta con ValleXpress: semanas, comisión por pagar y a dónde transferir (solo el dueño)
+  static Future<EstadoDeCuenta> misLiquidaciones() async =>
+      EstadoDeCuenta.desdeJson(_json(await http.get(_url('/mi-negocio/liquidaciones'), headers: await _cabeceras()), 200, 'No se pudo cargar tu estado de cuenta'));
 
   /// Rechazado → vuelve a revisión (después de corregir los datos). Solo el dueño, no el administrador.
   static Future<Negocio> pedirRevisionNegocio() async => _negocio(await http.post(_url('/mi-negocio/revision'), headers: await _cabeceras()));

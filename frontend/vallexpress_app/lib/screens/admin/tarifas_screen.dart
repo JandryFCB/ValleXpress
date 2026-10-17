@@ -21,6 +21,12 @@ class _TarifasScreenState extends State<TarifasScreen> {
   final _porKm = TextEditingController();
   final _factor = TextEditingController();
   final _comision = TextEditingController();
+  // Zona de servicio
+  final _zNombre = TextEditingController();
+  final _zRadio = TextEditingController();
+  final _zLat = TextEditingController();
+  final _zLng = TextEditingController();
+  bool _guardandoZona = false;
   Map<String, double>? _actuales;
   String? _error;
   bool _guardando = false;
@@ -37,7 +43,7 @@ class _TarifasScreenState extends State<TarifasScreen> {
 
   @override
   void dispose() {
-    for (final c in [_base, _porKm, _factor, _comision]) {
+    for (final c in [_base, _porKm, _factor, _comision, _zNombre, _zRadio, _zLat, _zLng]) {
       c.dispose();
     }
     super.dispose();
@@ -45,9 +51,10 @@ class _TarifasScreenState extends State<TarifasScreen> {
 
   Future<void> _cargar() async {
     try {
-      final t = await AdminService.tarifas();
+      final r = await Future.wait([AdminService.tarifas(), AdminService.zona()]);
       if (!mounted) return;
-      _rellenar(t);
+      _rellenar(r[0] as Map<String, double>);
+      _rellenarZona(r[1]);
     } catch (e) {
       if (mounted) setState(() => _error = textoDeError(e));
     }
@@ -59,6 +66,29 @@ class _TarifasScreenState extends State<TarifasScreen> {
     _porKm.text = t['envioPorKm']!.toStringAsFixed(2);
     _factor.text = t['factorRuta']!.toString();
     _comision.text = t['comisionPorcentaje']!.toStringAsFixed(t['comisionPorcentaje']! % 1 == 0 ? 0 : 1);
+  }
+
+  void _rellenarZona(Map<String, dynamic> z) {
+    _zNombre.text = '${z['nombre'] ?? ''}';
+    _zRadio.text = '${z['radioKm'] ?? ''}';
+    _zLat.text = '${z['latitud'] ?? ''}';
+    _zLng.text = '${z['longitud'] ?? ''}';
+  }
+
+  Future<void> _guardarZona() async {
+    final radio = _num(_zRadio), lat = _num(_zLat), lng = _num(_zLng);
+    if (_zNombre.text.trim().length < 2 || radio == null || lat == null || lng == null) return mostrarError(context, 'Revisa los datos de la zona');
+    setState(() => _guardandoZona = true);
+    try {
+      final z = await AdminService.guardarZona({'nombre': _zNombre.text.trim(), 'radioKm': radio, 'latitud': lat, 'longitud': lng});
+      if (!mounted) return;
+      _rellenarZona(z);
+      mostrarExito(context, 'Zona guardada');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _guardandoZona = false);
+    }
   }
 
   double? _num(TextEditingController c) => double.tryParse(c.text.trim().replaceAll(',', '.'));
@@ -104,7 +134,7 @@ class _TarifasScreenState extends State<TarifasScreen> {
     final teclado = const TextInputType.numberWithOptions(decimal: true);
 
     return FondoValle(
-      appBar: AppBar(title: const Text('Tarifas y comisión')),
+      appBar: AppBar(title: const Text('Tarifas, comisión y zona')),
       child: _actuales == null
           ? (_error != null
               ? EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar las tarifas', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar)
@@ -161,6 +191,30 @@ class _TarifasScreenState extends State<TarifasScreen> {
                 ),
                 const SizedBox(height: 20),
                 BotonValle(texto: 'Guardar tarifas', icono: Icons.check_rounded, cargando: _guardando, onPressed: _hayCambios ? _guardar : null),
+
+                // Zona de servicio
+                const EncabezadoSeccion('Zona de servicio', subtitulo: 'Fuera de este círculo no se pueden guardar direcciones ni locales'),
+                TarjetaValle(
+                  child: Column(
+                    children: [
+                      Row(children: [
+                        Expanded(flex: 3, child: CampoValle(controller: _zNombre, etiqueta: 'Ciudad o zona', icono: Icons.location_city_rounded, maxLongitud: 60)),
+                        const SizedBox(width: 12),
+                        Expanded(flex: 2, child: CampoValle(controller: _zRadio, etiqueta: 'Radio km', icono: Icons.radar_rounded, tipoTeclado: teclado, formateadores: decimal)),
+                      ]),
+                      const SizedBox(height: 12),
+                      Row(children: [
+                        Expanded(child: CampoValle(controller: _zLat, etiqueta: 'Centro: latitud', icono: Icons.my_location_rounded, tipoTeclado: const TextInputType.numberWithOptions(decimal: true, signed: true))),
+                        const SizedBox(width: 12),
+                        Expanded(child: CampoValle(controller: _zLng, etiqueta: 'Centro: longitud', icono: Icons.my_location_rounded, tipoTeclado: const TextInputType.numberWithOptions(decimal: true, signed: true))),
+                      ]),
+                      const SizedBox(height: 6),
+                      Text('Radio 0 = sin límite. Para crecer a otra ciudad, más adelante habrá varias zonas.', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                      const SizedBox(height: 12),
+                      BotonValle(texto: 'Guardar zona', icono: Icons.check_rounded, tipo: TipoBoton.secundario, cargando: _guardandoZona, onPressed: _guardarZona),
+                    ],
+                  ),
+                ),
               ],
             ),
     );

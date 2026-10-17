@@ -94,6 +94,7 @@ class Negocio {
     this.aprobacion,
     this.motivoAprobacion,
     this.soporte,
+    this.bloqueadoPorDeuda = false,
   });
 
   final int id;
@@ -122,6 +123,7 @@ class Negocio {
   final String? aprobacion; // 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' (solo para el dueño)
   final String? motivoAprobacion; // por qué lo rechazaron o suspendieron
   final String? soporte; // correo de soporte (solo mientras no esté aprobado)
+  final bool bloqueadoPorDeuda; // comisión vencida sin pagar: no recibe pedidos (solo el dueño)
 
   /// Horario de hoy (según el día del teléfono), o null si no hay horarios cargados
   HorarioDia? get horarioHoy {
@@ -155,5 +157,6 @@ class Negocio {
         aprobacion: _texto(j['aprobacion']),
         motivoAprobacion: _texto(j['motivoAprobacion']),
         soporte: _texto(j['soporte']),
+        bloqueadoPorDeuda: j['bloqueadoPorDeuda'] == true,
       );
 }
