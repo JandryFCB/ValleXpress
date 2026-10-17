@@ -114,13 +114,13 @@ class AdminService {
   }
 
   // --- Cobro de comisiones a los negocios ---
-  static Future<({List<DeudaNegocio> pendientes, int diasGracia, String cuenta})> liquidaciones() async {
+  static Future<({List<DeudaNegocio> pendientes, int diasGracia, CuentaCobro cuenta})> liquidaciones() async {
     final j = _json(await http.get(_url('/liquidaciones'), headers: await _cabeceras()), 'No se pudieron cargar los cobros');
     final config = Map<String, dynamic>.from(j['config'] ?? {});
     return (
       pendientes: (j['pendientes'] as List).map((p) => DeudaNegocio.desdeJson(Map<String, dynamic>.from(p))).toList(),
       diasGracia: (config['diasGracia'] as num?)?.toInt() ?? 7,
-      cuenta: '${config['cuenta'] ?? ''}',
+      cuenta: CuentaCobro.desdeJson(config['cuenta']),
     );
   }
 
@@ -133,10 +133,16 @@ class AdminService {
     return EstadoDeCuenta.desdeJson(Map<String, dynamic>.from(jsonDecode(res.body) as Map));
   }
 
-  static Future<void> guardarConfigCobro({int? diasGracia, String? cuenta}) async {
+  static Future<void> guardarConfigCobro({int? diasGracia, Map<String, String>? cuenta}) async {
     final res = await http.put(_url('/liquidaciones/config'), headers: await _cabeceras(), body: jsonEncode({if (diasGracia != null) 'diasGracia': diasGracia, if (cuenta != null) 'cuenta': cuenta}));
     _json(res, 'No se pudo guardar la configuración del cobro');
   }
+
+  static Future<EstadoDeCuenta> aprobarComprobante(int id) async =>
+      EstadoDeCuenta.desdeJson(_json(await http.post(_url('/comprobantes/$id/aprobar'), headers: await _cabeceras()), 'No se pudo aprobar el comprobante'));
+
+  static Future<EstadoDeCuenta> rechazarComprobante(int id, String motivo) async => EstadoDeCuenta.desdeJson(
+      _json(await http.post(_url('/comprobantes/$id/rechazar'), headers: await _cabeceras(), body: jsonEncode({'motivo': motivo})), 'No se pudo rechazar el comprobante'));
 
   // --- Zona de servicio ---
   static Future<Map<String, dynamic>> zona() async => Map<String, dynamic>.from(_json(await http.get(_url('/zona'), headers: await _cabeceras()), 'No se pudo cargar la zona')['zona']);

@@ -4,6 +4,7 @@ import '../../models/liquidacion.dart';
 import '../../services/api_error.dart';
 import '../../services/catalogo_service.dart';
 import '../../utils/formato.dart';
+import '../../utils/imagen.dart';
 import '../../widgets/estado_cuenta.dart';
 import '../../widgets/ui/ui.dart';
 
@@ -35,6 +36,37 @@ class _MisCuentasScreenState extends State<MisCuentasScreen> {
     }
   }
 
+  // Foto del comprobante (cámara o galería) + número de la transferencia (opcional)
+  Future<void> _subirComprobante(SemanaLiquidacion s) async {
+    final imagen = await elegirImagenBase64(context, titulo: 'Foto del comprobante');
+    if (imagen == null || !mounted) return;
+    final referencia = TextEditingController();
+    final enviar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Comprobante de ${Formato.dinero(s.comision)}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Lo revisamos y te avisamos. Mientras tanto, esta semana no te bloquea.'),
+          const SizedBox(height: 12),
+          TextField(controller: referencia, maxLength: 100, decoration: const InputDecoration(labelText: 'Nº de transferencia (opcional)')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enviar')),
+        ],
+      ),
+    );
+    if (enviar != true || !mounted) return;
+    try {
+      final c = await CatalogoService.subirComprobante(semana: s.codigoSemana, imagen: imagen, referencia: referencia.text);
+      if (!mounted) return;
+      setState(() => _cuenta = c);
+      mostrarExito(context, 'Comprobante enviado. Te avisamos cuando lo revisemos');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FondoValle(
@@ -47,7 +79,7 @@ class _MisCuentasScreenState extends State<MisCuentasScreen> {
               onRefresh: _cargar,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                children: [EstadoCuentaVista(cuenta: _cuenta!)],
+                children: [EstadoCuentaVista(cuenta: _cuenta!, onSubirComprobante: _subirComprobante)],
               ),
             ),
     );

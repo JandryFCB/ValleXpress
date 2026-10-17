@@ -7,6 +7,7 @@ import '../../services/api_error.dart';
 import '../../utils/formato.dart';
 import '../../widgets/estado_cuenta.dart';
 import '../../widgets/ui/ui.dart';
+import 'pedir_motivo.dart';
 
 /// Cobros a negocios: quién debe la comisión de semanas ya cerradas, cuánto y si ya dejó de recibir pedidos.
 /// Abajo, la cuenta donde transfieren y los días de gracia. Tocar un negocio abre sus semanas para registrar pagos.
@@ -19,7 +20,11 @@ class CobrosScreen extends StatefulWidget {
 
 class _CobrosScreenState extends State<CobrosScreen> {
   List<DeudaNegocio>? _pendientes;
-  final _cuenta = TextEditingController();
+  final _banco = TextEditingController();
+  final _numero = TextEditingController();
+  final _titular = TextEditingController();
+  final _identificacion = TextEditingController();
+  String _tipo = 'ahorros';
   final _dias = TextEditingController();
   String? _error;
   bool _guardando = false;
@@ -32,8 +37,9 @@ class _CobrosScreenState extends State<CobrosScreen> {
 
   @override
   void dispose() {
-    _cuenta.dispose();
-    _dias.dispose();
+    for (final c in [_banco, _numero, _titular, _identificacion, _dias]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -42,7 +48,11 @@ class _CobrosScreenState extends State<CobrosScreen> {
       final r = await AdminService.liquidaciones();
       if (!mounted) return;
       setState(() => (_pendientes = r.pendientes, _error = null));
-      _cuenta.text = r.cuenta;
+      _banco.text = r.cuenta.banco;
+      _numero.text = r.cuenta.numero;
+      _titular.text = r.cuenta.titular;
+      _identificacion.text = r.cuenta.identificacion;
+      setState(() => _tipo = r.cuenta.tipo);
       _dias.text = '${r.diasGracia}';
     } catch (e) {
       if (mounted) setState(() => _error = textoDeError(e));
@@ -52,9 +62,14 @@ class _CobrosScreenState extends State<CobrosScreen> {
   Future<void> _guardarConfig() async {
     final dias = int.tryParse(_dias.text.trim());
     if (dias == null || dias < 0 || dias > 60) return mostrarError(context, 'Los días de gracia van de 0 a 60');
+    final id = _identificacion.text.trim();
+    if (id.isNotEmpty && id.length != 10 && id.length != 13) return mostrarError(context, 'La cédula tiene 10 dígitos y el RUC 13');
     setState(() => _guardando = true);
     try {
-      await AdminService.guardarConfigCobro(diasGracia: dias, cuenta: _cuenta.text.trim());
+      await AdminService.guardarConfigCobro(
+        diasGracia: dias,
+        cuenta: {'banco': _banco.text.trim(), 'tipo': _tipo, 'numero': _numero.text.trim(), 'titular': _titular.text.trim(), 'identificacion': id},
+      );
       if (mounted) mostrarExito(context, 'Guardado');
       await _cargar();
     } catch (e) {
@@ -115,6 +130,10 @@ class _CobrosScreenState extends State<CobrosScreen> {
                                     '${d.semanas} ${d.semanas == 1 ? 'semana' : 'semanas'}${d.bloqueado ? ' · sin recibir pedidos' : ''}',
                                     style: tema.bodySmall?.copyWith(color: d.bloqueado ? AppTheme.errorColor : c.textoSuave),
                                   ),
+                                  if (d.porRevisar > 0) ...[
+                                    const SizedBox(height: 4),
+                                    InsigniaValle(d.porRevisar == 1 ? '1 comprobante por revisar' : '${d.porRevisar} comprobantes por revisar', color: AppTheme.infoColor, icono: Icons.receipt_long_rounded),
+                                  ],
                                 ]),
                               ),
                               Text(Formato.dinero(d.saldo), style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
@@ -126,7 +145,23 @@ class _CobrosScreenState extends State<CobrosScreen> {
                   const EncabezadoSeccion('Cómo cobras', subtitulo: 'Los negocios ven estos datos en "Mis cuentas"'),
                   TarjetaValle(
                     child: Column(children: [
-                      CampoValle(controller: _cuenta, etiqueta: 'Cuenta para transferir (banco, número, titular)', icono: Icons.account_balance_rounded, maxLineas: 2, maxLongitud: 300),
+                      CampoValle(controller: _banco, etiqueta: 'Banco', icono: Icons.account_balance_rounded, maxLongitud: 60, mayusculas: TextCapitalization.words),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<String>(
+                          showSelectedIcon: false,
+                          segments: const [ButtonSegment(value: 'ahorros', label: Text('Ahorros')), ButtonSegment(value: 'corriente', label: Text('Corriente'))],
+                          selected: {_tipo},
+                          onSelectionChanged: (v) => setState(() => _tipo = v.first),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      CampoValle(controller: _numero, etiqueta: 'Número de cuenta', icono: Icons.numbers_rounded, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))], maxLongitud: 30),
+                      const SizedBox(height: 12),
+                      CampoValle(controller: _titular, etiqueta: 'Titular', icono: Icons.person_outline_rounded, maxLongitud: 100, mayusculas: TextCapitalization.words),
+                      const SizedBox(height: 12),
+                      CampoValle(controller: _identificacion, etiqueta: 'Cédula o RUC del titular', icono: Icons.badge_outlined, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 13),
                       const SizedBox(height: 12),
                       CampoValle(controller: _dias, etiqueta: 'Días para pagar después de cada semana', icono: Icons.event_available_rounded, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 2),
                       const SizedBox(height: 6),
@@ -201,6 +236,49 @@ class _CuentaNegocioScreenState extends State<CuentaNegocioScreen> {
     }
   }
 
+  Future<void> _aprobar(ComprobantePago comp) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Aprobar el comprobante?'),
+        content: const Text('Confirma que el dinero llegó a tu cuenta. La semana queda pagada y le avisamos al negocio.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Aprobar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final c = await AdminService.aprobarComprobante(comp.id);
+      HapticFeedback.mediumImpact();
+      if (!mounted) return;
+      setState(() => _cuenta = c);
+      mostrarExito(context, 'Pago aprobado y le avisamos al negocio');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    }
+  }
+
+  Future<void> _rechazar(ComprobantePago comp) async {
+    final motivo = await pedirMotivo(
+      context,
+      titulo: 'Rechazar comprobante',
+      explicacion: 'El negocio verá el motivo y podrá subir otro.',
+      textoBoton: 'Rechazar',
+      sugerencias: const ['La foto no se lee', 'El monto no coincide', 'No encontramos la transferencia', 'Es de otra semana'],
+    );
+    if (motivo == null) return;
+    try {
+      final c = await AdminService.rechazarComprobante(comp.id, motivo);
+      if (!mounted) return;
+      setState(() => _cuenta = c);
+      mostrarMensaje(context, 'Comprobante rechazado: le avisamos al negocio');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FondoValle(
@@ -213,7 +291,7 @@ class _CuentaNegocioScreenState extends State<CuentaNegocioScreen> {
               onRefresh: _cargar,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                children: [EstadoCuentaVista(cuenta: _cuenta!, paraAdmin: true, onPagar: _pagar)],
+                children: [EstadoCuentaVista(cuenta: _cuenta!, paraAdmin: true, onPagar: _pagar, onAprobar: _aprobar, onRechazar: _rechazar)],
               ),
             ),
     );

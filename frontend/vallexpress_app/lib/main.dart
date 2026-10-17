@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -19,6 +20,9 @@ import 'services/fcm_mobile.dart'
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Solo vertical: las pantallas están diseñadas para el celular de pie (girarlo descuadraba el diseño).
+  // En Android también lo fija el manifiesto (screenOrientation) para que no gire ni durante el arranque.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   // Inicializar FCM (Firebase Cloud Messaging)
   if (!kIsWeb) {
