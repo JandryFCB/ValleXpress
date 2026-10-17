@@ -1,0 +1,10 @@
+# Caddy saca y renueva solo el certificado HTTPS (Let's Encrypt) del dominio y reenvía todo al backend,
+# incluido el tiempo real (Socket.IO por WebSocket).
+{$DOMINIO} {
+	encode gzip
+	reverse_proxy backend:3000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

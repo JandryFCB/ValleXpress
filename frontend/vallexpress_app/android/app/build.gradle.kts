@@ -1,3 +1,12 @@
+import java.util.Properties
+
+// Llave para firmar la versión que se sube a Google Play: android/key.properties (NUNCA va a git; ver DESPLIEGUE.md).
+// Si no existe, la versión release se firma con la llave de depuración (sirve para probar, no para publicar).
+val llave = Properties().apply {
+    val archivo = rootProject.file("key.properties")
+    if (archivo.exists()) archivo.inputStream().use { load(it) }
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -39,11 +48,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (llave.getProperty("storeFile") != null) {
+            create("publicacion") {
+                storeFile = file(llave.getProperty("storeFile"))
+                storePassword = llave.getProperty("storePassword")
+                keyAlias = llave.getProperty("keyAlias")
+                keyPassword = llave.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (llave.getProperty("storeFile") != null) signingConfigs.getByName("publicacion") else signingConfigs.getByName("debug")
         }
     }
 }

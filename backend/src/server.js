@@ -3,6 +3,13 @@ require('dotenv').config();
 
 const jwt = require('jsonwebtoken');
 
+// En producción no se arranca con una clave de firma débil: cualquiera podría fabricar sesiones válidas
+if (process.env.NODE_ENV === 'production' && String(process.env.JWT_SECRET || '').length < 32) {
+  console.error('❌ JWT_SECRET debe tener al menos 32 caracteres en producción. Genera uno con:');
+  console.error("   node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"");
+  process.exit(1);
+}
+
 // Inicializar Firebase Admin SDK
 const admin = require('firebase-admin');
 const fs = require('fs');
@@ -105,13 +112,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Detrás de un proxy (Caddy/Nginx con HTTPS) la IP real del usuario viene en X-Forwarded-For. Sin esto todas
+// las peticiones parecerían de la IP del proxy y el limitador bloquearía a TODOS a la vez. TRUST_PROXY=1 = un proxy.
+if (process.env.TRUST_PROXY) app.set('trust proxy', /^\d+$/.test(process.env.TRUST_PROXY) ? Number(process.env.TRUST_PROXY) : process.env.TRUST_PROXY);
+
 // Middlewares globales
 app.use(solicitudId);          // identificador por petición (une los logs de una misma petición)
 
 app.use(helmet());
 app.use(cors());
 app.use(compression());
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

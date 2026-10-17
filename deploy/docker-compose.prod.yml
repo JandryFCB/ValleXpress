@@ -1,0 +1,95 @@
+# ValleXpress en producción: base de datos + backend + HTTPS automático + respaldos diarios.
+#   cd deploy && docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+# Todo se reinicia solo (si el servidor se reinicia o un servicio falla). Solo Caddy queda expuesto (80/443).
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: vx_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: America/Guayaquil
+    volumes:
+      - db_datos:/var/lib/postgresql/data
+      # Las migraciones se ejecutan en orden SOLO al crear la base la primera vez (ver DESPLIEGUE.md para las nuevas)
+      - ../database/migraciones:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [interna]
+
+  backend:
+    build: ../backend
+    image: vallexpress-backend
+    container_name: vx_backend
+    restart: always
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 5432
+      TRUST_PROXY: 1
+      UPLOADS_DIR: /app/uploads
+      FIREBASE_SERVICE_ACCOUNT_PATH: /run/secrets/firebase.json
+    volumes:
+      - uploads:/app/uploads
+      - ./secretos/firebase.json:/run/secrets/firebase.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [interna]
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: vx_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
+    depends_on: [backend]
+    networks: [interna]
+
+  # Respaldo diario de la base (comprimido); guarda los últimos ${RESPALDOS_DIAS:-14} días en ./respaldos.
+  # Copia esa carpeta FUERA del servidor de vez en cuando (ver DESPLIEGUE.md).
+  respaldos:
+    image: postgres:17-alpine
+    container_name: vx_respaldos
+    restart: always
+    environment:
+      PGHOST: db
+      PGUSER: ${DB_USER}
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: ${DB_NAME}
+      DIAS: ${RESPALDOS_DIAS:-14}
+      TZ: America/Guayaquil
+    volumes:
+      - ./respaldos:/respaldos
+    entrypoint: >
+      sh -c 'while true; do
+        f=/respaldos/vallexpress-$$(date +%Y%m%d-%H%M).sql.gz;
+        pg_dump --no-owner | gzip > "$$f" && echo "respaldo $$f";
+        find /respaldos -name "vallexpress-*.sql.gz" -mtime +$$DIAS -delete;
+        sleep 86400; done'
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [interna]
+
+volumes:
+  db_datos:
+  uploads:
+  caddy_datos:
+  caddy_config:
+
+networks:
+  interna:

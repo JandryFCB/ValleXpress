@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.*
 !.env.example
+!.env.ejemplo
 *firebase-adminsdk*
 **/google-services.json
 **/GoogleService-Info.plist
@@ -38,3 +39,7 @@ Thumbs.db
 datos_base.txt
 *.sql.bak
 database/respaldos/
+
+# Producción: secretos (credenciales de Firebase) y respaldos de la base NUNCA van a git
+deploy/secretos/
+deploy/respaldos/
