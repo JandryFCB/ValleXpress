@@ -48,15 +48,15 @@ const SEMANA = (apertura, cierre) => Array.from({ length: 7 }, (_, i) => ({ dia:
     r = await api('GET', '/api/negocios/categorias', null, C);
     check('8 categorías (comida ... otros)', r.status === 200 && r.body.categorias.length === 8 && r.body.categorias[0].descripcion === 'Comida' && r.body.categorias.at(-1).codigo === '099', JSON.stringify(r.body));
     r = await api('PUT', '/api/mi-negocio', { costoEnvio: 1.5, pedidoMinimo: 5, tiempoPreparacion: 25, radioKm: 4, ruc: '1790012345001', descripcion: 'Las mejores pizzas' }, L);
-    check('actualizar datos: 200', r.status === 200 && r.body.negocio.costoEnvio === 1.5 && r.body.negocio.pedidoMinimo === 5 && r.body.negocio.tiempoPreparacion === 25 && r.body.negocio.radioKm === 4 && r.body.negocio.ruc === '1790012345001', JSON.stringify(r.body));
+    check('actualizar datos: 200 (el costo de envío ya no lo fija el negocio: se ignora)', r.status === 200 && r.body.negocio.costoEnvio !== 1.5 && r.body.negocio.pedidoMinimo === 5 && r.body.negocio.tiempoPreparacion === 25 && r.body.negocio.radioKm === 4 && r.body.negocio.ruc === '1790012345001', JSON.stringify(r.body));
     r = await api('PUT', '/api/mi-negocio', { ruc: '123' }, L);
     check('RUC inválido: 400', r.status === 400 && /13 dígitos/.test(r.body.error));
     r = await api('PUT', '/api/mi-negocio', { categoria: '555' }, L);
     check('categoría inválida: 400', r.status === 400);
-    r = await api('PUT', '/api/mi-negocio', { costoEnvio: -1 }, L);
-    check('costo de envío negativo: 400', r.status === 400);
-    let h = await q(`SELECT versioncontrol v, costoenvio, cusuario_modificacion m, fhasta FROM tnegocios WHERE cnegocio=1 ORDER BY fdesde`);
-    check('el cambio queda en el historial del negocio con quién lo hizo', h.length === 2 && Number(h[0].costoenvio) === 0 && Number(h[1].costoenvio) === 1.5 && h[1].m === luis.usuario.id, JSON.stringify(h));
+    r = await api('PUT', '/api/mi-negocio', { pedidoMinimo: -1 }, L);
+    check('pedido mínimo negativo: 400', r.status === 400);
+    let h = await q(`SELECT versioncontrol v, pedidominimo, cusuario_modificacion m, fhasta FROM tnegocios WHERE cnegocio=1 ORDER BY fdesde`);
+    check('el cambio queda en el historial del negocio con quién lo hizo', h.length === 2 && Number(h[0].pedidominimo) === 0 && Number(h[1].pedidominimo) === 5 && h[1].m === luis.usuario.id, JSON.stringify(h));
 
     seccion('3. Local del negocio');
     r = await api('PUT', '/api/mi-negocio/local', { direccion: 'Av. Principal y Calle 3', referencia: 'Junto al parque', latitud: -3.25, longitud: -78.55 }, L);

@@ -8,6 +8,7 @@ const { datosAprobacion, pedirRevision: pedirRevisionDe } = require('../../share
 const ArchivoService = require('../../shared/services/archivo.service');
 const CatalogoService = require('../../shared/services/catalogo.service');
 const PerfilesService = require('../../shared/services/perfiles.service');
+const TarifasService = require('../../shared/services/tarifas.service');
 const { auditar } = require('../../shared/services/log.service');
 const { APROBACION, CATEGORIA, TIPODIRECCION } = require('../../shared/constants/codigos');
 
@@ -53,11 +54,27 @@ async function mapaCategorias() {
   return cacheCategorias;
 }
 
+// Dirección predeterminada de quien consulta (para estimarle el envío de cada negocio), si tiene
+async function direccionDe(req) {
+  if (!req?.usuario?.personaId) return null;
+  const d = await Direccion.findOne({ where: { personaId: req.usuario.personaId, esPredeterminada: true }, attributes: ['latitud', 'longitud'] });
+  return d ? { lat: num(d.latitud), lng: num(d.longitud) } : null;
+}
+
 // Formato que recibe la app. "privado" agrega lo que solo ve el dueño (RUC, aprobación).
+// El envío lo calcula ValleXpress por distancia: a quien tiene dirección predeterminada se le estima el de cada
+// negocio (envioEstimado = true); si no, se muestra la tarifa base ("desde").
 async function aApi(entrada, req, { privado = false } = {}) {
   const lista = Array.isArray(entrada) ? entrada : [entrada];
   const urls = await ArchivoService.mapaUrls(req, lista.flatMap((n) => [n.logoId, n.portadaId]));
   const categorias = await mapaCategorias();
+  const tarifas = await TarifasService.tarifas();
+  const desde = privado ? null : await direccionDe(req);
+  const envioDe = (n) => {
+    const local = n.local ? { lat: num(n.local.latitud), lng: num(n.local.longitud) } : null;
+    const e = TarifasService.envioEntre(tarifas, local && desde ? local : null, local && desde ? desde : null);
+    return { costoEnvio: e.centavos / 100, distanciaKm: e.distanciaKm, envioEstimado: e.distanciaKm != null };
+  };
   const salida = lista.map((n) => {
     const horarios = (n.horarios || [])
       .map((h) => ({ dia: h.dia, cerrado: h.cerrado, apertura: hhmm(h.apertura), cierre: hhmm(h.cierre) }))
@@ -70,7 +87,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
       categoria: { codigo: n.categoria, descripcion: categorias[n.categoria] || 'Otros' },
       logo: urls[String(n.logoId)]?.url || null,
       portada: urls[String(n.portadaId)]?.url || null,
-      costoEnvio: num(n.costoEnvio),
+      ...envioDe(n),
       pedidoMinimo: num(n.pedidoMinimo),
       tiempoPreparacion: n.tiempoPreparacion,
       radioKm: num(n.radioKm),
@@ -177,7 +194,8 @@ async function crear(usuarioId, datos, req) {
 async function actualizar(usuarioId, datos, req) {
   const n = await exigirMio(usuarioId);
   const cambios = {};
-  for (const campo of ['nombre', 'descripcion', 'costoEnvio', 'pedidoMinimo', 'tiempoPreparacion', 'radioKm']) {
+  // costoEnvio ya no lo fija el negocio: el envío lo calcula ValleXpress por distancia (TarifasService)
+  for (const campo of ['nombre', 'descripcion', 'pedidoMinimo', 'tiempoPreparacion', 'radioKm']) {
     if (datos[campo] !== undefined) cambios[campo] = typeof datos[campo] === 'string' ? datos[campo].trim() || null : datos[campo];
   }
   if (datos.categoria !== undefined) {

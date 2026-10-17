@@ -10,6 +10,7 @@ const { verificarToken, verificarRol } = require('../../middlewares/auth.middlew
 const cliente = [verificarToken, verificarRol('cliente')];
 
 router.get('/metodos-pago', verificarToken, controller.metodosPago);
+router.get('/cotizar', cliente, schema.cotizar, validar, controller.cotizar);
 router.post('/', cliente, schema.crear, validar, controller.crear);
 router.get('/mis-pedidos', cliente, schema.listado, validar, controller.misPedidos);
 router.patch('/:id/cancelar', cliente, schema.cancelar, validar, controller.cancelar);

@@ -21,7 +21,6 @@ const datos = (requerido) => [
   body('descripcion').optional({ values: 'null' }).isString().isLength({ max: 500 }).withMessage('La descripción es muy larga (máximo 500)'),
   body('categoria').optional().isIn(CATEGORIAS).withMessage('Categoría inválida'),
   body('ruc').optional({ values: 'falsy' }).matches(/^\d{13}$/).withMessage('El RUC debe tener 13 dígitos'),
-  body('costoEnvio').optional().isFloat({ min: 0, max: 100 }).withMessage('Costo de envío inválido (0 a 100)').toFloat(),
   body('pedidoMinimo').optional().isFloat({ min: 0, max: 1000 }).withMessage('Pedido mínimo inválido (0 a 1000)').toFloat(),
   body('tiempoPreparacion').optional().isInt({ min: 5, max: 240 }).withMessage('Tiempo de preparación inválido (5 a 240 minutos)').toInt(),
   body('radioKm').optional().isFloat({ gt: 0, max: 50 }).withMessage('Radio de entrega inválido (hasta 50 km)').toFloat(),

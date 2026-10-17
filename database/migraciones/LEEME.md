@@ -17,6 +17,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `009_motivo_aprobacion.sql` | Motivo del rechazo o la suspensión en negocios y repartidores |
 | `010_perfiles.sql` | Perfiles y permisos: registro abierto por perfil y aprobación automática por separado para vendedor y repartidor (reemplaza a `APROBACIONAUTOMATICA`) |
 | `011_vencimiento_pedidos.sql` | Minutos para avisar y cancelar solos los pedidos sin repartidor (desde que quedan listos) o sin respuesta del negocio |
+| `012_tarifas.sql` | Envío por distancia (base + km de ruta) y comisión de ValleXpress; cada pedido guarda su distancia, % y comisión |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

@@ -13,11 +13,13 @@ const LOCAL = { lat: -0.18, lng: -78.48 };
   let q;
   try {
     ({ q } = await t.iniciar());
+    // Envío plano de $1.5 (sin valor por km): esta prueba no es de tarifas (eso lo cubre tarifas.e2e.js)
+    await q("UPDATE tconfiguraciones SET valor = CASE cconfiguracion WHEN 'ENVIOBASE' THEN '1.5'::jsonb ELSE '0'::jsonb END WHERE cconfiguracion IN ('ENVIOBASE','ENVIOPORKM') AND fhasta = '2999-12-31 00:00:00-05'");
 
     seccion('1. Preparación: negocio, productos y clientes');
     const luis = await t.registrar('luis@test.com', 'Luis', 'Mora', 'vendedor', { nombreNegocio: 'Pizzería Luis', categoriaNegocio: '001' });
     const L = luis.token;
-    await api('PUT', '/api/mi-negocio', { costoEnvio: 1.5, pedidoMinimo: 5, tiempoPreparacion: 20, radioKm: 5 }, L);
+    await api('PUT', '/api/mi-negocio', { pedidoMinimo: 5, tiempoPreparacion: 20, radioKm: 5 }, L);
     await api('PUT', '/api/mi-negocio/local', { direccion: 'Av. Amazonas y Colón', latitud: LOCAL.lat, longitud: LOCAL.lng }, L);
     const crearProd = async (datos) => (await api('POST', '/api/mi-negocio/productos', datos, L)).body.producto;
     const pizza = await crearProd({ nombre: 'Pizza margarita', precio: 8.5, seccion: 'Pizzas' });

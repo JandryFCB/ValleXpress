@@ -7,6 +7,7 @@ const id = (req) => Number(req.params.id);
 
 // --- Cliente ---
 const metodosPago = asyncHandler(async (req, res) => res.json({ metodos: await service.metodosPago() }));
+const cotizar = asyncHandler(async (req, res) => res.json(await service.cotizar(req.usuario, req.query)));
 const crear = asyncHandler(async (req, res) => res.status(201).json({ pedido: await service.crear(req.usuario, req.body, req) }));
 const misPedidos = asyncHandler(async (req, res) => res.json(await service.listarDelCliente(req.usuario.id, req.query, req)));
 const cancelar = asyncHandler(async (req, res) => res.json({ pedido: await service.cancelar(req.usuario, id(req), req.body, req) }));
@@ -20,4 +21,4 @@ const obtener = asyncHandler(async (req, res) => res.json({ pedido: await servic
 const delNegocio = asyncHandler(async (req, res) => res.json(await service.listarDelNegocio(req.usuario.id, req.query, req)));
 const estadoNegocio = asyncHandler(async (req, res) => res.json({ pedido: await service.cambiarEstadoNegocio(req.usuario, id(req), req.body, req) }));
 
-module.exports = { metodosPago, crear, misPedidos, cancelar, recibido, calificar, obtener, delNegocio, estadoNegocio };
+module.exports = { metodosPago, cotizar, crear, misPedidos, cancelar, recibido, calificar, obtener, delNegocio, estadoNegocio };

@@ -28,6 +28,9 @@ const Pedido = sequelize.define('Pedido', {
   notas: { type: DataTypes.STRING(300), field: 'notas' },
   tiempoEstimado: { type: DataTypes.SMALLINT, field: 'tiempoestimado' },
   motivoCancelacion: { type: DataTypes.STRING(300), field: 'motivocancelacion' },
+  distanciaKm: { type: DataTypes.DECIMAL(6, 2), field: 'distanciakm' },             // ruta estimada con la que se cobró el envío
+  comisionPorcentaje: { type: DataTypes.DECIMAL(5, 2), allowNull: false, defaultValue: 0, field: 'comisionporcentaje' },
+  comision: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0, field: 'comision' },   // de ValleXpress; la paga el negocio
   fechaPedido: { type: DataTypes.DATE, field: 'fpedido' },
   ...columnasHistorial,
 }, opcionesHistorial('TPEDIDOS'));

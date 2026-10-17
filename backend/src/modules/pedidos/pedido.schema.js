@@ -28,6 +28,12 @@ const estadoNegocio = [
   body('tiempoEstimado').optional({ values: 'null' }).isInt({ min: 5, max: 240 }).withMessage('Tiempo estimado inválido (5 a 240 minutos)').toInt(),
 ];
 
+// Cotizar el envío de un negocio a una dirección del cliente
+const cotizar = [
+  query('negocioId').isInt({ min: 1 }).withMessage('Indica el negocio').toInt(),
+  query('direccionId').isInt({ min: 1 }).withMessage('Indica la dirección').toInt(),
+];
+
 const cancelar = [...id, body('motivo').optional({ values: 'null' }).isString().isLength({ max: 300 }).withMessage('El motivo es muy largo')];
 
 const calificar = [
@@ -37,4 +43,4 @@ const calificar = [
   body('destino').optional().toLowerCase().isIn(['negocio', 'repartidor']).withMessage('Se califica al negocio o al repartidor'),
 ];
 
-module.exports = { id, listado, crear, estadoNegocio, cancelar, calificar };
+module.exports = { id, listado, cotizar, crear, estadoNegocio, cancelar, calificar };

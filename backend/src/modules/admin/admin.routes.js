@@ -37,6 +37,8 @@ router.put('/usuarios/:usuario/foto', schema.fotoUsuario, validar, controller.fo
 router.patch('/usuarios/:usuario/estado', schema.estadoUsuario, validar, controller.estadoUsuario);
 router.delete('/usuarios/:usuario', schema.bajaUsuario, validar, controller.bajaUsuario);
 
+router.get('/tarifas', controller.tarifas);
+router.put('/tarifas', schema.tarifas, validar, controller.cambiarTarifas);
 router.get('/perfiles', controller.perfiles);
 router.patch('/perfiles/:rol', schema.perfil, validar, controller.cambiarPerfil);
 

@@ -18,6 +18,7 @@ const NotificacionService = require('../notificaciones/notificacion.service');
 const SesionService = require('../../shared/services/sesion.service');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const PerfilesService = require('../../shared/services/perfiles.service');
+const TarifasService = require('../../shared/services/tarifas.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const { auditar } = require('../../shared/services/log.service');
@@ -53,13 +54,15 @@ async function resumen() {
     SELECT COUNT(*) AS pedidos,
            COUNT(*) FILTER (WHERE cestatuspedido IN (${vendidos})) AS entregados,
            COALESCE(SUM(total) FILTER (WHERE cestatuspedido IN (${vendidos})), 0) AS ventas,
-           COALESCE(SUM(costoenvio) FILTER (WHERE cestatuspedido IN (${vendidos})), 0) AS envios
+           COALESCE(SUM(costoenvio) FILTER (WHERE cestatuspedido IN (${vendidos})), 0) AS envios,
+           COALESCE(SUM(comision) FILTER (WHERE cestatuspedido IN (${vendidos})), 0) AS comisiones
       FROM tpedidos
      WHERE fhasta = ${VIGENTE} AND (fpedido AT TIME ZONE :zona)::date = (now() AT TIME ZONE :zona)::date`, { zona: ZONA });
 
   // Ventas de los últimos 7 días (incluye los días sin ventas, para la gráfica)
   const dias = await consulta(`
-    SELECT to_char(d.dia, 'YYYY-MM-DD') AS dia, COUNT(p.cpedido) AS pedidos, COALESCE(SUM(p.total), 0) AS ventas
+    SELECT to_char(d.dia, 'YYYY-MM-DD') AS dia, COUNT(p.cpedido) AS pedidos, COALESCE(SUM(p.total), 0) AS ventas,
+           COALESCE(SUM(p.comision), 0) AS comisiones
       FROM generate_series((now() AT TIME ZONE :zona)::date - 6, (now() AT TIME ZONE :zona)::date, interval '1 day') AS d(dia)
       LEFT JOIN tpedidos p ON p.fhasta = ${VIGENTE} AND p.cestatuspedido IN (${vendidos}) AND (p.fpedido AT TIME ZONE :zona)::date = d.dia
      GROUP BY d.dia ORDER BY d.dia`, { zona: ZONA });
@@ -82,8 +85,8 @@ async function resumen() {
   const negociosPor = conteo(negocios, (c) => APROBACIONAAPI[c]);
   const repartidoresPor = conteo(repartidores, (c) => APROBACIONAAPI[c]);
   return {
-    hoy: { pedidos: Number(hoy.pedidos), entregados: Number(hoy.entregados), ventas: num(hoy.ventas), envios: num(hoy.envios) },
-    ultimos7Dias: dias.map((d) => ({ dia: d.dia, pedidos: Number(d.pedidos), ventas: num(d.ventas) })),
+    hoy: { pedidos: Number(hoy.pedidos), entregados: Number(hoy.entregados), ventas: num(hoy.ventas), envios: num(hoy.envios), comisiones: num(hoy.comisiones) },
+    ultimos7Dias: dias.map((d) => ({ dia: d.dia, pedidos: Number(d.pedidos), ventas: num(d.ventas), comisiones: num(d.comisiones) })),
     pedidosEnCurso: conteo(enCurso, (c) => ESTADOPEDIDOAAPI[c]),
     mejoresNegocios: mejores.map((m) => ({ id: Number(m.id), nombre: m.nombre, pedidos: Number(m.pedidos), ventas: num(m.ventas) })),
     usuarios: conteo(usuarios, (c) => ROLAAPI[c]),
@@ -394,6 +397,16 @@ async function editarRepartidor(admin, usuarioId, datos, req) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Tarifas: envío por distancia y comisión de ValleXpress
+// ---------------------------------------------------------------------------------------------
+async function cambiarTarifas(admin, cambios, req) {
+  const hechos = await withTransaction((t) => TarifasService.fijar(cambios, { transaction: t }), { usuarioId: admin.id });
+  ConfiguracionService.limpiarCache();
+  if (Object.keys(hechos).length) auditar({ usuarioId: admin.id, accion: 'TARIFASCAMBIADAS', entidad: 'CONFIGURACIONES', entidadId: 'TARIFAS', detalle: hechos, req });
+  return TarifasService.tarifas();
+}
+
+// ---------------------------------------------------------------------------------------------
 // Perfiles y permisos
 // ---------------------------------------------------------------------------------------------
 // Por perfil (cliente, vendedor, repartidor): si puede registrarse desde la app y, para vendedor y repartidor,
@@ -452,5 +465,6 @@ async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica
 module.exports = {
   resumen, negocios, cambiarAprobacionNegocio, repartidores, cambiarAprobacionRepartidor,
   usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
-  resolverDueno, editarRepartidor, perfiles, cambiarPerfil,
+  resolverDueno, editarRepartidor, perfiles, cambiarPerfil, cambiarTarifas,
+  tarifas: () => TarifasService.tarifas(),
 };

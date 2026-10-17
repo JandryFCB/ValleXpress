@@ -15,6 +15,7 @@ const withTransaction = require('../../shared/helpers/withTransaction');
 const ArchivoService = require('../../shared/services/archivo.service');
 const { auditar } = require('../../shared/services/log.service');
 const { distanciaKm } = require('../../shared/utils/geo');
+const TarifasService = require('../../shared/services/tarifas.service');
 const {
   ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO, VEHICULOAAPI,
 } = require('../../shared/constants/codigos');
@@ -105,8 +106,9 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
         local: n.local ? { direccion: n.local.direccion, referencia: n.local.referencia, latitud: num(n.local.latitud), longitud: num(n.local.longitud) } : null,
         ...((rol === 'repartidor' || rol === 'administrador') && { telefono: n.dueno?.telefono || null }),
       },
-      // Distancia del negocio a la entrega (en línea recta): le sirve al repartidor para decidir
-      distanciaKm: n?.local ? Number(distanciaKm({ lat: num(n.local.latitud), lng: num(n.local.longitud) }, { lat: num(p.latitud), lng: num(p.longitud) }).toFixed(2)) : null,
+      // Distancia de ruta del negocio a la entrega (la que se cobró); los pedidos de antes de las tarifas usan la línea recta
+      distanciaKm: p.distanciaKm != null ? num(p.distanciaKm)
+        : n?.local ? Number(distanciaKm({ lat: num(n.local.latitud), lng: num(n.local.longitud) }, { lat: num(p.latitud), lng: num(p.longitud) }).toFixed(2)) : null,
       entrega: { direccion: p.direccionEntrega, referencia: p.referenciaEntrega, latitud: num(p.latitud), longitud: num(p.longitud) },
       metodoPago: METODOPAGOAAPI[p.metodoPago],
       pagado: p.pagado,
@@ -115,6 +117,12 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
       descuento: num(p.descuento),
       propina: num(p.propina),
       total: num(p.total),
+      // Lo que se queda ValleXpress y lo que recibe el negocio: solo lo ven el negocio y el administrador
+      ...((rol === 'vendedor' || rol === 'administrador') && {
+        comisionPorcentaje: num(p.comisionPorcentaje),
+        comision: num(p.comision),
+        recibeNegocio: dinero(centavos(p.subtotal) - centavos(p.comision)),
+      }),
       notas: p.notas,
       tiempoEstimado: p.tiempoEstimado,
       motivoCancelacion: p.motivoCancelacion,
@@ -235,6 +243,26 @@ async function metodoActivo(codigo) {
   return fila?.esactivo === true;
 }
 
+// Envío de un negocio a una dirección según las tarifas: distancia de ruta, costo y si está fuera de su cobertura
+// (la cobertura del negocio, RADIOKM, se mide en línea recta)
+function envioPara(negocio, direccion, tarifas) {
+  const desde = negocio.local ? { lat: num(negocio.local.latitud), lng: num(negocio.local.longitud) } : null;
+  const hasta = { lat: num(direccion.latitud), lng: num(direccion.longitud) };
+  const lineaKm = desde ? distanciaKm(desde, hasta) : null;
+  const envio = TarifasService.envioEntre(tarifas, desde, hasta);
+  return { ...envio, lineaKm, fueraDeCobertura: lineaKm != null && lineaKm > num(negocio.radioKm) };
+}
+
+// Cliente: cuánto le costaría el envío de este negocio a una de sus direcciones (el carrito lo muestra antes de pedir)
+async function cotizar(cliente, { negocioId, direccionId }) {
+  const negocio = await Negocio.findOne({ where: { id: negocioId }, include: [{ model: Direccion, as: 'local', required: false }] });
+  if (!negocio || negocio.aprobacion !== APROBACION.APROBADO) throw AppError.notFound('Negocio no encontrado', 'NEGOCIONOENCONTRADO');
+  const direccion = await Direccion.findOne({ where: { id: direccionId, personaId: cliente.personaId } });
+  if (!direccion) throw AppError.notFound('Dirección no encontrada', 'DIRECCIONNOENCONTRADA');
+  const e = envioPara(negocio, direccion, await TarifasService.tarifas());
+  return { distanciaKm: e.distanciaKm, costoEnvio: dinero(e.centavos), fueraDeCobertura: e.fueraDeCobertura, radioKm: num(negocio.radioKm) };
+}
+
 async function crear(cliente, datos, req) {
   const metodoPago = APIAMETODOPAGO[String(datos.metodoPago || '').toLowerCase()];
   if (!metodoPago || !(await metodoActivo(metodoPago))) throw AppError.badRequest('Ese método de pago no está disponible', 'METODOPAGOINVALIDO');
@@ -249,6 +277,7 @@ async function crear(cliente, datos, req) {
   const items = [...lineas.values()].sort((a, b) => Number(a.productoId) - Number(b.productoId));   // orden fijo: sin bloqueos cruzados
   if (items.some((i) => i.cantidad > 99)) throw AppError.badRequest('Máximo 99 unidades por producto', 'CANTIDADINVALIDA');
 
+  const tarifas = await TarifasService.tarifas();
   const { pedido, negocio } = await withTransaction(async (t) => {
     const negocio = await Negocio.findOne({
       where: { id: datos.negocioId },
@@ -262,11 +291,9 @@ async function crear(cliente, datos, req) {
     // La dirección debe ser del propio cliente; se COPIA en el pedido
     const direccion = await Direccion.findOne({ where: { id: datos.direccionId, personaId: cliente.personaId }, transaction: t });
     if (!direccion) throw AppError.notFound('Dirección no encontrada', 'DIRECCIONNOENCONTRADA');
-    if (negocio.local) {
-      const km = distanciaKm({ lat: num(negocio.local.latitud), lng: num(negocio.local.longitud) }, { lat: num(direccion.latitud), lng: num(direccion.longitud) });
-      if (km > num(negocio.radioKm)) {
-        throw AppError.conflict(`Tu dirección está a ${km.toFixed(1)} km y este negocio entrega hasta ${num(negocio.radioKm)} km`, 'FUERADECOBERTURA', { distanciaKm: Number(km.toFixed(2)) });
-      }
+    const envio = envioPara(negocio, direccion, tarifas);
+    if (envio.fueraDeCobertura) {
+      throw AppError.conflict(`Tu dirección está a ${envio.lineaKm.toFixed(1)} km y este negocio entrega hasta ${num(negocio.radioKm)} km`, 'FUERADECOBERTURA', { distanciaKm: Number(envio.lineaKm.toFixed(2)) });
     }
 
     const productos = await Producto.findAll({ where: { id: items.map((i) => i.productoId), negocioId: negocio.id }, transaction: t });
@@ -286,7 +313,8 @@ async function crear(cliente, datos, req) {
       if (p.controlaStock) await descontarStock(p, it.cantidad, t);
     }
 
-    const envio = centavos(negocio.costoEnvio);
+    // El envío es del repartidor; la comisión de ValleXpress sale de lo vendido en productos (el cliente no la ve)
+    const comision = TarifasService.comisionDe(subtotal, tarifas.comisionPorcentaje);
     const nuevo = await Pedido.create({
       clienteId: cliente.id,
       negocioId: negocio.id,
@@ -297,8 +325,11 @@ async function crear(cliente, datos, req) {
       latitud: direccion.latitud,
       longitud: direccion.longitud,
       subtotal: dinero(subtotal),
-      costoEnvio: dinero(envio),
-      total: dinero(subtotal + envio),
+      costoEnvio: dinero(envio.centavos),
+      distanciaKm: envio.distanciaKm,
+      comisionPorcentaje: tarifas.comisionPorcentaje,
+      comision: dinero(comision),
+      total: dinero(subtotal + envio.centavos),
       notas: datos.notas?.trim() || null,
       tiempoEstimado: negocio.tiempoPreparacion + MINUTOSENTREGA,
     }, { transaction: t });
@@ -603,7 +634,7 @@ async function metodosPago() {
 }
 
 module.exports = {
-  crear, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, metodosPago,
+  crear, cotizar, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, metodosPago,
   libresParaRepartidor, listarDelRepartidor, aceptar,
   recoger: (usuario, id, req) => pasoRepartidor(usuario, id, E.RECOGIDO, req),
   entregar: (usuario, id, req) => pasoRepartidor(usuario, id, E.ENTREGADO, req),
