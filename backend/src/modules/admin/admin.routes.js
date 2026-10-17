@@ -10,6 +10,7 @@ const router = express.Router();
 router.use(verificarToken, verificarRol('administrador'));
 
 router.get('/resumen', controller.resumen);
+router.get('/resumen/:tipo', controller.detalleCifra);
 
 router.get('/negocios', schema.listadoAprobacion, validar, controller.negocios);
 router.patch('/negocios/:id/aprobacion', schema.idNegocio, schema.aprobacion, validar, controller.aprobacionNegocio);

@@ -24,7 +24,7 @@ const LiquidacionService = require('../liquidaciones/liquidacion.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const { auditar } = require('../../shared/services/log.service');
-const { APROBACION, APROBACIONAAPI, ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, ROLAAPI, APIAROL } = require('../../shared/constants/codigos');
+const { APROBACION, APROBACIONAAPI, ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, ROLAAPI, APIAROL, VEHICULOAAPI } = require('../../shared/constants/codigos');
 require('../pedidos/pedido.model');      // asegura la asociación Negocio -> dueño
 
 // Panel del ADMINISTRADOR: métricas, aprobación de negocios y repartidores, usuarios y configuración.
@@ -84,6 +84,11 @@ async function resumen() {
   const repartidores = await consulta(`SELECT cestatusaprobacion AS clave, COUNT(*) AS total FROM trepartidores WHERE fhasta = ${VIGENTE} GROUP BY cestatusaprobacion`);
   const [enLinea] = await consulta('SELECT COUNT(*) AS total FROM trepartidoresestado WHERE estadisponible');
   const [comprobantes] = await consulta("SELECT COUNT(*) AS total FROM tliquidacioncomprobantes WHERE estado = 'ENVIADO'");
+  // Lo que los negocios ya pagaron de su comisión (la plata que de verdad entró), hoy y en los últimos 7 días
+  const [cobrado] = await consulta(`
+    SELECT COALESCE(SUM(comision) FILTER (WHERE (fpago AT TIME ZONE :zona)::date = (now() AT TIME ZONE :zona)::date), 0) AS hoy,
+           COALESCE(SUM(comision) FILTER (WHERE (fpago AT TIME ZONE :zona)::date >= (now() AT TIME ZONE :zona)::date - 6), 0) AS semana
+      FROM tliquidaciones`, { zona: ZONA });
 
   const negociosPor = conteo(negocios, (c) => APROBACIONAAPI[c]);
   const repartidoresPor = conteo(repartidores, (c) => APROBACIONAAPI[c]);
@@ -97,7 +102,193 @@ async function resumen() {
     repartidores: { ...repartidoresPor, enLinea: Number(enLinea.total) },
     pendientes: (negociosPor.pendiente || 0) + (repartidoresPor.pendiente || 0),
     comprobantesPorRevisar: Number(comprobantes.total),
+    cobrado: { hoy: num(cobrado.hoy), semana: num(cobrado.semana) },
     correoConfigurado: Correo.configurado(),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Detalle de cada cifra del resumen (como el estado de cuenta de un banco: al tocar la cifra, sus movimientos)
+// ---------------------------------------------------------------------------------------------
+// tipo: pedidos | ventas | ganancia | envios | encurso | enlinea · rango: hoy | semana (7 días) | mes (30 días)
+// Todas responden igual para que la app las dibuje con una sola pantalla:
+//   { tipo, rango, total: { etiqueta, valor, formato }, resumen: [{ etiqueta, valor, formato }],
+//     secciones: [{ titulo, filas: [{ titulo, detalle, valor, formato, pedidoId?, estado?, fecha?, icono }] }] }
+const TIPOSDETALLE = ['pedidos', 'ventas', 'ganancia', 'envios', 'encurso', 'enlinea'];
+const RANGOS = { hoy: 0, semana: 6, mes: 29 };
+const ENCURSODETALLE = [E.PENDIENTE, E.CONFIRMADO, E.PREPARANDO, E.LISTO, E.ENCAMINO, E.RECOGIDO];
+const nombreDe = (n, a) => [n, a].filter(Boolean).join(' ').trim() || null;
+const NOMBREVEHICULO = { moto: 'Moto', auto: 'Auto', camioneta: 'Camioneta', bicicleta: 'Bicicleta', a_pie: 'A pie' };
+
+async function detalleCifra(tipo, rangoTexto = 'hoy') {
+  if (!TIPOSDETALLE.includes(tipo)) throw AppError.notFound('Esa cifra no existe', 'CIFRANOENCONTRADA');
+  const rango = Object.prototype.hasOwnProperty.call(RANGOS, rangoTexto) ? rangoTexto : 'hoy';
+  const enRango = (col) => `(${col} AT TIME ZONE :zona)::date >= (now() AT TIME ZONE :zona)::date - ${RANGOS[rango]}`;
+  const vendidos = VENDIDOS.map((c) => `'${c}'`).join(',');
+  const enCurso = ENCURSODETALLE.map((c) => `'${c}'`).join(',');
+  const dinero = (v) => Number(Number(v || 0).toFixed(2));
+  const suma = (lista, campo) => lista.reduce((t, p) => t + Number(p[campo] || 0), 0);
+
+  // Pedidos con su local, cliente y repartidor
+  const pedidos = (filtro) => consulta(`
+    SELECT p.cpedido AS id, p.cestatuspedido AS estado, p.fpedido AS fecha, p.total, p.subtotal, p.costoenvio, p.comision,
+           n.cnegocio AS "negocioId", n.nombre AS negocio, c.nombres AS "cNombre", c.apellidos AS "cApellido",
+           r.usuario AS repartidor, r.nombres AS "rNombre", r.apellidos AS "rApellido"
+      FROM tpedidos p
+      JOIN tnegocios n ON n.cnegocio = p.cnegocio AND n.fhasta = ${VIGENTE}
+      LEFT JOIN vusuarios c ON c.usuario = p.cusuario
+      LEFT JOIN vusuarios r ON r.usuario = p.cusuario_repartidor
+     WHERE p.fhasta = ${VIGENTE} AND ${filtro}
+     ORDER BY p.fpedido DESC LIMIT 300`, { zona: ZONA });
+
+  // Agrupa pedidos por una clave (local o repartidor) y suma un campo (o solo cuenta)
+  const agrupar = (lista, clave, nombre, campo, icono) => {
+    const m = new Map();
+    for (const p of lista) {
+      const k = p[clave] ?? 'sin';
+      const g = m.get(k) || { titulo: nombre(p), pedidos: 0, suma: 0 };
+      g.pedidos += 1;
+      g.suma += Number(campo ? p[campo] : 0);
+      m.set(k, g);
+    }
+    return [...m.values()].sort((a, b) => b.suma - a.suma || b.pedidos - a.pedidos).map((g) => ({
+      titulo: g.titulo, detalle: g.pedidos === 1 ? '1 pedido' : `${g.pedidos} pedidos`,
+      valor: campo ? dinero(g.suma) : g.pedidos, formato: campo ? 'dinero' : 'numero', icono,
+    }));
+  };
+  const filaPedido = (p, valor, detalle) => ({
+    titulo: `#${p.id} · ${p.negocio}`, detalle, valor: dinero(valor), formato: 'dinero',
+    pedidoId: Number(p.id), estado: ESTADOPEDIDOAAPI[p.estado], fecha: p.fecha, icono: 'pedido',
+  });
+  const cliente = (p) => nombreDe(p.cNombre, p.cApellido) || 'Cliente';
+  const repartidor = (p) => nombreDe(p.rNombre, p.rApellido);
+  const plata = (v) => `$${dinero(v).toFixed(2)}`;
+
+  if (tipo === 'pedidos') {
+    const lista = await pedidos(enRango('p.fpedido'));
+    const cuenta = (codigos) => lista.filter((p) => codigos.includes(p.estado)).length;
+    return {
+      tipo, rango,
+      total: { etiqueta: 'Pedidos', valor: lista.length, formato: 'numero' },
+      resumen: [
+        { etiqueta: 'Entregados', valor: cuenta(VENDIDOS), formato: 'numero' },
+        { etiqueta: 'En curso', valor: cuenta(ENCURSODETALLE), formato: 'numero' },
+        { etiqueta: 'Cancelados o rechazados', valor: lista.length - cuenta(VENDIDOS) - cuenta(ENCURSODETALLE), formato: 'numero' },
+      ],
+      secciones: [
+        { titulo: 'Por local', filas: agrupar(lista, 'negocioId', (p) => p.negocio, null, 'local') },
+        { titulo: 'Pedidos', filas: lista.map((p) => filaPedido(p, p.total, cliente(p))) },
+      ],
+    };
+  }
+
+  if (tipo === 'ventas') {
+    const lista = await pedidos(`p.cestatuspedido IN (${vendidos}) AND ${enRango('p.fpedido')}`);
+    const total = suma(lista, 'total');
+    return {
+      tipo, rango,
+      total: { etiqueta: 'Vendido (productos + envío)', valor: dinero(total), formato: 'dinero' },
+      resumen: [
+        { etiqueta: 'Productos', valor: dinero(suma(lista, 'subtotal')), formato: 'dinero' },
+        { etiqueta: 'Envíos', valor: dinero(suma(lista, 'costoenvio')), formato: 'dinero' },
+        { etiqueta: 'Ticket promedio', valor: dinero(lista.length ? total / lista.length : 0), formato: 'dinero' },
+      ],
+      secciones: [
+        { titulo: 'Por local', filas: agrupar(lista, 'negocioId', (p) => p.negocio, 'total', 'local') },
+        { titulo: 'Pedidos entregados', filas: lista.map((p) => filaPedido(p, p.total, `${cliente(p)} · productos ${plata(p.subtotal)}`)) },
+      ],
+    };
+  }
+
+  if (tipo === 'ganancia') {
+    const lista = (await pedidos(`p.cestatuspedido IN (${vendidos}) AND ${enRango('p.fpedido')}`)).filter((p) => Number(p.comision) > 0);
+    const pagos = await consulta(`
+      SELECT n.nombre AS negocio, to_char(l.semana, 'YYYY-MM-DD') AS semana, l.comision, l.referencia, l.fpago AS fecha
+        FROM tliquidaciones l JOIN tnegocios n ON n.cnegocio = l.cnegocio AND n.fhasta = ${VIGENTE}
+       WHERE ${enRango('l.fpago')} ORDER BY l.fpago DESC LIMIT 200`, { zona: ZONA });
+    const porCobrar = (await LiquidacionService.pendientes()).reduce((t, d) => t + Number(d.saldo || 0), 0);
+    return {
+      tipo, rango,
+      total: { etiqueta: 'Comisión ganada', valor: dinero(suma(lista, 'comision')), formato: 'dinero' },
+      resumen: [
+        { etiqueta: 'Pagos recibidos', valor: dinero(suma(pagos, 'comision')), formato: 'dinero' },
+        { etiqueta: 'Por cobrar', valor: dinero(porCobrar), formato: 'dinero' },
+      ],
+      secciones: [
+        { titulo: 'Por local', filas: agrupar(lista, 'negocioId', (p) => p.negocio, 'comision', 'local') },
+        {
+          titulo: 'Pagos recibidos de los locales',
+          filas: pagos.map((l) => ({ titulo: l.negocio, detalle: `Semana del ${l.semana}${l.referencia ? ` · ${l.referencia}` : ''}`, valor: dinero(l.comision), formato: 'dinero', fecha: l.fecha, icono: 'pago' })),
+        },
+        { titulo: 'Comisión por pedido', filas: lista.map((p) => filaPedido(p, p.comision, `de ${plata(p.subtotal)} en productos`)) },
+      ],
+    };
+  }
+
+  if (tipo === 'envios') {
+    const lista = await pedidos(`p.cestatuspedido IN (${vendidos}) AND ${enRango('p.fpedido')}`);
+    const total = suma(lista, 'costoenvio');
+    return {
+      tipo, rango,
+      total: { etiqueta: 'Ganado por los repartidores', valor: dinero(total), formato: 'dinero' },
+      resumen: [
+        { etiqueta: 'Entregas', valor: lista.length, formato: 'numero' },
+        { etiqueta: 'Promedio por envío', valor: dinero(lista.length ? total / lista.length : 0), formato: 'dinero' },
+      ],
+      secciones: [
+        { titulo: 'Por repartidor', filas: agrupar(lista, 'repartidor', (p) => repartidor(p) || 'Sin repartidor', 'costoenvio', 'repartidor') },
+        { titulo: 'Entregas', filas: lista.map((p) => filaPedido(p, p.costoenvio, repartidor(p) || 'Sin repartidor')) },
+      ],
+    };
+  }
+
+  if (tipo === 'encurso') {
+    const lista = await pedidos(`p.cestatuspedido IN (${enCurso})`);
+    const sinRepartidor = lista.filter((p) => !p.repartidor).length;
+    return {
+      tipo, rango: 'ahora',
+      total: { etiqueta: 'Pedidos en curso ahora', valor: lista.length, formato: 'numero' },
+      resumen: [
+        { etiqueta: 'Con repartidor', valor: lista.length - sinRepartidor, formato: 'numero' },
+        { etiqueta: 'Sin repartidor', valor: sinRepartidor, formato: 'numero' },
+      ],
+      secciones: [
+        { titulo: 'Pedidos', filas: lista.map((p) => filaPedido(p, p.total, `${cliente(p)} · ${repartidor(p) ? `lo lleva ${repartidor(p)}` : 'sin repartidor'}`)) },
+        { titulo: 'Por local', filas: agrupar(lista, 'negocioId', (p) => p.negocio, null, 'local') },
+      ],
+    };
+  }
+
+  // enlinea: repartidores conectados, si llevan un pedido y cuándo se actualizó su ubicación
+  const filas = await consulta(`
+    SELECT e.cusuario AS usuario, u.nombres, u.apellidos, t.numerotelefono AS telefono, r.ctipovehiculo AS vehiculo, r.placa,
+           e.fubicacion, e.numeroentregas AS entregas,
+           (SELECT p.cpedido FROM tpedidos p WHERE p.fhasta = ${VIGENTE} AND p.cusuario_repartidor = e.cusuario
+               AND p.cestatuspedido IN (${enCurso}) ORDER BY p.fpedido DESC LIMIT 1) AS pedido
+      FROM trepartidoresestado e
+      JOIN vusuarios u ON u.usuario = e.cusuario
+      LEFT JOIN trepartidores r ON r.cusuario = e.cusuario AND r.fhasta = ${VIGENTE}
+      LEFT JOIN tpersonatelefonos t ON t.cpersona = u.cpersona AND t.esprincipal AND t.fhasta = ${VIGENTE}
+     WHERE e.estadisponible
+     ORDER BY pedido NULLS LAST, u.nombres`);
+  const ocupados = filas.filter((f) => f.pedido).length;
+  return {
+    tipo, rango: 'ahora',
+    total: { etiqueta: 'Repartidores en línea', valor: filas.length, formato: 'numero' },
+    resumen: [
+      { etiqueta: 'Llevando un pedido', valor: ocupados, formato: 'numero' },
+      { etiqueta: 'Libres', valor: filas.length - ocupados, formato: 'numero' },
+    ],
+    secciones: [{
+      titulo: 'En línea ahora',
+      filas: filas.map((f) => ({
+        titulo: nombreDe(f.nombres, f.apellidos) || f.usuario,
+        detalle: [NOMBREVEHICULO[VEHICULOAAPI[f.vehiculo]], f.placa, f.telefono, f.pedido ? `lleva el pedido #${f.pedido}` : 'libre'].filter(Boolean).join(' · '),
+        valor: Number(f.entregas || 0), formato: 'entregas',
+        ...(f.pedido && { pedidoId: Number(f.pedido) }),
+        fecha: f.fubicacion, icono: 'repartidor', ocupado: !!f.pedido,
+      })),
+    }],
   };
 }
 
@@ -483,6 +674,7 @@ async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica
 }
 
 module.exports = {
+  detalleCifra,
   resumen, negocios, cambiarAprobacionNegocio, repartidores, cambiarAprobacionRepartidor,
   usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
   resolverDueno, editarRepartidor, perfiles, cambiarPerfil, cambiarTarifas,

@@ -286,6 +286,27 @@ const CLAVEADMIN = 'admin-secreta-1';
 
     r = await api('PUT', `/api/admin/repartidores/${pedro.usuario.id}`, { vehiculo: 'auto', placa: 'PCD-1234', color: 'Gris' }, A);
     check('editar el vehículo de un repartidor', r.status === 200 && r.body.repartidor.vehiculo === 'auto' && r.body.repartidor.placa === 'PCD1234', JSON.stringify(r.body));
+
+    seccion('11. Detalle de las cifras del resumen');
+    const resumenHoy = (await api('GET', '/api/admin/resumen', null, A)).body;
+    for (const tipo of ['pedidos', 'ventas', 'ganancia', 'envios', 'encurso', 'enlinea']) {
+      r = await api('GET', `/api/admin/resumen/${tipo}?rango=mes`, null, A);
+      check(`${tipo}: total, resumen y secciones con filas`, r.status === 200 && typeof r.body.total?.valor === 'number' && Array.isArray(r.body.resumen) && r.body.secciones.every((x) => x.titulo && Array.isArray(x.filas)), JSON.stringify(r.body).slice(0, 300));
+    }
+    r = await api('GET', '/api/admin/resumen/pedidos', null, A);
+    check('pedidos de hoy: el total coincide con el resumen y cada pedido trae local, estado y se puede abrir', r.body.total.valor === resumenHoy.hoy.pedidos && r.body.secciones[1].filas.every((f) => f.pedidoId && f.estado && f.titulo.includes('·')), JSON.stringify(r.body.total));
+    r = await api('GET', '/api/admin/resumen/ventas', null, A);
+    check('ventas de hoy: coinciden con el resumen y se agrupan por local', r.body.total.valor === resumenHoy.hoy.ventas && r.body.secciones[0].titulo === 'Por local', JSON.stringify(r.body.total));
+    r = await api('GET', '/api/admin/resumen/ganancia', null, A);
+    check('ganancia de hoy: coincide con la comisión del resumen e incluye pagos recibidos y por cobrar', r.body.total.valor === resumenHoy.hoy.comisiones && r.body.resumen.length === 2 && r.body.secciones.some((x) => x.titulo.startsWith('Pagos recibidos')));
+    r = await api('GET', '/api/admin/resumen/envios', null, A);
+    check('envíos de hoy: coinciden con el resumen y se agrupan por repartidor', r.body.total.valor === resumenHoy.hoy.envios && r.body.secciones[0].titulo === 'Por repartidor');
+    r = await api('GET', '/api/admin/resumen/enlinea', null, A);
+    check('en línea: cuántos repartidores están conectados (como el resumen)', r.body.total.valor === resumenHoy.repartidores.enLinea && r.body.rango === 'ahora');
+    r = await api('GET', '/api/admin/resumen/nada', null, A);
+    check('una cifra que no existe: 404', r.status === 404);
+    r = await api('GET', '/api/admin/resumen/ventas', null, L);
+    check('un vendedor no ve el detalle: 403', r.status === 403);
   } catch (e) {
     return t.finalizar(e);
   }
