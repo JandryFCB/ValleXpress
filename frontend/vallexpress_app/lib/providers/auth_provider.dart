@@ -68,20 +68,19 @@ class AuthProvider with ChangeNotifier {
       final guardado = prefs.getString('usuario');
       if (guardado != null) _usuario = jsonDecode(guardado) as Map<String, dynamic>;
 
+      // Se entra enseguida con lo guardado. Si el token de acceso venció (la app estuvo cerrada) se renueva en
+      // segundo plano: antes se esperaba aquí y, sin internet, la pantalla de inicio se quedaba hasta 15 s.
+      // Si el servidor dice que la sesión terminó, SessionManager avisa y se vuelve al login.
       var acceso = await SessionStore.accessToken();
-      if (!SessionStore.accesoVigente(acceso)) {
-        // Venció (la app estuvo cerrada): se renueva ahora. Si no hay internet, la sesión se conserva y se
-        // renovará con la primera petición.
+      // Caso raro (sin token de acceso guardado): ahí sí hay que esperar la renovación
+      if (acceso == null) {
         await SessionManager.instance.refrescar();
         acceso = await SessionStore.accessToken();
+      } else if (!SessionStore.accesoVigente(acceso)) {
+        SessionManager.instance.refrescar().catchError((_) => false); // el token nuevo llega por "renovado"
       }
-      _token = acceso; // null si el servidor cerró la sesión
-
-      if (_token != null) {
-        FcmService.registrarDispositivo();
-      } else {
-        _usuario = null;
-      }
+      _token = _usuario == null ? null : acceso;
+      if (_token != null) FcmService.registrarDispositivo();
     } catch (e) {
       debugPrint('No se pudo restaurar la sesión: $e');
     } finally {

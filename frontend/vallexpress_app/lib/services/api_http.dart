@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as base;
 import 'api_error.dart';
+import 'conectividad.dart';
 import 'session_manager.dart';
 import 'session_store.dart';
 
@@ -16,6 +17,9 @@ import 'session_store.dart';
 // Así el usuario no ve nunca el vencimiento de los 15 minutos.
 //   3. Ninguna petición espera para siempre (límite de tiempo) y si no hay conexión o el servidor no responde se
 //      lanza ErrorConexion con un mensaje humano, nunca el error técnico con la ruta del servidor.
+//   4. Un solo cliente para toda la app: la conexión con el servidor (TCP + HTTPS) se reutiliza entre peticiones.
+//      Antes cada petición abría una nueva, y con el servidor en Europa eso sumaba ~0,5 s a cada pantalla.
+//   5. Si el celular no tiene red, falla al instante (sin esperar el límite de tiempo).
 export 'package:http/http.dart' hide get, post, put, patch, delete;
 
 Future<base.Response> get(Uri url, {Map<String, String>? headers}) => _enviar('GET', url, headers);
@@ -32,12 +36,15 @@ Future<base.Response> patch(Uri url, {Map<String, String>? headers, Object? body
 Future<base.Response> delete(Uri url, {Map<String, String>? headers, Object? body, Encoding? encoding}) =>
     _enviar('DELETE', url, headers, body: body, encoding: encoding);
 
+final _cliente = base.Client();
+
 bool _llevaAuth(Map<String, String>? h) => h?.keys.any((k) => k.toLowerCase() == 'authorization') ?? false;
 
 // Las consultas responden rápido; las que suben datos (fotos en base64) pueden tardar más con mala señal
-Duration _limite(String metodo) => metodo == 'GET' ? const Duration(seconds: 20) : const Duration(seconds: 45);
+Duration _limite(String metodo) => metodo == 'GET' ? const Duration(seconds: 15) : const Duration(seconds: 45);
 
 Future<base.Response> _enviar(String metodo, Uri url, Map<String, String>? headers, {Object? body, Encoding? encoding}) async {
+  if (!await Conectividad.hayRed()) throw const ErrorConexion(ErrorConexion.sinConexion);
   try {
     return await _enviarSinCapturar(metodo, url, headers, body: body, encoding: encoding).timeout(_limite(metodo));
   } on TimeoutException {
@@ -51,15 +58,15 @@ Future<base.Response> _enviarSinCapturar(String metodo, Uri url, Map<String, Str
   Future<base.Response> intento(Map<String, String>? h) {
     switch (metodo) {
       case 'POST':
-        return base.post(url, headers: h, body: body, encoding: encoding);
+        return _cliente.post(url, headers: h, body: body, encoding: encoding);
       case 'PUT':
-        return base.put(url, headers: h, body: body, encoding: encoding);
+        return _cliente.put(url, headers: h, body: body, encoding: encoding);
       case 'PATCH':
-        return base.patch(url, headers: h, body: body, encoding: encoding);
+        return _cliente.patch(url, headers: h, body: body, encoding: encoding);
       case 'DELETE':
-        return base.delete(url, headers: h, body: body, encoding: encoding);
+        return _cliente.delete(url, headers: h, body: body, encoding: encoding);
       default:
-        return base.get(url, headers: h);
+        return _cliente.get(url, headers: h);
     }
   }
 
