@@ -20,6 +20,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `012_tarifas.sql` | Envío por distancia (base + km de ruta) y comisión de ValleXpress; cada pedido guarda su distancia, % y comisión |
 | `013_zona_servicio.sql` | Zona de servicio (Yantzaza, centro y radio): direcciones y locales fuera de ella se rechazan |
 | `014_liquidaciones.sql` | Cobro semanal de la comisión a cada negocio: `TLIQUIDACIONES` (pagos), días de gracia y cuenta para transferir |
+| `015_comprobantes.sql` | Cuenta de cobro con sus datos (banco, tipo, número, titular, cédula/RUC) y `TLIQUIDACIONCOMPROBANTES` (el negocio sube la foto de su transferencia; el admin la aprueba o rechaza) |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

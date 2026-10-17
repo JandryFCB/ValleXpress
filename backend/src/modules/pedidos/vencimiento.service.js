@@ -1,11 +1,10 @@
 const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../config/database');
-const UsuarioCuenta = require('../auth/usuarioCuenta.model');
 const NotificacionService = require('../notificaciones/notificacion.service');
 const Notificacion = require('../notificaciones/notificacion.model');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const { auditar, logMensaje } = require('../../shared/services/log.service');
-const { ESTADOPEDIDO: E, ROLES } = require('../../shared/constants/codigos');
+const { ESTADOPEDIDO: E } = require('../../shared/constants/codigos');
 const PedidoService = require('./pedido.service');
 
 // VIGILANTE DE VENCIMIENTOS: ningún pedido queda varado horas o días. Cada minuto revisa:
@@ -33,11 +32,6 @@ async function candidatos() {
   );
 }
 
-async function administradores() {
-  const filas = await UsuarioCuenta.findAll({ where: { rol: ROLES.ADMINISTRADOR, estatus: '001' }, attributes: ['id'] });
-  return filas.map((f) => f.id);
-}
-
 // Aviso de "nadie lo ha recogido": una sola vez por pedido (la BD lo recuerda aunque el servidor se reinicie)
 async function avisarDemora(p, minutosListo, vence, io) {
   if (await Notificacion.count({ where: { pedidoId: p.id, tipo: 'pedido_sin_repartidor' } })) return false;
@@ -47,9 +41,7 @@ async function avisarDemora(p, minutosListo, vence, io) {
     ...aviso, usuarioId: p.dueno,
     mensaje: `Ningún repartidor ha recogido el pedido #${p.id} todavía. Si nadie lo recoge en ${faltan} min se cancelará solo`,
   });
-  for (const admin of await administradores()) {
-    await NotificacionService.notificar({ ...aviso, usuarioId: admin, mensaje: `${p.negocioNombre}: el pedido #${p.id} lleva ${minutosListo} min listo sin repartidor` });
-  }
+  await NotificacionService.notificarAdministradores({ ...aviso, mensaje: `${p.negocioNombre}: el pedido #${p.id} lleva ${minutosListo} min listo sin repartidor` });
   if (p.estado === E.LISTO) await PedidoService.avisarRepartidores(io, { id: p.id, costoEnvio: await costoEnvio(p.id) }, p.negocioNombre);
   return true;
 }

@@ -34,6 +34,7 @@ router.use(verificarToken, verificarRol('vendedor'));
 router.post('/', schema.crear, validar, controller.crear);
 router.post('/revision', controller.revision);
 router.get('/liquidaciones', controller.liquidaciones);
+router.post('/liquidaciones/comprobante', schema.comprobante, validar, controller.comprobante);
 rutasDeGestion(router);
 
 // Pedidos que recibe el negocio

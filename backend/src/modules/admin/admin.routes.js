@@ -43,6 +43,8 @@ router.get('/liquidaciones', controller.liquidacionesPendientes);
 router.put('/liquidaciones/config', schema.configLiquidaciones, validar, controller.configLiquidaciones);
 router.get('/negocios/:id/liquidaciones', schema.idNegocio, validar, controller.liquidacionesNegocio);
 router.post('/negocios/:id/liquidaciones', schema.idNegocio, schema.pagoLiquidacion, validar, controller.registrarLiquidacion);
+router.post('/comprobantes/:id/aprobar', schema.idComprobante, validar, controller.aprobarComprobante);
+router.post('/comprobantes/:id/rechazar', schema.idComprobante, schema.rechazoComprobante, validar, controller.rechazarComprobante);
 router.get('/zona', controller.zona);
 router.put('/zona', schema.zona, validar, controller.cambiarZona);
 router.get('/perfiles', controller.perfiles);

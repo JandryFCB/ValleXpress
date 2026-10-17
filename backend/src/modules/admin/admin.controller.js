@@ -34,7 +34,9 @@ const resolverDueno = asyncHandler(async (req, res, next) => { await service.res
 const tarifas = asyncHandler(async (req, res) => res.json({ tarifas: await service.tarifas() }));
 const cambiarTarifas = asyncHandler(async (req, res) => res.json({ tarifas: await service.cambiarTarifas(req.usuario, req.body, req) }));
 const liquidacionesPendientes = asyncHandler(async (req, res) => res.json({ pendientes: await LiquidacionService.pendientes(), config: await LiquidacionService.config() }));
-const liquidacionesNegocio = asyncHandler(async (req, res) => res.json(await LiquidacionService.estadoDeCuenta(Number(req.params.id))));
+const liquidacionesNegocio = asyncHandler(async (req, res) => res.json(await LiquidacionService.estadoDeCuenta(Number(req.params.id), req)));
+const aprobarComprobante = asyncHandler(async (req, res) => res.json(await LiquidacionService.aprobarComprobante(req.usuario, Number(req.params.id), req)));
+const rechazarComprobante = asyncHandler(async (req, res) => res.json(await LiquidacionService.rechazarComprobante(req.usuario, Number(req.params.id), req.body, req)));
 const registrarLiquidacion = asyncHandler(async (req, res) => res.status(201).json(await LiquidacionService.registrarPago(req.usuario, Number(req.params.id), req.body, req)));
 const configLiquidaciones = asyncHandler(async (req, res) => res.json({ config: await service.cambiarConfigLiquidaciones(req.usuario, req.body, req) }));
 const zona = asyncHandler(async (req, res) => res.json({ zona: await service.zona() }));
@@ -43,5 +45,5 @@ const perfiles = asyncHandler(async (req, res) => res.json({ perfiles: await ser
 const cambiarPerfil = asyncHandler(async (req, res) => res.json(await service.cambiarPerfil(req.usuario, req.params.rol, req.body, req)));
 
 module.exports = { resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
-  liquidacionesPendientes, liquidacionesNegocio, registrarLiquidacion, configLiquidaciones,
+  liquidacionesPendientes, liquidacionesNegocio, registrarLiquidacion, configLiquidaciones, aprobarComprobante, rechazarComprobante,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

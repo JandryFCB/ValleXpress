@@ -5,6 +5,7 @@ const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/norm
 const { ROLESPERFIL } = require('../../shared/services/perfiles.service');
 const { LIMITES } = require('../../shared/services/tarifas.service');
 const { LIMITES: LIMITESZONA } = require('../../shared/services/zona.service');
+const { TIPOSCUENTA } = require('../liquidaciones/liquidacion.service');
 
 // Reglas de validación de /api/admin.
 const APROBACIONES = Object.values(APROBACIONAAPI);
@@ -102,9 +103,17 @@ const pagoLiquidacion = [
 ];
 const configLiquidaciones = [
   body('diasGracia').optional().isInt({ min: 0, max: 60 }).withMessage('Los días de gracia van de 0 a 60').toInt(),
-  body('cuenta').optional().isString().trim().isLength({ max: 300 }).withMessage('Los datos de la cuenta son muy largos'),
+  body('cuenta').optional().isObject().withMessage('Los datos de la cuenta van como objeto'),
+  body('cuenta.banco').optional().isString().trim().isLength({ max: 60 }).withMessage('El nombre del banco es muy largo'),
+  body('cuenta.tipo').optional().isIn(TIPOSCUENTA).withMessage(`El tipo de cuenta es ${TIPOSCUENTA.join(' o ')}`),
+  body('cuenta.numero').optional().isString().trim().matches(/^[0-9-]{0,30}$/).withMessage('El número de cuenta lleva solo números'),
+  body('cuenta.titular').optional().isString().trim().isLength({ max: 100 }).withMessage('El titular es muy largo'),
+  body('cuenta.identificacion').optional().isString().trim().matches(/^(\d{10}|\d{13})?$/).withMessage('La cédula (10 dígitos) o el RUC (13) no son válidos'),
+  body('cuenta.notas').optional().isString().trim().isLength({ max: 200 }).withMessage('Las notas son muy largas'),
   body().custom((b) => b.diasGracia !== undefined || b.cuenta !== undefined).withMessage('Indica qué cambiar'),
 ];
+const idComprobante = [param('id').isInt({ min: 1 }).withMessage('Comprobante inválido').toInt()];
+const rechazoComprobante = [body('motivo').isString().trim().isLength({ min: 5, max: 300 }).withMessage('Escribe el motivo del rechazo (5 a 300 letras)')];
 
 // Permisos de un perfil: al menos un cambio; aprobarPendientes solo acompaña a la aprobación automática
 const booleanoOpcional = (campo) => body(campo).optional().isBoolean().withMessage(`${campo} debe ser true o false`).toBoolean();
@@ -118,6 +127,6 @@ const perfil = [
 ];
 
 module.exports = {
-  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoLiquidacion, configLiquidaciones,
+  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoLiquidacion, configLiquidaciones, idComprobante, rechazoComprobante,
   crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, negocioGestion, editarRepartidor,
 };

@@ -78,4 +78,12 @@ async function notificar({ io, usuarioId, tipo, titulo, mensaje, pedidoId = null
   }
 }
 
-module.exports = { listar, noLeidas, marcarLeida, marcarTodas, registrarDispositivo, quitarDispositivo, notificar };
+// El mismo aviso a todos los administradores activos (comprobantes por revisar, pedidos sin repartidor...)
+async function notificarAdministradores(aviso) {
+  const UsuarioCuenta = require('../auth/usuarioCuenta.model');       // perezoso: evita una dependencia circular
+  const { ROLES } = require('../../shared/constants/codigos');
+  const admins = await UsuarioCuenta.findAll({ where: { rol: ROLES.ADMINISTRADOR, estatus: '001' }, attributes: ['id'] });
+  for (const a of admins) await notificar({ ...aviso, usuarioId: a.id });
+}
+
+module.exports = { listar, noLeidas, marcarLeida, marcarTodas, registrarDispositivo, quitarDispositivo, notificar, notificarAdministradores };
