@@ -83,6 +83,7 @@ async function resumen() {
   const negocios = await consulta(`SELECT cestatusaprobacion AS clave, COUNT(*) AS total FROM tnegocios WHERE fhasta = ${VIGENTE} GROUP BY cestatusaprobacion`);
   const repartidores = await consulta(`SELECT cestatusaprobacion AS clave, COUNT(*) AS total FROM trepartidores WHERE fhasta = ${VIGENTE} GROUP BY cestatusaprobacion`);
   const [enLinea] = await consulta('SELECT COUNT(*) AS total FROM trepartidoresestado WHERE estadisponible');
+  const [comprobantes] = await consulta("SELECT COUNT(*) AS total FROM tliquidacioncomprobantes WHERE estado = 'ENVIADO'");
 
   const negociosPor = conteo(negocios, (c) => APROBACIONAAPI[c]);
   const repartidoresPor = conteo(repartidores, (c) => APROBACIONAAPI[c]);
@@ -95,6 +96,7 @@ async function resumen() {
     negocios: negociosPor,
     repartidores: { ...repartidoresPor, enLinea: Number(enLinea.total) },
     pendientes: (negociosPor.pendiente || 0) + (repartidoresPor.pendiente || 0),
+    comprobantesPorRevisar: Number(comprobantes.total),
     correoConfigurado: Correo.configurado(),
   };
 }

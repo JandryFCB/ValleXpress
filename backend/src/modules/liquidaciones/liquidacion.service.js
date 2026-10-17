@@ -129,9 +129,12 @@ async function estadoDeCuenta(negocioId, req) {
   const lista = await semanas(negocioId, req);
   const { diasGracia, cuenta } = await config();
   const porPagar = lista.filter((s) => ['pendiente', 'vencida', 'en_revision'].includes(s.estado));
+  const suma = (l) => Number(l.reduce((t, s) => t + s.comision, 0).toFixed(2));
   return {
     semanas: lista,
-    saldoPendiente: Number(porPagar.reduce((t, s) => t + s.comision, 0).toFixed(2)),
+    saldoPendiente: suma(porPagar),
+    saldoEnRevision: suma(porPagar.filter((s) => s.estado === 'en_revision')), // ya envió el comprobante
+    semanasEnRevision: porPagar.filter((s) => s.estado === 'en_revision').length,
     bloqueado: lista.some((s) => s.estado === 'vencida'),
     diasGracia,
     cuenta,
