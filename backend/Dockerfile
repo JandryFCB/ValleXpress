@@ -11,6 +11,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY src ./src
 COPY scripts ./scripts
+COPY legal ./legal
 
 # Imágenes subidas: van a un volumen (no se pierden al actualizar la imagen). Corre como usuario sin privilegios.
 RUN mkdir -p /app/uploads && chown -R node:node /app/uploads

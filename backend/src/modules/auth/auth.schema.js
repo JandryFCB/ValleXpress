@@ -40,6 +40,8 @@ const registro = [
   // Solo para repartidores: con estos datos se crea su perfil de reparto en el mismo registro
   body('vehiculo').optional({ values: 'falsy' }).isString().isLength({ max: 20 }).withMessage('Vehículo inválido'),
   body('placa').optional({ values: 'falsy' }).isString().isLength({ max: 12 }).withMessage('Placa inválida'),
+  // Prueba de aceptación: sin marcar "Acepto" no hay registro (queda guardada la versión aceptada)
+  body('aceptaTerminos').custom((v) => v === true || v === 'true').withMessage('Debes aceptar los términos y condiciones y la política de privacidad'),
   // Datos del dispositivo (opcionales): se guardan en la sesión para poder mostrar "dispositivos con sesión iniciada"
   ...dispositivo,
 ];
@@ -78,6 +80,8 @@ const actualizarPerfil = [
     .isLength({ max: 100 }).withMessage('Apellido inválido'),
   body('telefono').optional().customSanitizer(normalizarTelefono).custom(validarTelefono).withMessage(MSGTELEFONO),
 ];
+const eliminarCuenta = [body('password').isString().notEmpty().withMessage('Escribe tu contraseña para confirmar')];
+
 const cambiarClave = [
   body('passwordActual').isString().notEmpty().withMessage('La contraseña actual es requerida'),
   clave('passwordNueva'),
@@ -89,5 +93,5 @@ const consultaEmail = [email('email', param)];
 
 module.exports = {
   registro, login, refrescar, correo, verificarCodigo, enviarVerificacion, restablecer,
-  actualizarPerfil, cambiarClave, consultaCedula, consultaEmail,
+  actualizarPerfil, cambiarClave, eliminarCuenta, consultaCedula, consultaEmail,
 };

@@ -1,4 +1,5 @@
 const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const LegalService = require('../legal/legal.service');
 const asyncHandler = require('../../shared/helpers/asyncHandler');
 const service = require('./admin.service');
 const PedidoService = require('../pedidos/pedido.service');
@@ -44,6 +45,8 @@ const cambiarZona = asyncHandler(async (req, res) => res.json({ zona: await serv
 const perfiles = asyncHandler(async (req, res) => res.json({ perfiles: await service.perfiles() }));
 const cambiarPerfil = asyncHandler(async (req, res) => res.json(await service.cambiarPerfil(req.usuario, req.params.rol, req.body, req)));
 
-module.exports = { resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
+const legal = asyncHandler(async (req, res) => res.json({ documentos: await LegalService.estadisticas() }));
+
+module.exports = { legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
   liquidacionesPendientes, liquidacionesNegocio, registrarLiquidacion, configLiquidaciones, aprobarComprobante, rechazarComprobante,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

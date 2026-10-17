@@ -50,7 +50,7 @@ module.exports = function crearArnes({ puerto, bd, env = {} }) {
     contador += 1;
     await api('POST', '/api/auth/send-verification', { email, nombre });
     await api('POST', '/api/auth/verify-email', { email, code: await codigoDe(email) });
-    const r = await api('POST', '/api/auth/register', { nombre, apellido, email, telefono: `09930000${String(contador).padStart(2, '0')}`, cedula: cedula(17, 3000 + contador), password: 'secreto1', tipoUsuario: tipo, ...extra });
+    const r = await api('POST', '/api/auth/register', { nombre, apellido, email, telefono: `09930000${String(contador).padStart(2, '0')}`, cedula: cedula(17, 3000 + contador), password: 'secreto1', tipoUsuario: tipo, aceptaTerminos: true, ...extra });
     return { token: r.body?.token, refreshToken: r.body?.refreshToken, usuario: r.body?.usuario };
   }
 

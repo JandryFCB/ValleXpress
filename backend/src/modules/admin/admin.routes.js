@@ -40,6 +40,7 @@ router.delete('/usuarios/:usuario', schema.bajaUsuario, validar, controller.baja
 router.get('/tarifas', controller.tarifas);
 router.put('/tarifas', schema.tarifas, validar, controller.cambiarTarifas);
 router.get('/liquidaciones', controller.liquidacionesPendientes);
+router.get('/legal', controller.legal);
 router.put('/liquidaciones/config', schema.configLiquidaciones, validar, controller.configLiquidaciones);
 router.get('/negocios/:id/liquidaciones', schema.idNegocio, validar, controller.liquidacionesNegocio);
 router.post('/negocios/:id/liquidaciones', schema.idNegocio, schema.pagoLiquidacion, validar, controller.registrarLiquidacion);

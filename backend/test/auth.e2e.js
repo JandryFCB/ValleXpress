@@ -29,7 +29,7 @@ async function registrarCliente(email, nombre, apellido, extra = {}) {
   await verificar(email, nombre);
   return api('POST', '/api/auth/register', {
     nombre, apellido, email, telefono: `0998${String(contador).padStart(6, "0")}`, cedula: cedula(17, 2000 + contador),
-    password: 'secreto1', tipoUsuario: 'cliente', dispositivo: 'Prueba', plataforma: 'android', ...extra,
+    password: 'secreto1', tipoUsuario: 'cliente', aceptaTerminos: true, dispositivo: 'Prueba', plataforma: 'android', ...extra,
   });
 }
 
@@ -49,11 +49,11 @@ async function registrarCliente(email, nombre, apellido, extra = {}) {
     check('cédula libre', r.status === 200 && r.body.exists === false);
     r = await api('GET', '/api/auth/check-cedula/1234567890');
     check('cédula inválida: 400 con mensaje claro', r.status === 400 && /Cédula inválida/.test(r.body.error), JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/register', { nombre: 'A', apellido: 'B', email: 'malo', telefono: '123', cedula: '1', password: '12', tipoUsuario: 'cliente' });
+    r = await api('POST', '/api/auth/register', { nombre: 'A', apellido: 'B', email: 'malo', telefono: '123', cedula: '1', password: '12', aceptaTerminos: true, tipoUsuario: 'cliente' });
     check('registro inválido: 400, primer mensaje en "error" y lista en "errors"', r.status === 400 && typeof r.body.error === 'string' && Array.isArray(r.body.errors) && r.body.errors.length >= 3);
 
     seccion('3. El registro exige email verificado (en el servidor)');
-    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: '0991000001', cedula: cedula(17, 1001), password: 'secreto1', tipoUsuario: 'cliente' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: '0991000001', cedula: cedula(17, 1001), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'cliente' });
     check('sin verificar el email: 403 EMAILNOVERIFICADO', r.status === 403 && r.body.code === 'EMAILNOVERIFICADO', JSON.stringify(r.body));
 
     seccion('4. Verificación de email');
@@ -74,7 +74,7 @@ async function registrarCliente(email, nombre, apellido, extra = {}) {
     check('en la BD el código va con hash (bcrypt) y propósito 001', fila.codigohash.startsWith('$2') && fila.cpropositocodigo === '001');
 
     seccion('5. Registro de cliente');
-    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: '0991000001', cedula: cedula(17, 1001), password: 'secreto1', tipoUsuario: 'cliente', dispositivo: 'Pixel 7', plataforma: 'android' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'Ana@Test.com', telefono: '0991000001', cedula: cedula(17, 1001), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'cliente', dispositivo: 'Pixel 7', plataforma: 'android' });
     check('registro: 201', r.status === 201, JSON.stringify(r.body));
     const ana = r.body;
     check('devuelve token de acceso, refreshToken y expiresIn=900', !!ana.token && !!ana.refreshToken && ana.expiresIn === 900);
@@ -84,11 +84,11 @@ async function registrarCliente(email, nombre, apellido, extra = {}) {
     check('persona en TPERSONAS: CPERSONA ≥ 2 (el 1 es el administrador), correo en minúsculas, documento 001', persona && Number(persona.cpersona) >= 2 && persona.ctipodocumento === '001' && persona.fcorreoverificado);
     fila = (await q('SELECT * FROM vusuarios WHERE email=$1', ['ana@test.com']))[0];
     check('la BD genera el usuario a partir del nombre: aperez, rol 001, activo', fila && fila.usuario === 'aperez' && fila.rol === '001' && fila.activo === true, JSON.stringify(fila && fila.usuario));
-    check('clave con bcrypt y términos aceptados (versión 1.0)', fila.clavehash.startsWith('$2') && !!fila.terminosen && fila.terminosver === '1.0');
+    check('clave con bcrypt y términos aceptados (versión vigente de los términos de cliente)', fila.clavehash.startsWith('$2') && !!fila.terminosen && fila.terminosver === require('../src/modules/legal/legal.service').versionDe('terminos-cliente'));
     const tel = (await q(`SELECT * FROM tpersonatelefonos WHERE cpersona=$1 AND fhasta=${VIGENTE}`, [persona.cpersona]))[0];
     check('teléfono guardado como principal (STELEFONO=1)', tel && tel.numerotelefono === '0991000001' && tel.esprincipal === true && tel.stelefono === 1);
     check('se creó la fila de acceso (TUSUARIOSACCESO)', (await q("SELECT 1 FROM tusuariosacceso WHERE cusuario='aperez'")).length === 1);
-    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'ana@test.com', telefono: '0991000009', cedula: cedula(17, 1002), password: 'secreto1', tipoUsuario: 'cliente' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Ana', apellido: 'Pérez', email: 'ana@test.com', telefono: '0991000009', cedula: cedula(17, 1002), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'cliente' });
     check('el código de verificación no sirve dos veces: 403', r.status === 403 && r.body.code === 'EMAILNOVERIFICADO');
     r = await api('POST', '/api/auth/send-verification', { email: 'ana@test.com' });
     check('no se envían códigos a un email ya registrado: 409', r.status === 409 && r.body.code === 'EMAILDUPLICADO');
@@ -97,16 +97,16 @@ async function registrarCliente(email, nombre, apellido, extra = {}) {
 
     seccion('6. Duplicados, roles y usuarios generados');
     await verificar('luis@test.com', 'Luis');
-    r = await api('POST', '/api/auth/register', { nombre: 'Luis', apellido: 'Mora', email: 'luis@test.com', telefono: '0991000002', cedula: cedula(17, 1003), password: 'secreto1', tipoUsuario: 'vendedor' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Luis', apellido: 'Mora', email: 'luis@test.com', telefono: '0991000002', cedula: cedula(17, 1003), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'vendedor' });
     check('vendedor: 201 con rol 002', r.status === 201 && r.body.usuario.tipoUsuario === 'vendedor' && r.body.usuario.usuario === 'lmora', JSON.stringify(r.body));
     await verificar('hack@test.com', 'Hack');
-    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1006), password: 'secreto1', tipoUsuario: 'administrador' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1006), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'administrador' });
     check('registrarse como administrador: 400', r.status === 400 && /Tipo de usuario inválido/.test(r.body.error), JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000001', cedula: cedula(17, 1006), password: 'secreto1', tipoUsuario: 'cliente' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000001', cedula: cedula(17, 1006), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'cliente' });
     check('teléfono ya usado: 409 y la verificación NO se gasta', r.status === 409 && r.body.code === 'TELEFONODUPLICADO', JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1001), password: 'secreto1', tipoUsuario: 'cliente' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1001), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'cliente' });
     check('cédula ya usada: 409', r.status === 409 && r.body.code === 'CEDULADUPLICADA', JSON.stringify(r.body));
-    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1006), password: 'secreto1', tipoUsuario: 'cliente' });
+    r = await api('POST', '/api/auth/register', { nombre: 'Hack', apellido: 'Er', email: 'hack@test.com', telefono: '0991000005', cedula: cedula(17, 1006), password: 'secreto1', aceptaTerminos: true, tipoUsuario: 'cliente' });
     check('tras los 409 la verificación sigue vigente (rollback): registra OK', r.status === 201, JSON.stringify(r.body));
     r = await registrarCliente('ana2@test.com', 'Ana', 'Pérez');
     check('homónima: aperez ocupado -> aperez2', r.status === 201 && r.body.usuario.usuario === 'aperez2', JSON.stringify(r.body.usuario || r.body));

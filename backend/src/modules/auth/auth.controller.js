@@ -81,7 +81,10 @@ const checkEmail = asyncHandler(async (req, res) => {
 // Perfiles con el registro abierto: { cliente: true, vendedor: true, repartidor: false }
 const perfilesRegistro = asyncHandler(async (req, res) => res.json({ perfiles: await authService.perfilesRegistro() }));
 
+const deleteAccount = asyncHandler(async (req, res) => res.json(await authService.eliminarCuenta(req.usuario.id, req.body, req)));
+
 module.exports = {
+  deleteAccount,
   register, perfilesRegistro, login, refresh, logout, logoutAll, getProfile, updateProfile, changePassword,
   forgotPassword, verifyResetCode, resetPassword,
   sendEmailVerification, verifyEmailCode,

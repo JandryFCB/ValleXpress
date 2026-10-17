@@ -8,16 +8,22 @@ const withTransaction = require('../../shared/helpers/withTransaction');
 const TokenService = require('../../shared/services/token.service');
 const SesionService = require('../../shared/services/sesion.service');
 const CodigoService = require('../../shared/services/codigo.service');
-const ConfiguracionService = require('../../shared/services/configuracion.service');
 const PerfilesService = require('../../shared/services/perfiles.service');
 const ArchivoService = require('../../shared/services/archivo.service');
 const NegocioService = require('../negocios/negocio.service');
 const RepartidorService = require('../repartidores/repartidor.service');
+const LegalService = require('../legal/legal.service');
+const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const fs = require('fs/promises');
+const path = require('path');
+const crypto = require('crypto');
+const { QueryTypes } = require('sequelize');
+const { sequelize } = require('../../config/database');
 const { logMensaje, auditar } = require('../../shared/services/log.service');
 const Correo = require('../../shared/services/correo.service');
 const { hashClave, compararClave, HASHRELLENO } = require('../../shared/utils/clave');
 const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/normalizers');
-const { ROLES, APIAROL, ROLESREGISTRABLES, PROPOSITOCODIGO } = require('../../shared/constants/codigos');
+const { ROLES, APIAROL, ROLESREGISTRABLES, PROPOSITOCODIGO, APROBACION, ESTADOPEDIDO: E } = require('../../shared/constants/codigos');
 
 // Toda la lógica de negocio de autenticación. El controller solo llama a estos métodos.
 //
@@ -128,7 +134,7 @@ async function crearCuenta(tipo, datos, t, { correoVerificadoEn = new Date(), ap
     rol: APIAROL[tipo],
     claveHash: await hashClave(datos.password),
     terminosEn: ahora,
-    terminosVer: String(await ConfiguracionService.obtener('VERSIONTERMINOS', '1.0')),
+    terminosVer: LegalService.versionDe(`terminos-${tipo}`),
   }, { transaction: t });
 
   await Telefono.create({ personaId: persona.id, numero: telefono, principal: true }, { transaction: t });
@@ -166,6 +172,8 @@ async function registrar(datos, req) {
     // El email debe haberse verificado (la app ya lo exige; también el servidor)
     const verificacion = await CodigoService.exigirEmailVerificado(email, { transaction: t });
     const nueva = await crearCuenta(tipo, datos, t, { correoVerificadoEn: verificacion.verificadoEn || new Date() });
+    // Prueba de que aceptó los términos de su perfil y la política de privacidad vigentes
+    await LegalService.aceptarAlRegistrarse(nueva.id, tipo, req, { transaction: t });
     // El código de verificación queda consumido (no sirve para registrar otra cuenta)
     await CodigoService.consumir(verificacion, { transaction: t });
     return nueva;
@@ -313,6 +321,65 @@ async function cambiarClave(id, { passwordActual, passwordNueva }, req) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Eliminar la cuenta (derecho de eliminación de la LOPDP; Google Play lo exige dentro de la app)
+// ---------------------------------------------------------------------------------------------
+// Con la contraseña. No se puede con un pedido en curso (como cliente, negocio o repartidor) ni, si es un negocio,
+// con comisiones por pagar. Da de baja la cuenta, cierra todas sus sesiones, suspende su negocio y borra sus datos
+// personales también del historial (ELIMINARDATOSPERSONALES). Los pedidos se conservan sin datos de contacto.
+const ENCURSO = [E.PENDIENTE, E.CONFIRMADO, E.PREPARANDO, E.LISTO, E.ENCAMINO, E.RECOGIDO];
+const RAIZUPLOADS = process.env.UPLOADS_DIR || path.join(__dirname, '../../../uploads');
+const consulta = (sql, replacements, opciones = {}) => sequelize.query(sql, { replacements, type: QueryTypes.SELECT, ...opciones });
+
+async function eliminarCuenta(id, { password }, req) {
+  const usuario = await cargarUsuario(id);
+  if (usuario.tipoUsuario === 'administrador') throw AppError.forbidden('La cuenta del administrador no se puede eliminar desde la app', 'ADMINNOELIMINABLE');
+  if (!(await usuario.verificarClave(password))) throw AppError.unauthorized('Contraseña incorrecta', 'CLAVEACTUALINCORRECTA');
+
+  const negocios = (await consulta("SELECT cnegocio AS id FROM tnegocios WHERE cusuario = :u AND fhasta = '2999-12-31 00:00:00-05'", { u: id })).map((n) => Number(n.id));
+  const [enCurso] = await consulta(
+    `SELECT COUNT(*) AS total FROM tpedidos
+      WHERE fhasta = '2999-12-31 00:00:00-05' AND cestatuspedido IN (:estados)
+        AND (cusuario = :u OR cusuario_repartidor = :u ${negocios.length ? 'OR cnegocio IN (:negocios)' : ''})`,
+    { u: id, estados: ENCURSO, ...(negocios.length && { negocios }) },
+  );
+  if (Number(enCurso.total) > 0) throw AppError.conflict('Tienes un pedido en curso. Espera a que termine para eliminar tu cuenta', 'PEDIDOENCURSO');
+
+  for (const n of negocios) {
+    const cuenta = await LiquidacionService.estadoDeCuenta(n, req);
+    const enCursoSemana = cuenta.semanas.find((s) => s.estado === 'en_curso')?.comision || 0;
+    const debe = Number((cuenta.saldoPendiente + enCursoSemana).toFixed(2));
+    if (debe > 0) throw AppError.conflict(`Tienes $${debe.toFixed(2)} de comisiones por pagar. Págalas en "Mis cuentas" antes de eliminar tu cuenta`, 'COMISIONESPENDIENTES');
+  }
+
+  const fotos = await withTransaction(async (t) => {
+    await UsuarioCuenta.update({ estatus: '002', claveHash: await hashClave(crypto.randomBytes(24).toString('hex')) }, { where: { id }, transaction: t });
+    if (negocios.length) {
+      await sequelize.query(
+        `UPDATE tnegocios SET cestatusaprobacion = :suspendido, motivoaprobacion = 'El dueño eliminó su cuenta'
+          WHERE cusuario = :u AND fhasta = '2999-12-31 00:00:00-05'`,
+        { replacements: { u: id, suspendido: APROBACION.SUSPENDIDO }, transaction: t },
+      );
+    }
+    await sequelize.query('DELETE FROM tcodigosverificacion WHERE correo = :correo', { replacements: { correo: usuario.email }, transaction: t });
+    await SesionService.cerrarTodas(id, 'DESACTIVADA', { transaction: t });
+    const filas = await consulta('SELECT eliminardatospersonales AS id FROM ELIMINARDATOSPERSONALES(:p, :u)', { p: usuario.personaId, u: id }, { transaction: t });
+    return filas.map((f) => Number(f.id));
+  }, { usuarioId: id });
+
+  // Las fotos de perfil que quedaron sin usar se borran del disco (fuera de la transacción: si falla no se revierte la baja)
+  if (fotos.length) {
+    const archivos = await consulta('SELECT carchivo, ruta, rutamediana, rutaminiatura FROM tarchivos WHERE carchivo IN (:ids)', { ids: fotos });
+    for (const a of archivos) {
+      await Promise.all([a.ruta, a.rutamediana, a.rutaminiatura].map((r) => fs.rm(path.join(RAIZUPLOADS, String(r).replace(/^uploads\//, '')), { force: true }).catch(() => {})));
+    }
+    await sequelize.query('DELETE FROM tarchivos WHERE carchivo IN (:ids)', { replacements: { ids: fotos } });
+  }
+
+  auditar({ usuarioId: id, accion: 'CUENTAELIMINADA', entidad: 'USUARIOS', entidadId: id, detalle: { tipoUsuario: usuario.tipoUsuario, negocios }, req });
+  return { eliminada: true };
+}
+
+// ---------------------------------------------------------------------------------------------
 // Recuperar contraseña: 1) pedir código  2) verificarlo  3) fijar la clave nueva
 // ---------------------------------------------------------------------------------------------
 const MENSAJERESET = 'Si el correo existe, te enviamos un código de verificación.';
@@ -405,7 +472,7 @@ const existeEmail = async (email) => (await Persona.count({ where: { correo: nor
 module.exports = {
   ROLES,
   registrar, perfilesRegistro, crearCuenta, usuarioPerfil, login, refrescar, cerrarSesion, cerrarTodasLasSesiones,
-  obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave,
+  obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave, eliminarCuenta,
   solicitarCodigoReset, verificarCodigoReset, restablecerClave,
   enviarCodigoEmail, verificarCodigoEmail,
   existeCedula, existeEmail,
