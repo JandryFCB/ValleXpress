@@ -43,3 +43,6 @@ database/respaldos/
 # Producción: secretos (credenciales de Firebase) y respaldos de la base NUNCA van a git
 deploy/secretos/
 deploy/respaldos/
+# APK publicadas en el servidor (pesan ~60 MB; se suben con scp)
+deploy/descargas/
+backend/descargas/

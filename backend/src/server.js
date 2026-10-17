@@ -173,6 +173,28 @@ io.use(async (socket, next) => {
 // Las imágenes se llaman como su hash (nunca cambian): el navegador/app puede guardarlas en caché una semana
 app.use('/uploads', express.static(process.env.UPLOADS_DIR || path.join(__dirname, '../uploads'), { maxAge: '7d', immutable: true }));
 
+// Descarga de la app (APK) mientras no esté en las tiendas: https://<dominio>/descargas/vallexpress.apk
+// Sin caché larga: el archivo se reemplaza en cada versión con el mismo nombre.
+app.use('/descargas', express.static(process.env.DESCARGAS_DIR || path.join(__dirname, '../descargas'), {
+  maxAge: 0,
+  setHeaders: (res, ruta) => { if (ruta.endsWith('.apk')) res.setHeader('Content-Type', 'application/vnd.android.package-archive'); },
+}));
+
+// Versión de la app: la app compara su número de compilación y ofrece (u obliga a) actualizar
+app.get('/api/app/version', async (req, res, next) => {
+  try {
+    const ConfiguracionService = require('./shared/services/configuracion.service');
+    const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const url = String(await ConfiguracionService.obtener('APPURLDESCARGA', '')).trim() || `${base}/descargas/vallexpress.apk`;
+    res.json({
+      ultima: Number(await ConfiguracionService.obtener('APPVERSIONULTIMA', 1)) || 1,
+      minima: Number(await ConfiguracionService.obtener('APPVERSIONMINIMA', 1)) || 1,
+      url,
+      novedades: String(await ConfiguracionService.obtener('APPNOVEDADES', '') || ''),
+    });
+  } catch (e) { next(e); }
+});
+
 
 // Límite general de peticiones por IP (cada ruta sensible tiene además el suyo, ver auth.routes.js)
 app.use('/api', limite.general);
