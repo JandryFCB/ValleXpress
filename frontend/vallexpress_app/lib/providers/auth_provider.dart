@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import '../config/navegacion.dart';
 import '../services/auth_service.dart';
+import '../services/api_error.dart';
 import '../services/session_manager.dart';
 import '../services/session_store.dart';
 import '../services/tiempo_real.dart';
@@ -225,7 +226,7 @@ class AuthProvider with ChangeNotifier {
     await prefs.setString('usuario', jsonEncode(_usuario));
   }
 
-  String _limpiar(Object e) => e.toString().replaceFirst('Exception: ', '');
+  String _limpiar(Object e) => textoDeError(e);
 
   void clearError() {
     _error = null;

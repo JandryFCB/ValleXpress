@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/api_error.dart';
 import '../../config/theme.dart';
 import '../../services/password_reset_service.dart';
 import '../../widgets/ui/ui.dart';
@@ -45,7 +46,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       mostrarExito(context, 'Contraseña actualizada. Ya puedes iniciar sesión.');
       Navigator.popUntil(context, (ruta) => ruta.isFirst); // vuelve al inicio de sesión
     } catch (e) {
-      if (mounted) mostrarError(context, e.toString().replaceAll('Exception: ', ''));
+      if (mounted) mostrarError(context, textoDeError(e));
     } finally {
       if (mounted) setState(() => _cargando = false);
     }

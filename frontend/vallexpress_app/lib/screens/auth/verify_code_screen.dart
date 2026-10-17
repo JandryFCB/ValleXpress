@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../services/api_error.dart';
 import 'package:flutter/services.dart';
 import '../../config/theme.dart';
 import '../../services/password_reset_service.dart';
@@ -61,7 +62,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     } catch (e) {
       if (mounted) {
         _codigo.clear();
-        mostrarError(context, e.toString().replaceAll('Exception: ', ''));
+        mostrarError(context, textoDeError(e));
       }
     } finally {
       if (mounted) setState(() => _cargando = false);

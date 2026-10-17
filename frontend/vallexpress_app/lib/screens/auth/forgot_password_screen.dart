@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/api_error.dart';
 import '../../services/password_reset_service.dart';
 import '../../utils/validadores.dart';
 import '../../widgets/ui/ui.dart';
@@ -38,7 +39,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       mostrarMensaje(context, 'Si el correo existe, te enviamos un código.', tipo: TipoMensaje.exito);
       Navigator.push(context, MaterialPageRoute(builder: (_) => VerifyCodeScreen(email: email)));
     } catch (e) {
-      if (mounted) mostrarError(context, e.toString().replaceAll('Exception: ', ''));
+      if (mounted) mostrarError(context, textoDeError(e));
     } finally {
       if (mounted) setState(() => _cargando = false);
     }

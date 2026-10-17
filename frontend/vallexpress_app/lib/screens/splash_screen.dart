@@ -30,7 +30,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     final texto = CurvedAnimation(parent: _entrada, curve: const Interval(0.35, 1, curve: Curves.easeOutCubic));
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
+      // Ocupa TODA la pantalla: sin esto el contenedor se encogía al tamaño del logo y quedaba arriba a la izquierda
+      // (se veía así cuando la app tardaba en arrancar)
       body: Container(
+        constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
           gradient: RadialGradient(colors: [AppTheme.backgroundGradientEnd, AppTheme.backgroundColor], radius: 0.9),
         ),

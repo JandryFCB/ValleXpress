@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/auth_service.dart';
+import '../../../services/api_error.dart';
 import '../../../utils/validadores.dart';
 import '../../../widgets/ui/ui.dart';
 
@@ -357,8 +358,7 @@ class RegistroController extends ChangeNotifier {
   }
 
   String _limpiar(Object e, String porDefecto) {
-    var t = e.toString();
-    t = t.replaceAll('Exception: ', '').replaceAll('Error de conexión: ', '').trim();
+    final t = textoDeError(e);
     return t.isEmpty ? porDefecto : t;
   }
 
