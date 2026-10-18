@@ -104,11 +104,19 @@ async function crear(usuarioId, datos, req) {
 
 const miPerfil = async (usuarioId) => aApi(await exigirPerfil(usuarioId));
 
-async function actualizar(usuarioId, datos, req) {
+// El repartidor NO cambia su tipo de vehículo (los documentos que entregó son de ese vehículo) y, ya aprobado,
+// tampoco la placa: eso lo hace el administrador ("comoAdmin"). El color sí lo puede cambiar.
+async function actualizar(usuarioId, datos, req, { comoAdmin = false } = {}) {
   const r = await exigirPerfil(usuarioId);
   const vehiculo = datos.vehiculo !== undefined ? vehiculoDe(datos.vehiculo) : r.vehiculo;
   if (!vehiculo) throw AppError.badRequest('Tipo de vehículo inválido', 'VEHICULOINVALIDO');
   const placa = placaPara(vehiculo, datos.placa !== undefined ? datos.placa : r.placa);
+  if (!comoAdmin && vehiculo !== r.vehiculo) {
+    throw AppError.forbidden('Para cambiar tu tipo de vehículo escríbele al administrador de ValleXpress', 'VEHICULOSOLOADMIN');
+  }
+  if (!comoAdmin && placa !== r.placa && r.aprobacion === APROBACION.APROBADO) {
+    throw AppError.forbidden('Para cambiar la placa escríbele al administrador de ValleXpress', 'PLACASOLOADMIN');
+  }
   await exigirPlacaLibre(placa, usuarioId);
   const cambios = { vehiculo, placa };
   if (datos.color !== undefined) cambios.color = datos.color?.trim() || null;

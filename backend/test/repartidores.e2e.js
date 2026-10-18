@@ -226,6 +226,18 @@ const LOCAL = { lat: -0.18, lng: -78.48 };
     check('en la lista de aprobaciones se ve cuántos documentos subió', !!enLista?.documentos && enLista.documentos.subidos === 3 && enLista.documentos.requeridos === 3, JSON.stringify(r.body.repartidores?.[0]));
     r = await api('GET', `/api/admin/repartidores/${bici.usuario.id}/documentos`, null, bici.token);
     check('un repartidor no ve la ruta del admin: 403', r.status === 403);
+    r = await api('GET', '/api/repartidor/documentos', null, bici.token);
+    check('los documentos traen el estado de la cuenta (para "En revisión" / "Verificados")', ['aprobado', 'pendiente'].includes(r.body.aprobacion), JSON.stringify(r.body.aprobacion));
+
+    seccion('El tipo de vehículo solo lo cambia el administrador');
+    r = await api('PUT', '/api/repartidor', { vehiculo: 'auto', placa: 'PBC-4321' }, moto.token);
+    check('el repartidor no cambia su tipo de vehículo: 403', r.status === 403 && r.body.code === 'VEHICULOSOLOADMIN', JSON.stringify(r.body));
+    r = await api('PUT', '/api/repartidor', { placa: 'IB-999C' }, moto.token);
+    check('ya aprobado, tampoco la placa: 403', r.status === 403 && r.body.code === 'PLACASOLOADMIN', JSON.stringify(r.body));
+    r = await api('PUT', '/api/repartidor', { color: 'Negro' }, moto.token);
+    check('el color sí lo puede cambiar', r.status === 200 && r.body.repartidor?.color === 'Negro', JSON.stringify(r.body));
+    r = await api('PUT', `/api/admin/repartidores/${moto.usuario.id}`, { vehiculo: 'auto', placa: 'PBC-4321', color: 'Gris' }, A);
+    check('el administrador sí le cambia el vehículo (moto -> auto)', r.status === 200 && r.body.repartidor?.vehiculo === 'auto' && r.body.repartidor.placa === 'PBC4321', JSON.stringify(r.body));
   } catch (e) {
     return t.finalizar(e);
   }

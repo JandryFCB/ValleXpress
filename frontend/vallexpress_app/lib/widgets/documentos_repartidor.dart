@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../config/theme.dart';
 import '../models/documento_repartidor.dart';
 import '../services/api_error.dart';
 import '../services/pedidos_service.dart';
+import '../services/tiempo_real.dart';
 import '../utils/formato.dart';
 import '../utils/imagen.dart';
 import 'ui/ui.dart';
@@ -89,7 +91,11 @@ class ListaDocumentos extends StatelessWidget {
   }
 }
 
-/// Tarjeta "Tus documentos" del repartidor: los carga, los muestra y deja subirlos con la cámara o la galería
+/// Avisa a todas las tarjetas "Tus documentos" abiertas que algo cambió (subió uno desde otra pantalla)
+final documentosCambiaron = ValueNotifier<int>(0);
+
+/// Tarjeta "Tus documentos" del repartidor: los carga, los muestra y deja subirlos con la cámara o la galería.
+/// Se recarga sola si sube uno desde otra pantalla y al volver a la app.
 class MisDocumentos extends StatefulWidget {
   const MisDocumentos({super.key, this.alCambiar});
 
@@ -104,10 +110,21 @@ class _MisDocumentosState extends State<MisDocumentos> {
   String? _error;
   String? _subiendo;
 
+  StreamSubscription? _vivo;
+
   @override
   void initState() {
     super.initState();
     _cargar();
+    documentosCambiaron.addListener(_cargar);
+    _vivo = TiempoReal.instancia.cambios().listen((_) => _cargar());
+  }
+
+  @override
+  void dispose() {
+    documentosCambiaron.removeListener(_cargar);
+    _vivo?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargar() async {
@@ -128,8 +145,9 @@ class _MisDocumentosState extends State<MisDocumentos> {
       final nuevos = await PedidosService.subirDocumento(d.tipo, imagen);
       if (!mounted) return;
       setState(() => _docs = nuevos);
+      documentosCambiaron.value++;
       HapticFeedback.lightImpact();
-      mostrarExito(context, !antes && nuevos.completos ? '¡Listo! Tus documentos están completos' : '${d.titulo}: guardado');
+      mostrarExito(context, !antes && nuevos.completos ? '¡Listo! Recibimos tus documentos: los revisamos y te avisamos' : '${d.titulo}: guardado');
       widget.alCambiar?.call();
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
@@ -142,9 +160,16 @@ class _MisDocumentosState extends State<MisDocumentos> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final docs = _docs;
-    final color = docs == null ? context.colores.primario : (docs.completos ? AppTheme.successColor : AppTheme.warningColor);
+    // Faltan N (amarillo) -> En revisión (azul) -> Verificados (verde)
+    final (color, insignia, iconoInsignia) = docs == null
+        ? (context.colores.primario, null, null)
+        : !docs.completos
+            ? (AppTheme.warningColor, 'Faltan ${docs.faltan}', Icons.upload_rounded)
+            : docs.aprobado
+                ? (AppTheme.successColor, 'Verificados', Icons.verified_rounded)
+                : (AppTheme.infoColor, 'En revisión', Icons.hourglass_top_rounded);
     return TarjetaValle(
-      colorBorde: docs != null && !docs.completos ? AppTheme.warningColor.withValues(alpha: 0.6) : null,
+      colorBorde: docs != null ? color.withValues(alpha: 0.6) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -152,16 +177,15 @@ class _MisDocumentosState extends State<MisDocumentos> {
             Icon(Icons.verified_user_rounded, color: color),
             const SizedBox(width: 10),
             Expanded(child: Text('Tus documentos', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-            if (docs != null)
-              InsigniaValle(
-                docs.completos ? 'Completos' : 'Faltan ${docs.faltan}',
-                color: color,
-                icono: docs.completos ? Icons.check_rounded : Icons.upload_rounded,
-              ),
+            if (insignia != null) InsigniaValle(insignia, color: color, icono: iconoInsignia),
           ]),
           const SizedBox(height: 4),
           Text(
-            'Para aprobar tu cuenta verificamos tu identidad y tu vehículo. Solo los ve el equipo de ValleXpress.',
+            docs == null || !docs.completos
+                ? 'Para aprobar tu cuenta verificamos tu identidad y tu vehículo. Solo los ve el equipo de ValleXpress.'
+                : docs.aprobado
+                    ? 'Tus documentos fueron verificados. Si alguno cambia (licencia renovada, otro vehículo), súbelo de nuevo.'
+                    : 'Recibimos tus documentos: nuestro equipo los está revisando. Te avisamos apenas estés aprobado.',
             style: tema.bodySmall?.copyWith(color: context.colores.textoSuave),
           ),
           const SizedBox(height: 6),

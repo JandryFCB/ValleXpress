@@ -588,7 +588,7 @@ async function resolverDueno(req) {
 // Vehículo, placa y color de un repartidor
 async function editarRepartidor(admin, usuarioId, datos, req) {
   await RepartidorService.exigirPerfil(usuarioId);
-  await RepartidorService.actualizar(usuarioId, datos, req);
+  await RepartidorService.actualizar(usuarioId, datos, req, { comoAdmin: true });
   auditar({ usuarioId: admin.id, accion: 'REPARTIDOREDITADOADMIN', entidad: 'REPARTIDORES', entidadId: usuarioId, detalle: datos, req });
   return repartidorApi(await Repartidor.findOne({ where: { usuarioId }, include: INCLUIRREPARTIDOR }));
 }

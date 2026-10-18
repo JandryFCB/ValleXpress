@@ -5,7 +5,7 @@ const withTransaction = require('../../shared/helpers/withTransaction');
 const ArchivoService = require('../../shared/services/archivo.service');
 const NotificacionService = require('../notificaciones/notificacion.service');
 const { auditar } = require('../../shared/services/log.service');
-const { VEHICULOSINPLACA, APROBACION } = require('../../shared/constants/codigos');
+const { VEHICULOSINPLACA, APROBACION, APROBACIONAAPI } = require('../../shared/constants/codigos');
 
 // DOCUMENTOS DEL REPARTIDOR: fotos para verificar su identidad y su vehículo antes de aprobarlo.
 //   * Siempre: cédula (frente y reverso) y una selfie sosteniendo la cédula.
@@ -36,6 +36,7 @@ async function vehiculoDe(usuarioId) {
 // Lista de documentos del repartidor con su foto (si ya la subió)
 async function documentos(usuarioId, req) {
   const requeridos = requeridosPara(await vehiculoDe(usuarioId));
+  const [estado] = await consulta("SELECT cestatusaprobacion AS aprobacion FROM trepartidores WHERE cusuario = :u AND fhasta = '2999-12-31 00:00:00-05'", { u: usuarioId });
   const filas = await consulta('SELECT tipo, carchivo, fsubido FROM trepartidordocumentos WHERE cusuario = :u', { u: usuarioId });
   const urls = await ArchivoService.mapaUrls(req, filas.map((f) => f.carchivo));
   const porCodigo = Object.fromEntries(filas.map((f) => [f.tipo, f]));
@@ -44,7 +45,7 @@ async function documentos(usuarioId, req) {
     const url = f && urls[String(f.carchivo)];
     return { tipo: d.tipo, titulo: d.titulo, ayuda: d.ayuda, subido: !!f, ...(url && { url: url.url, miniatura: url.miniatura, fecha: f.fsubido }) };
   });
-  return { documentos: lista, completos: lista.every((d) => d.subido), faltan: lista.filter((d) => !d.subido).length };
+  return { documentos: lista, completos: lista.every((d) => d.subido), faltan: lista.filter((d) => !d.subido).length, aprobacion: APROBACIONAAPI[estado?.aprobacion] || 'pendiente' };
 }
 
 // Cuántos documentos subió cada repartidor y cuántos le piden (para la lista de aprobaciones del admin)

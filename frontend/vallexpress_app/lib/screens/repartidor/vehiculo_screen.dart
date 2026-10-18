@@ -28,6 +28,12 @@ class _VehiculoScreenState extends State<VehiculoScreen> {
   bool _guardando = false;
   String? _error;
 
+  // El repartidor ya registrado no cambia su tipo de vehículo (sus documentos son de ese vehículo) y, ya aprobado,
+  // tampoco la placa: se lo pide al administrador. El administrador sí puede cambiar todo.
+  bool get _esAdmin => widget.deUsuario != null;
+  bool get _tipoBloqueado => !_esAdmin && widget.actual != null;
+  bool get _placaBloqueada => !_esAdmin && (widget.actual?.aprobado ?? false);
+
   @override
   void dispose() {
     _placa.dispose();
@@ -76,7 +82,29 @@ class _VehiculoScreenState extends State<VehiculoScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
-          Text('¿Con qué repartes?', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          Text(_tipoBloqueado ? 'Tu vehículo' : '¿Con qué repartes?', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          if (_tipoBloqueado) ...[
+            const SizedBox(height: 10),
+            TarjetaValle(
+              color: AppTheme.infoColor.withValues(alpha: 0.1),
+              colorBorde: AppTheme.infoColor.withValues(alpha: 0.4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline_rounded, color: AppTheme.infoColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _placaBloqueada
+                          ? 'Para cambiar el tipo de vehículo o la placa escríbele al administrador de ValleXpress: tendrás que subir los documentos del vehículo nuevo.'
+                          : 'Para cambiar el tipo de vehículo escríbele al administrador de ValleXpress: tendrás que subir los documentos del vehículo nuevo.',
+                      style: tema.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           GridView.count(
             crossAxisCount: 3,
@@ -86,11 +114,12 @@ class _VehiculoScreenState extends State<VehiculoScreen> {
             crossAxisSpacing: 10,
             children: [
               for (final v in Vehiculo.values)
+                if (!_tipoBloqueado || v == _vehiculo)
                 TarjetaValle(
                   padding: const EdgeInsets.all(8),
                   colorBorde: _vehiculo == v ? c.primario : null,
                   color: _vehiculo == v ? c.primario.withValues(alpha: 0.12) : null,
-                  onTap: () => setState(() => _vehiculo = v),
+                  onTap: _tipoBloqueado ? null : () => setState(() => _vehiculo = v),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -104,7 +133,16 @@ class _VehiculoScreenState extends State<VehiculoScreen> {
           ),
           const SizedBox(height: 20),
           if (_vehiculo.llevaPlaca) ...[
-            CampoValle(controller: _placa, etiqueta: 'Placa', icono: Icons.pin_outlined, mayusculas: TextCapitalization.characters, maxLongitud: 9, ayuda: 'Ej: ABC-1234 (auto) o AB-123C (moto)'),
+            CampoValle(
+              controller: _placa,
+              etiqueta: 'Placa',
+              icono: Icons.pin_outlined,
+              mayusculas: TextCapitalization.characters,
+              maxLongitud: 9,
+              readOnly: _placaBloqueada,
+              enabled: !_placaBloqueada,
+              ayuda: _placaBloqueada ? 'Para cambiarla, escríbele al administrador' : 'Ej: ABC-1234 (auto) o AB-123C (moto)',
+            ),
             const SizedBox(height: 14),
           ],
           CampoValle(controller: _color, etiqueta: 'Color (opcional)', icono: Icons.palette_outlined, mayusculas: TextCapitalization.sentences, maxLongitud: 30, ayuda: 'Ayuda al cliente y al negocio a reconocerte', accion: TextInputAction.done),

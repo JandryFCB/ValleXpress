@@ -143,11 +143,15 @@ class _TutorialScreenState extends State<TutorialScreen> {
                   onPageChanged: (i) => setState(() => _actual = i),
                   itemBuilder: (_, i) {
                     final p = paginas[i];
-                    return SingleChildScrollView(
+                    // Centrado en la pantalla; si el texto no cabe (letra grande), se desplaza
+                    return LayoutBuilder(
+                      builder: (_, caja) => SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                      child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: caja.maxHeight - 24),
                       child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const SizedBox(height: 24),
                           Container(
                             width: 140,
                             height: 140,
@@ -174,6 +178,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
                               ),
                           ],
                         ],
+                      ),
+                      ),
                       ),
                     );
                   },

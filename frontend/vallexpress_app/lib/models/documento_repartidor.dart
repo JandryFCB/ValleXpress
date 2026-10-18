@@ -23,15 +23,19 @@ class DocumentoRepartidor {
 
 /// Los documentos que se le piden a un repartidor y si ya están completos
 class DocumentosRepartidor {
-  const DocumentosRepartidor({required this.documentos, required this.completos, required this.faltan});
+  const DocumentosRepartidor({required this.documentos, required this.completos, required this.faltan, this.aprobacion = 'pendiente'});
 
   final List<DocumentoRepartidor> documentos;
   final bool completos;
   final int faltan;
+  final String aprobacion; // estado de la cuenta del repartidor: pendiente | aprobado | rechazado | suspendido
+
+  bool get aprobado => aprobacion == 'aprobado';
 
   factory DocumentosRepartidor.desdeJson(Map<String, dynamic> j) => DocumentosRepartidor(
         documentos: [for (final d in (j['documentos'] as List? ?? [])) DocumentoRepartidor.desdeJson(Map<String, dynamic>.from(d))],
         completos: j['completos'] == true,
         faltan: (j['faltan'] as num?)?.toInt() ?? 0,
+        aprobacion: '${j['aprobacion'] ?? 'pendiente'}',
       );
 }
