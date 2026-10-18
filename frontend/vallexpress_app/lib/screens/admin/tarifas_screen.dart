@@ -118,7 +118,7 @@ class _TarifasScreenState extends State<TarifasScreen> {
       HapticFeedback.mediumImpact();
       if (!mounted) return;
       _rellenar(t);
-      mostrarExito(context, 'Tarifas guardadas: se aplican a los pedidos nuevos');
+      mostrarExito(context, 'Tarifas guardadas');
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
     } finally {
@@ -142,7 +142,6 @@ class _TarifasScreenState extends State<TarifasScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
-                Text('Los cambios se aplican a los pedidos nuevos; los que ya se hicieron conservan su precio.', style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
                 const EncabezadoSeccion('Envío', subtitulo: 'Lo paga el cliente y es 100 % del repartidor'),
                 TarjetaValle(
                   child: Column(
