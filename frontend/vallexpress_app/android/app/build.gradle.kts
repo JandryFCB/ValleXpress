@@ -38,8 +38,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.vallexpress_app"
+        // Nombre del paquete con el que se publica (Play y Firebase). El namespace del código sigue siendo el original.
+        applicationId = "ec.vallexpress.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
