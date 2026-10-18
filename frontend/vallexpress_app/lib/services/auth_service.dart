@@ -343,10 +343,12 @@ class AuthService {
   }
 
   // ✅ Verificar si email ya existe (validación en tiempo real)
-  Future<Map<String, dynamic>> checkEmail(String email, {String? tipo}) async {
+  // cedula: la que ya escribió; si el correo es de otra persona (otra cédula) responde otraCedula
+  Future<Map<String, dynamic>> checkEmail(String email, {String? tipo, String? cedula}) async {
     try {
+      final q = {if (tipo != null) 'tipo': tipo, if (cedula != null) 'cedula': cedula};
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/auth/check-email/$email${tipo != null ? '?tipo=$tipo' : ''}'),
+        Uri.parse('${AppConstants.baseUrl}/auth/check-email/$email').replace(queryParameters: q.isEmpty ? null : q),
         headers: {'Content-Type': 'application/json'},
       );
 

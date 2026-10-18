@@ -24,7 +24,7 @@ class _FalsoAuth extends AuthService {
   @override
   Future<Map<String, dynamic>> checkCedula(String cedula, {String? tipo}) async => {'exists': cedulaExiste};
   @override
-  Future<Map<String, dynamic>> checkEmail(String email, {String? tipo}) async => {'exists': emailExiste};
+  Future<Map<String, dynamic>> checkEmail(String email, {String? tipo, String? cedula}) async => {'exists': emailExiste};
   @override
   Future<Map<String, dynamic>> sendEmailVerification(String email, String nombre, {String? fcmToken, String? tipoUsuario}) async {
     envios++;

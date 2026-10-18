@@ -195,6 +195,8 @@ class RegistroController extends ChangeNotifier {
         estadoCedula = EstadoCampo.neutro; // sin conexión: el servidor la vuelve a validar al registrar
         mensajeCedula = null;
       }
+      // El correo se revisa con esta cédula (si ya lo escribió y aún no lo verificó)
+      if (email.text.trim().isNotEmpty && !emailVerificado && !codigoEnviado) alCambiarEmail(email.text);
       _avisar();
     });
   }
@@ -256,11 +258,13 @@ class RegistroController extends ChangeNotifier {
     _avisar();
     _esperaEmail = Timer(const Duration(milliseconds: 450), () async {
       try {
-        final r = await _servicio.checkEmail(v, tipo: rol);
+        final r = await _servicio.checkEmail(v, tipo: rol, cedula: Validadores.cedula(cedula.text.trim()) ? cedula.text.trim() : null);
         if (_liberado || email.text.trim().toLowerCase() != v) return;
         final existe = r['exists'] == true;
         estadoEmail = existe ? EstadoCampo.error : EstadoCampo.correcto;
-        mensajeEmail = existe
+        mensajeEmail = r['otraCedula'] == true
+            ? 'Este correo ya está registrado con otra cédula'
+            : existe
             ? (rol != null ? 'Ya tienes una cuenta ${_deRol()} con este correo. ¿Quieres iniciar sesión?' : 'Este correo ya tiene una cuenta. ¿Quieres iniciar sesión?')
             : r['otroPerfil'] == true
                 ? 'Ya tienes otra cuenta con este correo: crearemos tu cuenta ${_deRol()} con tus mismos datos'

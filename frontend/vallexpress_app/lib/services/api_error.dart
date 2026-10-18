@@ -43,7 +43,8 @@ String textoDeError(Object e) {
   if (e is ErrorConexion) return e.mensaje;
   if (e is TimeoutException) return ErrorConexion.lento;
   if (e is FormatException) return 'Recibimos una respuesta inesperada. Inténtalo de nuevo';
-  final texto = e.toString().replaceFirst('Exception: ', '').replaceFirst('Error de conexión: ', '').trim();
+  // Algunos servicios envuelven el error dos veces ("Error de conexión: Exception: ..."): se quitan todas las capas
+  final texto = e.toString().replaceFirst(RegExp(r'^((Exception|Error de conexión):\s*)+'), '').trim();
   if (_tecnico.hasMatch(texto)) return ErrorConexion.sinConexion;
   return texto.isEmpty ? 'Algo salió mal. Inténtalo de nuevo' : texto;
 }

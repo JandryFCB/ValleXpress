@@ -92,7 +92,7 @@ const cambiarClave = [
 // Consultas en tiempo real del formulario de registro
 const tipoConsulta = query('tipo').optional({ values: 'falsy' }).isIn(['cliente', 'vendedor', 'repartidor']).withMessage('Perfil inválido');
 const consultaCedula = [param('cedula').custom(validarCedula).withMessage('Cédula inválida'), tipoConsulta];
-const consultaEmail = [email('email', param), tipoConsulta];
+const consultaEmail = [email('email', param), tipoConsulta, query('cedula').optional({ values: 'falsy' }).custom(validarCedula).withMessage('Cédula inválida')];
 
 module.exports = {
   registro, login, refrescar, correo, verificarCodigo, enviarVerificacion, restablecer,

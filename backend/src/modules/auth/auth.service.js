@@ -569,7 +569,14 @@ async function consultarUnico(where, tipo) {
   return { exists: mismo, otroPerfil: !mismo };
 }
 const existeCedula = (cedula, tipo) => consultarUnico({ tipoDoc: TIPODOCCEDULA, numeroDoc: cedula }, tipo);
-const existeEmail = (email, tipo) => consultarUnico({ correo: normalizarEmail(email) }, tipo);
+// Con la cédula que ya escribió: si el correo es de una persona con otra cédula, "otraCedula" (no podrá registrarse)
+async function existeEmail(email, tipo, cedula) {
+  const r = await consultarUnico({ correo: normalizarEmail(email) }, tipo);
+  if (!cedula || (!r.exists && !r.otroPerfil)) return { ...r, otraCedula: false };
+  const persona = await Persona.findOne({ where: { correo: normalizarEmail(email) }, attributes: ['tipoDoc', 'numeroDoc'] });
+  const otraCedula = !!persona && !(persona.tipoDoc === TIPODOCCEDULA && persona.numeroDoc === cedula);
+  return otraCedula ? { exists: true, otroPerfil: false, otraCedula } : { ...r, otraCedula };
+}
 
 module.exports = {
   ROLES,

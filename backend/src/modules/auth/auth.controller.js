@@ -82,8 +82,8 @@ const checkCedula = asyncHandler(async (req, res) => {
 
 const checkEmail = asyncHandler(async (req, res) => {
   const { tipo } = req.query;
-  const { exists, otroPerfil } = await authService.existeEmail(req.params.email, tipo);
-  res.json({ exists, otroPerfil, message: exists ? (tipo ? `Ya tienes una cuenta de ${tipo} con este correo` : 'Este email ya está registrado') : otroPerfil ? OTROPERFIL : 'Email disponible' });
+  const { exists, otroPerfil, otraCedula } = await authService.existeEmail(req.params.email, tipo, req.query.cedula);
+  res.json({ exists, otroPerfil, otraCedula, message: otraCedula ? 'Este correo ya está registrado con otra cédula' : exists ? (tipo ? `Ya tienes una cuenta de ${tipo} con este correo` : 'Este email ya está registrado') : otroPerfil ? OTROPERFIL : 'Email disponible' });
 });
 
 // Perfiles con el registro abierto: { cliente: true, vendedor: true, repartidor: false }
