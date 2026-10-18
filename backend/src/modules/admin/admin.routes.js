@@ -55,5 +55,7 @@ router.get('/zona', controller.zona);
 router.put('/zona', schema.zona, validar, controller.cambiarZona);
 router.get('/perfiles', controller.perfiles);
 router.patch('/perfiles/:rol', schema.perfil, validar, controller.cambiarPerfil);
+router.get('/soporte', controller.soporte);
+router.put('/soporte', schema.soporte, validar, controller.cambiarSoporte);
 
 module.exports = router;

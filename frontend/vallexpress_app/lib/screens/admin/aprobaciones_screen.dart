@@ -440,6 +440,8 @@ class _CabeceraRepartidor extends StatelessWidget {
                 if (p.disponible) const InsigniaValle('En línea', color: AppTheme.successColor, icono: Icons.circle),
                 InsigniaValle(p.numeroEntregas == 1 ? '1 entrega' : '${p.numeroEntregas} entregas', color: AppTheme.infoColor),
                 if (p.numeroCalificaciones > 0) InsigniaValle('${p.calificacion.toStringAsFixed(1)} ★', color: AppTheme.accentColor),
+                if (r.advertencias > 0)
+                  InsigniaValle(r.advertencias == 1 ? '1 advertencia' : '${r.advertencias} advertencias', color: AppTheme.errorColor, icono: Icons.warning_amber_rounded),
               ]),
             ],
           ),

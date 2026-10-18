@@ -385,7 +385,59 @@ async function cobrado({ desde, hasta } = {}) {
   }));
 }
 
+// ---------------------------------------------------------------------------------------------
+// Recordatorios (push + aviso en la app), una sola vez cada uno por mes:
+//   inicio     desde el día 1: "Tu cuota de noviembre es $10. Tienes hasta el día 5"
+//   manana     el día antes del límite: "Mañana vence tu suscripción"
+//   bloqueado  pasado el límite: "Tu suscripción venció: no recibes pedidos / no puedes conectarte"
+// No se avisa de un mes que ya está pagado o con el comprobante en revisión. Solo de 8:00 a 21:00 (hora de Ecuador).
+// ---------------------------------------------------------------------------------------------
+const TIPORECORDATORIO = 'suscripcion_recordatorio';
+
+async function recordar({ io, ahora = new Date() } = {}) {
+  const hora = new Date(ahora.getTime() - 5 * 3600 * 1000);
+  if (hora.getUTCHours() < 8 || hora.getUTCHours() >= 21) return 0;
+  const hoy = hora.toISOString().slice(0, 10);
+  const mes = mesDe(hoy);
+  const cfg = await config();
+  const vence = sumarDias(mes, cfg.diasGracia - 1);
+  const manana = sumarDias(vence, -1);
+  const etapa = hoy > vence ? 'bloqueado' : hoy === manana ? 'manana' : 'inicio';
+
+  // Suscriptores que pagan este mes (su primer mes ya empezó) y no lo tienen pagado ni en revisión
+  const filas = await consulta(`
+    SELECT s.cusuario, s.tipo
+      FROM (${SUSCRIPTORES}) s
+     WHERE GREATEST(CAST(:inicio AS date), (date_trunc('month', s.faprobado AT TIME ZONE '${ZONA}') + interval '1 month')::date) <= CAST(:mes AS date)
+       AND NOT EXISTS (SELECT 1 FROM tsuscripcionpagos p WHERE p.cusuario = s.cusuario AND p.mes = CAST(:mes AS date) AND p.estado IN ('ENVIADO', 'APROBADO'))
+       AND NOT EXISTS (SELECT 1 FROM tnotificaciones n WHERE n.cusuario = s.cusuario AND n.tipo = :tipo AND n.datos->>'clave' = :clave)`,
+  { inicio: cfg.inicio, mes, tipo: TIPORECORDATORIO, clave: `${mes}:${etapa}` });
+
+  const nombre = nombreMes(mes).split(' ')[0];
+  for (const f of filas) {
+    const cuota = cuotaDe(cfg, f.tipo);
+    const bloqueo = f.tipo === 'vendedor' ? 'tus negocios no reciben pedidos' : 'no puedes conectarte ni aceptar pedidos';
+    const [titulo, mensaje] = {
+      inicio: [`Tu cuota de ${nombre}: $${cuota.toFixed(2)}`, `Tienes hasta el ${Number(vence.slice(8))} de ${nombre} para pagarla. Transfiere y sube el comprobante en "Mi suscripción"`],
+      manana: ['Mañana vence tu suscripción ⏰', `Paga tu cuota de $${cuota.toFixed(2)} y sube el comprobante hoy o mañana; si no, ${bloqueo}`],
+      bloqueado: ['Tu suscripción venció', `Hasta que pagues tu cuota de ${nombre}, ${bloqueo}. Sube el comprobante en "Mi suscripción"`],
+    }[etapa];
+    await NotificacionService.notificar({ io, usuarioId: f.cusuario, tipo: TIPORECORDATORIO, titulo, mensaje, datos: { clave: `${mes}:${etapa}`, mes } });
+  }
+  return filas.length;
+}
+
+// Revisa cada 15 minutos (y una vez al arrancar). No impide que el proceso termine.
+function iniciarRecordatorios(io) {
+  const pasada = () => recordar({ io }).catch((e) => require('../../shared/services/log.service').logMensaje({
+    nivel: 'ADVERTENCIA', modulo: 'SUSCRIPCIONES', accion: 'RECORDATORIOFALLIDO', mensaje: 'No se pudieron enviar los recordatorios', detalle: { error: e.message },
+  }));
+  setTimeout(pasada, 10 * 1000).unref();
+  return setInterval(pasada, 15 * 60 * 1000).unref();
+}
+
 module.exports = {
+  recordar, iniciarRecordatorios,
   TIPOS, TIPOSCUENTA, config, fijarConfig, estado, bloqueados, negociosBloqueados, exigirAlDia,
   subirComprobante, resumen, porRevisar, contarPorRevisar, aprobar, rechazar, registrarPago, cobrado, nombreMes,
 };

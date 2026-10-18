@@ -117,6 +117,7 @@ const configSuscripciones = [
   body().custom((b) => ['cuotaVendedor', 'cuotaRepartidor', 'diasGracia', 'inicio', 'cuenta'].some((c) => b[c] !== undefined)).withMessage('Indica qué cambiar'),
 ];
 const idComprobante = [param('id').isInt({ min: 1 }).withMessage('Comprobante inválido').toInt()];
+const soporte = [body('whatsapp').isString().trim().matches(/^(09\d{8})?$/).withMessage('El WhatsApp es un celular de 10 dígitos que empieza con 09 (o vacío)')];
 const advertencia = [body('motivo').isString().trim().isLength({ min: 10, max: 500 }).withMessage('Escribe el motivo de la advertencia (10 a 500 letras)')];
 const rechazoComprobante = [body('motivo').isString().trim().isLength({ min: 5, max: 300 }).withMessage('Escribe el motivo del rechazo (5 a 300 letras)')];
 
@@ -127,11 +128,12 @@ const perfil = [
   booleanoOpcional('registroAbierto'),
   booleanoOpcional('aprobacionAutomatica'),
   booleanoOpcional('aprobarPendientes'),
-  body().custom((b) => b.registroAbierto !== undefined || b.aprobacionAutomatica !== undefined || b.aprobarPendientes === true)
+  body('cupo').optional().isInt({ min: 0, max: 10000 }).withMessage('El cupo es un número desde 0 (0 = sin límite)').toInt(),
+  body().custom((b) => b.registroAbierto !== undefined || b.aprobacionAutomatica !== undefined || b.aprobarPendientes === true || b.cupo !== undefined)
     .withMessage('Indica qué permiso cambiar'),
 ];
 
 module.exports = {
-  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoSuscripcion, configSuscripciones, idComprobante, rechazoComprobante, advertencia,
+  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoSuscripcion, configSuscripciones, idComprobante, rechazoComprobante, advertencia, soporte,
   crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, negocioGestion, editarRepartidor,
 };

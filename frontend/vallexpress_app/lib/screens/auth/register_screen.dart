@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../../utils/validadores.dart';
 import '../legal/documento_legal_screen.dart';
+import '../../utils/contacto.dart';
 import '../../widgets/ui/ui.dart';
 import 'registro/registro_controller.dart';
 
@@ -321,6 +322,7 @@ class _TarjetaRol extends StatelessWidget {
   Widget build(BuildContext context) {
     final seleccionado = controlador.rol == valor;
     final abierto = controlador.registroAbierto(valor);
+    final sinCupos = controlador.sinCupos(valor);
     final tema = Theme.of(context).textTheme;
     // Registro cerrado por el administrador: se ve apagado y no se puede elegir
     return Opacity(
@@ -345,9 +347,28 @@ class _TarjetaRol extends StatelessWidget {
                   Text(titulo, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 2),
                   Text(
-                    abierto ? descripcion : 'Por ahora no estamos recibiendo nuevas cuentas de este tipo.',
+                    abierto
+                        ? descripcion
+                        : sinCupos
+                            ? 'Por ahora no hay cupos. Escríbenos para quedar en la lista de espera o vuelve más adelante.'
+                            : 'Por ahora no estamos recibiendo nuevas cuentas de este tipo.',
                     style: tema.bodySmall?.copyWith(color: context.colores.textoSuave),
                   ),
+                  if (sinCupos && (controlador.soporteWhatsapp != null || controlador.soporteCorreo != null))
+                    Wrap(spacing: 4, children: [
+                      if (controlador.soporteWhatsapp != null)
+                        TextButton.icon(
+                          onPressed: () => abrirWhatsapp(context, controlador.soporteWhatsapp!, mensaje: 'Hola, quiero ser repartidor de ValleXpress. ¿Hay cupos?'),
+                          icon: const Icon(Icons.chat_rounded, size: 18),
+                          label: const Text('WhatsApp'),
+                        ),
+                      if (controlador.soporteCorreo != null)
+                        TextButton.icon(
+                          onPressed: () => escribirASoporte(context, controlador.soporteCorreo!, asunto: 'Quiero ser repartidor de ValleXpress'),
+                          icon: const Icon(Icons.mail_outline_rounded, size: 18),
+                          label: const Text('Correo'),
+                        ),
+                    ]),
                 ],
               ),
             ),

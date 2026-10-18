@@ -683,9 +683,11 @@ async function calificarRepartidorComoNegocio(usuario, id, { puntuacion, comenta
 // 1 o 2 estrellas al repartidor: los administradores se enteran (para advertirle o darlo de baja)
 async function avisarCalificacionBaja(req, p, puntuacion, comentario, quien) {
   if (puntuacion > 2) return;
+  const rep = await Usuario.findByPk(p.repartidorId, { attributes: ['id', 'nombre', 'apellido'] });
+  const nombre = rep ? `${[rep.nombre, rep.apellido].filter(Boolean).join(' ')} (${rep.id})` : p.repartidorId;
   await NotificacionService.notificarAdministradores({
     io: req.io, tipo: 'calificacion_baja', titulo: `Calificación baja a un repartidor (${puntuacion}★)`,
-    mensaje: `Pedido #${p.id}: ${quien} calificó a ${p.repartidorId} con ${puntuacion}★${comentario?.trim() ? `: "${comentario.trim()}"` : ''}`,
+    mensaje: `Pedido #${p.id}: ${quien} calificó a ${nombre} con ${puntuacion}★${comentario?.trim() ? `: "${comentario.trim()}"` : ''}`,
     pedidoId: p.id, datos: { repartidor: p.repartidorId },
   });
 }

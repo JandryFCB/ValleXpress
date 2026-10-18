@@ -24,7 +24,12 @@ class RegistroController extends ChangeNotifier {
   /// Qué perfiles tienen el registro abierto (lo decide el administrador). null = aún no se sabe: se muestran
   /// todos y el servidor vuelve a validar al registrar.
   Map<String, bool>? perfilesAbiertos;
-  bool registroAbierto(String valor) => perfilesAbiertos?[valor] ?? true;
+  bool registroAbierto(String valor) => (perfilesAbiertos?[valor] ?? true) && !sinCupos(valor);
+
+  /// El cupo de repartidores está lleno: se muestra a quién escribir para la lista de espera
+  bool sinCupos(String valor) => valor == 'repartidor' && (_servicio.cupos?.repartidorSinCupos ?? false);
+  String? get soporteWhatsapp => _servicio.cupos?.whatsapp;
+  String? get soporteCorreo => _servicio.cupos?.correo;
   Vehiculo? vehiculo; // bicicleta y a pie no llevan placa
   bool aceptaTerminos = false;
 
@@ -79,6 +84,7 @@ class RegistroController extends ChangeNotifier {
     switch (paso) {
       case 0:
         if (rol == null) return 'Elige cómo vas a usar la app';
+        if (sinCupos(rol!)) return 'Por ahora no hay cupos para nuevos repartidores';
         return registroAbierto(rol!) ? null : 'Por ahora no estamos recibiendo este tipo de cuenta';
       case 1:
         if (nombre.text.trim().length < 2) return 'Escribe tu nombre';

@@ -77,7 +77,7 @@ module.exports = function crearArnes({ puerto, bd, env = {} }) {
     }
     // Las pruebas usan coordenadas de Quito: la zona de servicio (Yantzaza) queda sin límite salvo en su propia prueba
     await db.query("UPDATE tconfiguraciones SET valor = '0' WHERE cconfiguracion = 'ZONARADIOKM' AND fhasta = '2999-12-31 00:00:00-05'");
-    srv = spawn(process.execPath, ['src/server.js'], { cwd: BACKEND, env: { ...process.env, NODE_ENV: 'development', PORT: String(puerto), DB_NAME: bd, LIMITES_DESACTIVADOS: 'true', UPLOADS_DIR: UPLOADS, BREVO_API_KEY: '', ...env } });
+    srv = spawn(process.execPath, ['src/server.js'], { cwd: BACKEND, env: { ...process.env, NODE_ENV: 'development', PORT: String(puerto), DB_NAME: bd, LIMITES_DESACTIVADOS: 'true', RECORDATORIOS: 'no', UPLOADS_DIR: UPLOADS, BREVO_API_KEY: '', ...env } });
     srv.stdout.on('data', (d) => { salida += d.toString(); }); srv.stderr.on('data', (d) => { salida += d.toString(); });
     for (let i = 0; i < 50; i++) { try { if ((await fetch(`${BASE}/api/health`)).ok) break; } catch { /* aún no */ } await dormir(200); }
     return { db, q: async (sql, p) => (await db.query(sql, p)).rows };

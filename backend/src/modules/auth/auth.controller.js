@@ -87,7 +87,11 @@ const checkEmail = asyncHandler(async (req, res) => {
 });
 
 // Perfiles con el registro abierto: { cliente: true, vendedor: true, repartidor: false }
-const perfilesRegistro = asyncHandler(async (req, res) => res.json({ perfiles: await authService.perfilesRegistro() }));
+// sinCupos: { repartidor: true } cuando el cupo de repartidores está lleno, con el contacto de soporte
+const perfilesRegistro = asyncHandler(async (req, res) => {
+  const { soporte, ...sinCupos } = await authService.cuposRegistro();
+  res.json({ perfiles: await authService.perfilesRegistro(), sinCupos, soporte });
+});
 
 const deleteAccount = asyncHandler(async (req, res) => res.json(await authService.eliminarCuenta(req.usuario.id, req.body, req)));
 

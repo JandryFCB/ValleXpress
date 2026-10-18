@@ -20,6 +20,17 @@ Future<void> escribirASoporte(BuildContext context, String correo, {String asunt
   }
 }
 
+/// Abre WhatsApp con el número (09XXXXXXXX de Ecuador) y un mensaje ya escrito; si no se puede, lo copia
+Future<void> abrirWhatsapp(BuildContext context, String numero, {String mensaje = ''}) async {
+  final digitos = numero.replaceAll(RegExp(r'\D'), '');
+  final internacional = digitos.startsWith('0') ? '593${digitos.substring(1)}' : digitos;
+  final uri = Uri.parse('https://wa.me/$internacional${mensaje.isEmpty ? '' : '?text=${Uri.encodeComponent(mensaje)}'}');
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) {
+    await Clipboard.setData(ClipboardData(text: numero));
+    if (context.mounted) mostrarMensaje(context, 'Copiamos el número de WhatsApp: $numero');
+  }
+}
+
 /// Abre la ruta hacia un punto en Google Maps (o en la app de mapas que haya)
 Future<void> abrirEnMapas(BuildContext context, Punto destino) async {
   final uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${destino.latitud},${destino.longitud}&travelmode=driving');

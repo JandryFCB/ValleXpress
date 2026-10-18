@@ -311,6 +311,55 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     error = null;
     try { await q('SELECT RENOMBRARUSUARIO($1, $2)', ['luisito', pedro.usuario.id]); } catch (e) { error = e.message; }
     check('no se puede usar el usuario de otra persona', !!error && error.includes('otra persona'), error);
+
+    seccion('15. Recordatorios de la suscripción');
+    process.env.DB_NAME = 'vallexpress_test_suscripciones';      // el servicio corre aquí mismo contra la BD de la prueba
+    const { recordar } = require('../src/modules/suscripciones/suscripcion.service');
+    const [{ sig }] = await q("SELECT to_char(date_trunc('month', now() AT TIME ZONE 'America/Guayaquil') + interval '1 month', 'YYYY-MM') AS sig");
+    const el = (dia, hora = 12) => new Date(`${sig}-${String(dia).padStart(2, '0')}T${String(hora + 5).padStart(2, '0')}:00:00Z`);   // hora de Ecuador
+    const avisos = async (u, etapa) => (await q("SELECT titulo FROM tnotificaciones WHERE cusuario=$1 AND tipo='suscripcion_recordatorio' AND datos->>'clave'=$2", [u, `${sig}-01:${etapa}`]));
+    check('de madrugada no se envía nada', (await recordar({ ahora: el(1, 3) })) === 0);
+    await recordar({ ahora: el(1) });
+    check('el día 1: "Tu cuota de ..." al repartidor y al vendedor', (await avisos(pedro.usuario.id, 'inicio'))[0]?.titulo.startsWith('Tu cuota de') && (await avisos('luisito', 'inicio')).length === 1);
+    await recordar({ ahora: el(2) });
+    check('no se repite', (await avisos(pedro.usuario.id, 'inicio')).length === 1);
+    await recordar({ ahora: el(4) });
+    check('el día antes del límite: "Mañana vence tu suscripción"', (await avisos(pedro.usuario.id, 'manana'))[0]?.titulo.startsWith('Mañana vence'));
+    await api('POST', '/api/admin/suscripciones/luisito/pagos', { mes: sig }, A);
+    await recordar({ ahora: el(6) });
+    check('vencido: "Tu suscripción venció" a quien no pagó', (await avisos(pedro.usuario.id, 'bloqueado')).length === 1);
+    check('a quien ya pagó ese mes no se le avisa', (await avisos('luisito', 'bloqueado')).length === 0);
+
+    seccion('16. Cupo de repartidores');
+    const ocupados = (await q("SELECT COUNT(*)::int AS n FROM trepartidores r JOIN tusuarios u ON u.cusuario=r.cusuario AND u.fhasta=r.fhasta AND u.cestatususuario='001' WHERE r.fhasta='2999-12-31 00:00:00-05' AND r.cestatusaprobacion='002'"))[0].n;
+    r = await api('PATCH', '/api/admin/perfiles/repartidor', { cupo: ocupados }, A);
+    check('el admin pone el cupo de repartidores', r.status === 200 && r.body.perfil.cupo?.limite === ocupados && r.body.perfil.cupo.lleno === true, JSON.stringify(r.body));
+    r = await api('PUT', '/api/admin/soporte', { whatsapp: '0991234567' }, A);
+    check('y el WhatsApp de soporte', r.status === 200 && r.body.soporte.whatsapp === '0991234567');
+    r = await api('PUT', '/api/admin/soporte', { whatsapp: '12345' }, A);
+    check('un WhatsApp inválido: 400', r.status === 400);
+    r = await api('GET', '/api/auth/registro/perfiles');
+    check('el registro sabe que no hay cupos de repartidor y a quién escribir', r.body.sinCupos?.repartidor === true && r.body.soporte?.whatsapp === '0991234567', JSON.stringify(r.body));
+    await verificar('nuevo.rep@test.com', 'repartidor');
+    r = await api('POST', '/api/auth/register', { nombre: 'Nuevo', apellido: 'Rep', email: 'nuevo.rep@test.com', telefono: '0996666666', cedula: t.cedula(17, 3950), password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'bicicleta', aceptaTerminos: true });
+    check('el onceavo no se registra: 403 SINCUPOS con el WhatsApp', r.status === 403 && r.body.code === 'SINCUPOS' && r.body.error.includes('0991234567'), JSON.stringify(r.body));
+    const pendiente = (await q("SELECT cusuario FROM trepartidores WHERE fhasta='2999-12-31 00:00:00-05' AND cestatusaprobacion='001' LIMIT 1"))[0]?.cusuario;
+    if (pendiente) {
+      r = await api('PATCH', `/api/admin/repartidores/${pendiente}/aprobacion`, { estado: 'aprobado' }, A);
+      check('con el cupo lleno el admin no aprueba a otro: 409 CUPOSLLENOS', r.status === 409 && r.body.code === 'CUPOSLLENOS', JSON.stringify(r.body));
+    }
+    r = await api('PATCH', '/api/admin/perfiles/repartidor', { cupo: 0 }, A);
+    check('cupo 0 = sin límite: ya se puede registrar', r.body.perfil.cupo.lleno === false);
+    r = await api('POST', '/api/auth/register', { nombre: 'Nuevo', apellido: 'Rep', email: 'nuevo.rep@test.com', telefono: '0996666666', cedula: t.cedula(17, 3950), password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'bicicleta', aceptaTerminos: true });
+    check('el repartidor nuevo se registra', r.status === 201, JSON.stringify(r.body).slice(0, 200));
+
+    seccion('17. Intentos fallidos con varias cuentas');
+    const dl2 = await datosDe('luis@test.com');
+    await q("UPDATE tusuariosacceso SET numerointentos = 0, fultimaconexion = now() WHERE cusuario = 'luisito'");
+    await q("UPDATE tusuariosacceso SET numerointentos = 0, fultimaconexion = now() - interval '1 day' WHERE cusuario <> 'luisito' AND cusuario IN (SELECT cusuario FROM vusuarios WHERE email = 'luis@test.com')");
+    await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'mala-clave-1' });
+    const intentos = await q("SELECT v.usuario, a.numerointentos FROM vusuarios v JOIN tusuariosacceso a ON a.cusuario = v.usuario WHERE v.email = 'luis@test.com'");
+    check('una clave mala con el correo cuenta solo en la cuenta que usó por última vez', intentos.length === 2 && intentos.find((x) => x.usuario === 'luisito')?.numerointentos === 1 && intentos.filter((x) => x.usuario !== 'luisito').every((x) => x.numerointentos === 0), JSON.stringify(intentos) + dl2.cedula);
   } catch (e) {
     return t.finalizar(e);
   }

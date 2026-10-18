@@ -197,9 +197,17 @@ class AdminService {
     return (_json(res, 'No se pudieron cargar los perfiles')['perfiles'] as List).map((p) => PerfilPermisos.desdeJson(Map<String, dynamic>.from(p))).toList();
   }
 
+  /// WhatsApp de soporte (se muestra a quien no encuentra cupo)
+  static Future<String?> whatsappSoporte() async => (_json(await http.get(_url('/soporte'), headers: await _cabeceras()), 'No se pudo cargar el soporte')['soporte']?['whatsapp'])?.toString();
+
+  static Future<String?> guardarWhatsappSoporte(String numero) async => (_json(
+        await http.put(_url('/soporte'), headers: await _cabeceras(), body: jsonEncode({'whatsapp': numero.trim()})),
+        'No se pudo guardar el WhatsApp',
+      )['soporte']?['whatsapp'])?.toString();
+
   /// Cambia los permisos de un perfil. Con [aprobarPendientes] también aprueba las solicitudes que esperaban
   /// (cada una recibe su aviso y su correo); devuelve cuántas aprobó.
-  static Future<({PerfilPermisos perfil, int aprobados})> cambiarPerfil(String rol, {bool? registroAbierto, bool? aprobacionAutomatica, bool aprobarPendientes = false}) async {
+  static Future<({PerfilPermisos perfil, int aprobados})> cambiarPerfil(String rol, {bool? registroAbierto, bool? aprobacionAutomatica, bool aprobarPendientes = false, int? cupo}) async {
     final res = await http.patch(
       _url('/perfiles/$rol'),
       headers: await _cabeceras(),
@@ -207,6 +215,7 @@ class AdminService {
         if (registroAbierto != null) 'registroAbierto': registroAbierto,
         if (aprobacionAutomatica != null) 'aprobacionAutomatica': aprobacionAutomatica,
         if (aprobarPendientes) 'aprobarPendientes': true,
+        if (cupo != null) 'cupo': cupo,
       }),
     );
     final datos = _json(res, 'No se pudo guardar el permiso');

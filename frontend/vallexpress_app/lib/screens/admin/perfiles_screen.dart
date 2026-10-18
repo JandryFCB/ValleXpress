@@ -92,6 +92,37 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
     await _guardar(p, aprobacionAutomatica: automatica, aprobarPendientes: aprobarPendientes);
   }
 
+  Future<void> _cambiarCupo(PerfilPermisos p) async {
+    final control = TextEditingController(text: '${p.cupo?.limite ?? 0}');
+    final valor = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cupo de repartidores'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Hoy hay ${p.cupo?.ocupados ?? 0} repartidores aprobados. Pon 0 para no tener límite.'),
+          const SizedBox(height: 12),
+          TextField(controller: control, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly], decoration: const InputDecoration(labelText: 'Máximo de repartidores')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(control.text.trim())), child: const Text('Guardar')),
+        ],
+      ),
+    );
+    if (valor == null) return;
+    setState(() => _guardando = p.rol);
+    try {
+      final r = await AdminService.cambiarPerfil(p.rol, cupo: valor);
+      if (!mounted) return;
+      setState(() => _perfiles = [for (final x in _perfiles!) x.rol == p.rol ? r.perfil : x]);
+      mostrarMensaje(context, 'Guardado');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _guardando = null);
+    }
+  }
+
   Future<bool?> _confirmar({required String titulo, required String mensaje, required String boton}) => showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -145,10 +176,12 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                         onRegistro: (v) => _cambiarRegistro(p, v),
                         onAprobacion: (v) => _cambiarAprobacion(p, v),
                         onVerPendientes: () => _verPendientes(p),
+                        onCupo: () => _cambiarCupo(p),
                       ),
                     ),
                     const SizedBox(height: 14),
                   ],
+                  _TarjetaSoporte(),
                 ],
               ),
             ),
@@ -178,13 +211,14 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
 };
 
 class _TarjetaPerfil extends StatelessWidget {
-  const _TarjetaPerfil({required this.perfil, required this.guardando, required this.onRegistro, required this.onAprobacion, required this.onVerPendientes});
+  const _TarjetaPerfil({required this.perfil, required this.guardando, required this.onRegistro, required this.onAprobacion, required this.onVerPendientes, this.onCupo});
 
   final PerfilPermisos perfil;
   final bool guardando;
   final ValueChanged<bool> onRegistro;
   final ValueChanged<bool> onAprobacion;
   final VoidCallback onVerPendientes;
+  final VoidCallback? onCupo;
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +318,19 @@ class _TarjetaPerfil extends StatelessWidget {
                 ),
               ),
             ],
-          ] else
+          ],
+          // Cupo de repartidores: cuántos aprobados puede haber a la vez
+          if (p.cupo != null) ...[
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(p.cupo!.lleno ? Icons.group_off_rounded : Icons.groups_rounded, color: p.cupo!.lleno ? AppTheme.errorColor : t.color),
+              title: Text(p.cupo!.limite == 0 ? 'Cupo: sin límite' : 'Cupo: ${p.cupo!.ocupados} de ${p.cupo!.limite} aprobados'),
+              subtitle: Text(p.cupo!.lleno ? 'Lleno: nadie más puede registrarse como repartidor' : 'Cuando se llene, los nuevos verán cómo escribirte para la lista de espera'),
+              trailing: TextButton(onPressed: guardando ? null : onCupo, child: const Text('Cambiar')),
+            ),
+          ],
+          if (!p.conAprobacion)
             const InsigniaValle('Sin aprobación: entran directo a pedir', color: AppTheme.successColor, icono: Icons.verified_user_rounded),
         ],
       ),
@@ -325,4 +371,56 @@ class _HojaPendientes extends StatelessWidget {
       ),
     );
   }
+}
+
+/// WhatsApp de soporte: se muestra a quien no encuentra cupo (junto al correo de soporte)
+class _TarjetaSoporte extends StatefulWidget {
+  @override
+  State<_TarjetaSoporte> createState() => _TarjetaSoporteState();
+}
+
+class _TarjetaSoporteState extends State<_TarjetaSoporte> {
+  final _numero = TextEditingController();
+  bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    AdminService.whatsappSoporte().then((n) {
+      if (mounted) _numero.text = n ?? '';
+    }).catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    _numero.dispose();
+    super.dispose();
+  }
+
+  Future<void> _guardar() async {
+    final n = _numero.text.trim();
+    if (n.isNotEmpty && !RegExp(r'^09\d{8}$').hasMatch(n)) return mostrarError(context, 'Escribe un celular de 10 dígitos que empiece con 09');
+    setState(() => _guardando = true);
+    try {
+      await AdminService.guardarWhatsappSoporte(n);
+      if (mounted) mostrarMensaje(context, 'Guardado');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => TarjetaValle(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('WhatsApp de soporte', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('Lo ven quienes no encuentran cupo, para escribirte.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colores.textoSuave)),
+          const SizedBox(height: 12),
+          CampoValle(controller: _numero, etiqueta: 'Celular (09XXXXXXXX)', icono: Icons.chat_rounded, tipoTeclado: TextInputType.phone, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 10),
+          const SizedBox(height: 12),
+          BotonValle(texto: 'Guardar', icono: Icons.check_rounded, tipo: TipoBoton.secundario, cargando: _guardando, onPressed: _guardar),
+        ]),
+      );
 }

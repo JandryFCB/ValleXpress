@@ -311,11 +311,21 @@ class AuthService {
 
   /// Perfiles con el registro abierto ({cliente: true, vendedor: true, repartidor: false}). El administrador puede
   /// cerrar uno desde "Perfiles y permisos". Sin conexión devuelve null (el servidor vuelve a validar al registrar).
+  /// Lo que dijo el servidor la última vez sobre los cupos (se lee después de [perfilesRegistro])
+  ({bool repartidorSinCupos, String? whatsapp, String? correo})? cupos;
+
   Future<Map<String, bool>?> perfilesRegistro() async {
     try {
       final res = await http.get(Uri.parse('${AppConstants.baseUrl}/auth/registro/perfiles'), headers: {'Content-Type': 'application/json'});
       if (res.statusCode != 200) return null;
-      final perfiles = Map<String, dynamic>.from(json.decode(res.body)['perfiles'] as Map);
+      final cuerpo = json.decode(res.body) as Map<String, dynamic>;
+      final soporte = Map<String, dynamic>.from(cuerpo['soporte'] as Map? ?? {});
+      cupos = (
+        repartidorSinCupos: (cuerpo['sinCupos'] as Map?)?['repartidor'] == true,
+        whatsapp: soporte['whatsapp']?.toString(),
+        correo: soporte['correo']?.toString(),
+      );
+      final perfiles = Map<String, dynamic>.from(cuerpo['perfiles'] as Map);
       return perfiles.map((rol, abierto) => MapEntry(rol, abierto == true));
     } catch (_) {
       return null;

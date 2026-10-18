@@ -402,7 +402,10 @@ async function repartidores(query) {
   if (query.q) where[Op.or] = [{ usuarioId: { [Op.iLike]: textoBusqueda(query.q) } }, { placa: { [Op.iLike]: textoBusqueda(query.q) } }];
   const { count, rows } = await Repartidor.findAndCountAll({ where, include: INCLUIRREPARTIDOR, order: [['aprobacion', 'ASC'], ['usuarioId', 'ASC']], limit: pag.limit, offset: pag.offset });
   const docs = await DocumentosService.resumenDe(rows);
-  return { repartidores: rows.map((r) => ({ ...repartidorApi(r), documentos: docs[r.usuarioId] })), pagination: paginacion(pag, count) };
+  const ids = rows.map((r) => r.usuarioId);
+  const adv = ids.length ? await consulta('SELECT cusuario, COUNT(*)::int AS n FROM trepartidoradvertencias WHERE cusuario IN (:ids) GROUP BY cusuario', { ids }) : [];
+  const advDe = Object.fromEntries(adv.map((a) => [a.cusuario, a.n]));
+  return { repartidores: rows.map((r) => ({ ...repartidorApi(r), documentos: docs[r.usuarioId], advertencias: advDe[r.usuarioId] || 0 })), pagination: paginacion(pag, count) };
 }
 
 async function cambiarAprobacionRepartidor(admin, usuarioId, { estado, motivo }, req) {
@@ -412,6 +415,10 @@ async function cambiarAprobacionRepartidor(admin, usuarioId, { estado, motivo },
     const r = await Repartidor.findOne({ where: { usuarioId }, transaction: t, lock: t.LOCK.UPDATE });
     if (!r) throw AppError.notFound('Repartidor no encontrado', 'REPARTIDORNOENCONTRADO');
     if (r.aprobacion === codigo) throw AppError.conflict(`El repartidor ya está ${estado}`, 'SINCAMBIOS');
+    if (codigo === APROBACION.APROBADO) {
+      const cupo = await PerfilesService.cupoRepartidores();
+      if (cupo.lleno) throw AppError.conflict(`El cupo está lleno (${cupo.ocupados} de ${cupo.limite} repartidores aprobados). Súbelo en Perfiles y permisos para aprobar a más`, 'CUPOSLLENOS');
+    }
     await r.update({
       aprobacion: codigo,
       aprobadoEn: codigo === APROBACION.APROBADO ? new Date() : r.aprobadoEn,
@@ -647,22 +654,40 @@ async function perfiles() {
     vendedor: await Negocio.count({ where: { aprobacion: APROBACION.PENDIENTE } }),
     repartidor: await Repartidor.count({ where: { aprobacion: APROBACION.PENDIENTE } }),
   };
+  const cupo = await PerfilesService.cupoRepartidores();
   return (await PerfilesService.permisos()).map((p) => ({
     ...p,
     cuentas: cuentas[p.rol] || { total: 0, activos: 0 },
     ...(PerfilesService.conAprobacion(p.rol) && { pendientes: pendientes[p.rol] }),
+    ...(p.rol === 'repartidor' && { cupo }),
   }));
+}
+
+// WhatsApp de soporte (se muestra a quien no encuentra cupo)
+async function cambiarSoporte(admin, { whatsapp }, req) {
+  await withTransaction((t) => ConfiguracionService.fijar('SOPORTEWHATSAPP', String(whatsapp || '').trim(), { transaction: t }), { usuarioId: admin.id });
+  ConfiguracionService.limpiarCache();
+  auditar({ usuarioId: admin.id, accion: 'SOPORTECAMBIADO', entidad: 'CONFIGURACIONES', entidadId: 'SOPORTEWHATSAPP', detalle: { whatsapp }, req });
+  return PerfilesService.soporte();
 }
 
 const perfil = async (rol) => (await perfiles()).find((p) => p.rol === rol);
 
 // Cambia los permisos de un perfil. Con aprobarPendientes, además aprueba las solicitudes que estaban esperando
 // (cada una recibe su aviso y su correo, igual que si se aprobara a mano).
-async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica, aprobarPendientes }, req) {
+async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica, aprobarPendientes, cupo }, req) {
   if (aprobacionAutomatica !== undefined && !PerfilesService.conAprobacion(rol)) {
     throw AppError.badRequest('Este perfil no pasa por aprobación', 'SINAPROBACION');
   }
-  const cambios = await withTransaction((t) => PerfilesService.fijar(rol, { registroAbierto, aprobacionAutomatica }, { transaction: t }), { usuarioId: admin.id });
+  if (cupo !== undefined && rol !== 'repartidor') throw AppError.badRequest('Solo los repartidores tienen cupo', 'SINCUPO');
+  const cambios = await withTransaction(async (t) => {
+    const hechos = await PerfilesService.fijar(rol, { registroAbierto, aprobacionAutomatica }, { transaction: t });
+    if (cupo !== undefined && Number(cupo) !== (await PerfilesService.cupoRepartidores()).limite) {
+      await ConfiguracionService.fijar('CUPOREPARTIDORES', Number(cupo), { transaction: t });
+      hechos.cupo = Number(cupo);
+    }
+    return hechos;
+  }, { usuarioId: admin.id });
   ConfiguracionService.limpiarCache();
   if (Object.keys(cambios).length) {
     auditar({ usuarioId: admin.id, accion: 'PERFILCAMBIADO', entidad: 'CONFIGURACIONES', entidadId: rol, detalle: cambios, req });
@@ -679,6 +704,7 @@ async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica
     } else {
       const lista = await Repartidor.findAll({ where: { aprobacion: APROBACION.PENDIENTE }, attributes: ['usuarioId'], order: [['usuarioId', 'ASC']] });
       for (const r of lista) {
+        if ((await PerfilesService.cupoRepartidores()).lleno) break;    // los demás siguen esperando cupo
         await cambiarAprobacionRepartidor(admin, r.usuarioId, { estado: 'aprobado' }, req);
         aprobados += 1;
       }
@@ -693,5 +719,5 @@ module.exports = {
   usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
   resolverDueno, editarRepartidor, perfiles, cambiarPerfil, cambiarTarifas,
   tarifas: () => TarifasService.tarifas(),
-  zona: () => ZonaService.zona(), cambiarZona, cambiarConfigSuscripciones,
+  zona: () => ZonaService.zona(), cambiarZona, cambiarConfigSuscripciones, cambiarSoporte,
 };

@@ -183,13 +183,15 @@ async function exigirRegistroAbierto(tipo) {
   }
 }
 
-// Qué perfiles puede elegir la pantalla de registro
+// Qué perfiles puede elegir la pantalla de registro (y si el de repartidor ya no tiene cupos, con a quién escribir)
 const perfilesRegistro = async () => Object.fromEntries((await PerfilesService.permisos()).map((p) => [p.rol, p.registroAbierto]));
+const cuposRegistro = async () => ({ repartidor: (await PerfilesService.cupoRepartidores()).lleno, soporte: await PerfilesService.soporte() });
 
 async function registrar(datos, req) {
   const tipo = datos.tipoUsuario || 'cliente';
   if (!ROLESREGISTRABLES.includes(tipo)) throw AppError.badRequest('Tipo de usuario inválido', 'TIPOUSUARIOINVALIDO');
   await exigirRegistroAbierto(tipo);
+  if (tipo === 'repartidor') await PerfilesService.exigirCupoRegistro();
   const email = normalizarEmail(datos.email);
 
   const cuenta = await withTransaction(async (t) => {
@@ -237,13 +239,14 @@ async function login({ email: identificador, password, tipoUsuario }, req) {
       });
     }
     if (coinciden.length === 1) return entrar(coinciden[0], req);
-    // Ninguna coincide: si todas están inactivas o bloqueadas se dice eso; si no, cuenta como intento fallido
+    // Ninguna coincide: si todas están inactivas o bloqueadas se dice eso. Si no, el intento fallido cuenta SOLO en
+    // la cuenta a la que intentaba entrar: la que eligió o, si entró con el correo, la que usó por última vez.
     if (!habilitadas.length) {
       if (!usuario.activo) throw cuentaInactiva(usuario);
       throw bloqueoTemporal(usuario.bloqueadoHasta);
     }
-    for (const otra of habilitadas.slice(1)) await registrarFallo(otra, req);
-    return registrarFallo(habilitadas[0], req, { lanzar: true });
+    const ultima = [...habilitadas].sort((a, b) => new Date(b.ultimaConexion || 0) - new Date(a.ultimaConexion || 0))[0];
+    return registrarFallo(ultima, req, { lanzar: true });
   }
 
   // Cuenta bloqueada o dada de baja por el administrador: se dice claramente y a quién escribir
@@ -256,7 +259,7 @@ async function login({ email: identificador, password, tipoUsuario }, req) {
 }
 
 // Clave incorrecta: suma el intento y, al llegar al máximo, bloquea la cuenta unos minutos
-async function registrarFallo(usuario, req, { lanzar = false } = {}) {
+async function registrarFallo(usuario, req, { lanzar = true } = {}) {
   const intentos = usuario.intentosFallidos + 1;
   const bloquear = intentos >= MAXINTENTOSFALLIDOS;
   const hasta = new Date(Date.now() + MINUTOSBLOQUEO * 60 * 1000);
@@ -601,7 +604,7 @@ async function existeEmail(email, tipo, cedula) {
 
 module.exports = {
   ROLES,
-  registrar, perfilesRegistro, crearCuenta, usuarioPerfil, login, misCuentas, refrescar, cerrarSesion, cerrarTodasLasSesiones,
+  registrar, perfilesRegistro, cuposRegistro, crearCuenta, usuarioPerfil, login, misCuentas, refrescar, cerrarSesion, cerrarTodasLasSesiones,
   obtenerPerfil, actualizarPerfil, subirFoto, eliminarFoto, cambiarClave, eliminarCuenta,
   solicitarCodigoReset, verificarCodigoReset, restablecerClave,
   enviarCodigoEmail, verificarCodigoEmail,

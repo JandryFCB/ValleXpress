@@ -109,7 +109,7 @@ class ResumenAdmin {
 /// Permisos de un perfil (cliente, vendedor, repartidor): si puede registrarse desde la app y, para vendedor y
 /// repartidor, si nace aprobado o espera la revisión. Con sus cuentas y las solicitudes que esperan.
 class PerfilPermisos {
-  const PerfilPermisos({required this.rol, required this.registroAbierto, this.aprobacionAutomatica, this.cuentas = 0, this.activas = 0, this.pendientes = 0});
+  const PerfilPermisos({required this.rol, required this.registroAbierto, this.aprobacionAutomatica, this.cuentas = 0, this.activas = 0, this.pendientes = 0, this.cupo});
 
   final String rol;
   final bool registroAbierto;
@@ -117,6 +117,7 @@ class PerfilPermisos {
   final int cuentas;
   final int activas;
   final int pendientes;
+  final ({int limite, int ocupados, bool lleno})? cupo; // solo repartidores; limite 0 = sin límite
 
   bool get conAprobacion => aprobacionAutomatica != null;
 
@@ -129,6 +130,9 @@ class PerfilPermisos {
       cuentas: (cuentas['total'] as num?)?.toInt() ?? 0,
       activas: (cuentas['activos'] as num?)?.toInt() ?? 0,
       pendientes: (j['pendientes'] as num?)?.toInt() ?? 0,
+      cupo: j['cupo'] is Map
+          ? (limite: (j['cupo']['limite'] as num?)?.toInt() ?? 0, ocupados: (j['cupo']['ocupados'] as num?)?.toInt() ?? 0, lleno: j['cupo']['lleno'] == true)
+          : null,
     );
   }
 }
@@ -178,10 +182,11 @@ class NegocioAdmin {
 
 /// Un repartidor visto por el administrador: su perfil (vehículo, placa, entregas) y su contacto
 class RepartidorAdmin {
-  const RepartidorAdmin({required this.perfil, required this.aprobacion, this.aprobadoEn, this.contacto, this.documentosSubidos = 0, this.documentosRequeridos = 0});
+  const RepartidorAdmin({required this.perfil, required this.aprobacion, this.aprobadoEn, this.contacto, this.documentosSubidos = 0, this.documentosRequeridos = 0, this.advertencias = 0});
 
   final int documentosSubidos; // fotos de documentos que ya subió
   final int documentosRequeridos;
+  final int advertencias;
 
   final PerfilRepartidor perfil;
   final Aprobacion aprobacion;
@@ -197,6 +202,7 @@ class RepartidorAdmin {
         contacto: CuentaContacto.desdeJson(j['contacto']),
         documentosSubidos: ((j['documentos'] as Map?)?['subidos'] as num?)?.toInt() ?? 0,
         documentosRequeridos: ((j['documentos'] as Map?)?['requeridos'] as num?)?.toInt() ?? 0,
+        advertencias: (j['advertencias'] as num?)?.toInt() ?? 0,
       );
 }
 
