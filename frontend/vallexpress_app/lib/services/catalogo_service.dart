@@ -1,6 +1,5 @@
 import 'dart:convert';
 import '../config/constants.dart';
-import '../models/liquidacion.dart';
 import '../models/negocio.dart';
 import '../models/producto.dart';
 import 'api_error.dart';
@@ -97,20 +96,6 @@ class CatalogoService {
         await http.post(_url(_base), headers: await _cabeceras(), body: jsonEncode({'nombre': nombre, 'categoria': categoria, 'descripcion': descripcion})),
         201,
       );
-
-  /// Mi estado de cuenta con ValleXpress: semanas, comisión por pagar y a dónde transferir (solo el dueño)
-  static Future<EstadoDeCuenta> misLiquidaciones() async =>
-      EstadoDeCuenta.desdeJson(_json(await http.get(_url('/mi-negocio/liquidaciones'), headers: await _cabeceras()), 200, 'No se pudo cargar tu estado de cuenta'));
-
-  /// Sube la foto del comprobante de transferencia de una semana (el administrador lo revisa)
-  static Future<EstadoDeCuenta> subirComprobante({required String semana, required String imagen, String? referencia}) async {
-    final res = await http.post(
-      _url('/mi-negocio/liquidaciones/comprobante'),
-      headers: await _cabeceras(),
-      body: jsonEncode({'semana': semana, 'imagen': imagen, if (referencia != null && referencia.trim().isNotEmpty) 'referencia': referencia.trim()}),
-    );
-    return EstadoDeCuenta.desdeJson(_json(res, 201, 'No se pudo enviar el comprobante'));
-  }
 
   /// Rechazado → vuelve a revisión (después de corregir los datos). Solo el dueño, no el administrador.
   static Future<Negocio> pedirRevisionNegocio() async => _negocio(await http.post(_url('/mi-negocio/revision'), headers: await _cabeceras()));

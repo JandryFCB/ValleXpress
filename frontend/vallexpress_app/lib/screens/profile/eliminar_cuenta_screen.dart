@@ -9,7 +9,7 @@ import '../legal/documento_legal_screen.dart';
 
 /// Eliminar la cuenta (derecho de eliminación; Google Play lo exige dentro de la app). Explica qué se borra y qué se
 /// conserva, pide la contraseña y una confirmación. El servidor no la deja eliminar con un pedido en curso ni, a un
-/// negocio, con comisiones por pagar: ese motivo se muestra tal cual.
+/// negocio o repartidor, con meses de suscripción vencidos: ese motivo se muestra tal cual.
 class EliminarCuentaScreen extends StatefulWidget {
   const EliminarCuentaScreen({super.key});
 
@@ -99,10 +99,11 @@ class _EliminarCuentaScreenState extends State<EliminarCuentaScreen> {
               children: [
                 Text('Qué conservamos', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 10),
-                fila(Icons.receipt_long_rounded, 'Los pedidos${rol == 'vendedor' ? ', ventas y comisiones' : ''}, sin tus datos de contacto, porque son registros contables que exige la ley.'),
-                fila(Icons.block_rounded, rol == 'vendedor'
-                    ? 'No puedes eliminarla con un pedido en curso o con comisiones por pagar.'
+                fila(Icons.receipt_long_rounded, 'Los pedidos${rol == 'vendedor' || rol == 'repartidor' ? ' y los pagos de tu suscripción' : ''}, sin tus datos de contacto, porque son registros contables que exige la ley.'),
+                fila(Icons.block_rounded, rol == 'vendedor' || rol == 'repartidor'
+                    ? 'No puedes eliminarla con un pedido en curso o con meses de suscripción vencidos.'
                     : 'No puedes eliminarla mientras tengas un pedido en curso.'),
+                fila(Icons.people_alt_rounded, 'Si tienes otras cuentas con tu misma cédula (cliente, negocio o repartidor), siguen funcionando.'),
                 GestureDetector(
                   onTap: () => abrirDocumentoLegal(context, 'privacidad'),
                   child: Text('Más detalles en la Política de privacidad', style: tema.bodySmall?.copyWith(color: c.primario, fontWeight: FontWeight.w700, decoration: TextDecoration.underline)),

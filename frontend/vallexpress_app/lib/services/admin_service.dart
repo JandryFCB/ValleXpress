@@ -3,7 +3,8 @@ import '../config/constants.dart';
 import '../models/admin.dart';
 import '../models/documento_repartidor.dart';
 import '../models/legal.dart';
-import '../models/liquidacion.dart';
+import '../models/reputacion.dart';
+import '../models/suscripcion.dart';
 import '../models/pedido.dart';
 import 'api_error.dart';
 import 'api_http.dart' as http;
@@ -123,7 +124,6 @@ class AdminService {
     return RepartidorAdmin.desdeJson(Map<String, dynamic>.from(_json(res, 'No se pudo guardar el vehículo')['repartidor']));
   }
 
-  // --- Cobro de comisiones a los negocios ---
   /// Documentos legales vigentes y cuántas cuentas activas ya aceptaron esa versión
   static Future<List<({DocumentoLegal documento, int cuentas, int aceptaron})>> legal() async {
     final j = _json(await http.get(_url('/legal'), headers: await _cabeceras()), 'No se pudieron cargar los documentos');
@@ -133,35 +133,44 @@ class AdminService {
     ];
   }
 
-  static Future<({List<DeudaNegocio> pendientes, int diasGracia, CuentaCobro cuenta})> liquidaciones() async {
-    final j = _json(await http.get(_url('/liquidaciones'), headers: await _cabeceras()), 'No se pudieron cargar los cobros');
-    final config = Map<String, dynamic>.from(j['config'] ?? {});
+  // --- Suscripción mensual de vendedores y repartidores ---
+  static Future<({ConfigSuscripcion config, List<ComprobantePorRevisar> comprobantes, List<Suscriptor> suscriptores})> suscripciones() async {
+    final j = _json(await http.get(_url('/suscripciones'), headers: await _cabeceras()), 'No se pudieron cargar las suscripciones');
     return (
-      pendientes: (j['pendientes'] as List).map((p) => DeudaNegocio.desdeJson(Map<String, dynamic>.from(p))).toList(),
-      diasGracia: (config['diasGracia'] as num?)?.toInt() ?? 7,
-      cuenta: CuentaCobro.desdeJson(config['cuenta']),
+      config: ConfigSuscripcion.desdeJson(Map<String, dynamic>.from(j['config'] ?? {})),
+      comprobantes: (j['comprobantes'] as List? ?? []).map((c) => ComprobantePorRevisar.desdeJson(Map<String, dynamic>.from(c))).toList(),
+      suscriptores: (j['suscriptores'] as List? ?? []).map((c) => Suscriptor.desdeJson(Map<String, dynamic>.from(c))).toList(),
     );
   }
 
-  static Future<EstadoDeCuenta> liquidacionesDe(int negocioId) async =>
-      EstadoDeCuenta.desdeJson(_json(await http.get(_url('/negocios/$negocioId/liquidaciones'), headers: await _cabeceras()), 'No se pudo cargar el estado de cuenta'));
+  static Future<EstadoSuscripcion> suscripcionDe(String usuario) async =>
+      EstadoSuscripcion.desdeJson(_json(await http.get(_url('/suscripciones/$usuario'), headers: await _cabeceras()), 'No se pudo cargar la suscripción'));
 
-  static Future<EstadoDeCuenta> registrarPago(int negocioId, String semana, {String? referencia}) async {
-    final res = await http.post(_url('/negocios/$negocioId/liquidaciones'), headers: await _cabeceras(), body: jsonEncode({'semana': semana, if (referencia != null && referencia.trim().isNotEmpty) 'referencia': referencia.trim()}));
+  /// Pago en efectivo o transferencia sin comprobante. mes = AAAA-MM-01
+  static Future<EstadoSuscripcion> registrarPagoSuscripcion(String usuario, String mes, {String? referencia}) async {
+    final res = await http.post(_url('/suscripciones/$usuario/pagos'), headers: await _cabeceras(), body: jsonEncode({'mes': mes, if (referencia != null && referencia.trim().isNotEmpty) 'referencia': referencia.trim()}));
     if (res.statusCode != 201) throw Exception(mensajeDeError(res, 'No se pudo registrar el pago'));
-    return EstadoDeCuenta.desdeJson(Map<String, dynamic>.from(jsonDecode(res.body) as Map));
+    return EstadoSuscripcion.desdeJson(Map<String, dynamic>.from(jsonDecode(res.body) as Map));
   }
 
-  static Future<void> guardarConfigCobro({int? diasGracia, Map<String, String>? cuenta}) async {
-    final res = await http.put(_url('/liquidaciones/config'), headers: await _cabeceras(), body: jsonEncode({if (diasGracia != null) 'diasGracia': diasGracia, if (cuenta != null) 'cuenta': cuenta}));
-    _json(res, 'No se pudo guardar la configuración del cobro');
-  }
+  static Future<ConfigSuscripcion> guardarConfigSuscripcion(Map<String, Object> cambios) async => ConfigSuscripcion.desdeJson(Map<String, dynamic>.from(
+      _json(await http.put(_url('/suscripciones/config'), headers: await _cabeceras(), body: jsonEncode(cambios)), 'No se pudo guardar la configuración del cobro')['config']));
 
-  static Future<EstadoDeCuenta> aprobarComprobante(int id) async =>
-      EstadoDeCuenta.desdeJson(_json(await http.post(_url('/comprobantes/$id/aprobar'), headers: await _cabeceras()), 'No se pudo aprobar el comprobante'));
+  static Future<EstadoSuscripcion> aprobarComprobante(int id) async =>
+      EstadoSuscripcion.desdeJson(_json(await http.post(_url('/comprobantes/$id/aprobar'), headers: await _cabeceras()), 'No se pudo aprobar el comprobante'));
 
-  static Future<EstadoDeCuenta> rechazarComprobante(int id, String motivo) async => EstadoDeCuenta.desdeJson(
+  static Future<EstadoSuscripcion> rechazarComprobante(int id, String motivo) async => EstadoSuscripcion.desdeJson(
       _json(await http.post(_url('/comprobantes/$id/rechazar'), headers: await _cabeceras(), body: jsonEncode({'motivo': motivo})), 'No se pudo rechazar el comprobante'));
+
+  // --- Reputación y advertencias del repartidor ---
+  static Future<Reputacion> reputacionRepartidor(String usuario) async =>
+      Reputacion.desdeJson(_json(await http.get(_url('/repartidores/$usuario/reputacion'), headers: await _cabeceras()), 'No se pudo cargar la reputación'));
+
+  static Future<Reputacion> advertirRepartidor(String usuario, String motivo) async {
+    final res = await http.post(_url('/repartidores/$usuario/advertencias'), headers: await _cabeceras(), body: jsonEncode({'motivo': motivo}));
+    if (res.statusCode != 201) throw Exception(mensajeDeError(res, 'No se pudo enviar la advertencia'));
+    return Reputacion.desdeJson(Map<String, dynamic>.from(jsonDecode(res.body) as Map));
+  }
 
   // --- Zona de servicio ---
   static Future<Map<String, dynamic>> zona() async => Map<String, dynamic>.from(_json(await http.get(_url('/zona'), headers: await _cabeceras()), 'No se pudo cargar la zona')['zona']);
@@ -169,7 +178,7 @@ class AdminService {
   static Future<Map<String, dynamic>> guardarZona(Map<String, Object> cambios) async =>
       Map<String, dynamic>.from(_json(await http.put(_url('/zona'), headers: await _cabeceras(), body: jsonEncode(cambios)), 'No se pudo guardar la zona')['zona']);
 
-  // --- Tarifas: envío por distancia y comisión ---
+  // --- Tarifas: envío por distancia ---
   static Future<Map<String, double>> tarifas() async {
     final res = await http.get(_url('/tarifas'), headers: await _cabeceras());
     return _aTarifas(_json(res, 'No se pudieron cargar las tarifas')['tarifas']);

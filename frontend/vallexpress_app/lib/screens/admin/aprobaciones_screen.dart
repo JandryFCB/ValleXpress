@@ -13,6 +13,7 @@ import '../../models/documento_repartidor.dart';
 import '../../widgets/documentos_repartidor.dart';
 import '../vendedor/mi_negocio_screen.dart';
 import 'pedir_motivo.dart';
+import 'reputacion_admin_screen.dart';
 import 'usuarios_admin_screen.dart';
 
 /// Gestión de negocios y repartidores: revisar los nuevos (aprobar o rechazar), suspender o reactivar, editar un
@@ -215,6 +216,11 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
                 if (!esNegocio)
                   opcion('documentos', Icons.verified_user_rounded, 'Ver documentos',
                       detalle: '${(item as RepartidorAdmin).documentosSubidos} de ${item.documentosRequeridos} subidos'),
+                if (!esNegocio)
+                  opcion('reputacion', Icons.star_rounded, 'Reputación y advertencias',
+                      detalle: (item as RepartidorAdmin).perfil.numeroCalificaciones == 0
+                          ? 'Sin calificaciones todavía'
+                          : '${item.perfil.calificacion.toStringAsFixed(1)} ★ de ${item.perfil.numeroCalificaciones} calificaciones · advertirle'),
                 if (!esNegocio) opcion('vehiculo', Icons.two_wheeler_rounded, 'Editar vehículo', detalle: 'Tipo, placa y color'),
                 if (contacto != null) opcion('cuenta', Icons.manage_accounts_rounded, esNegocio ? 'Cuenta del dueño' : 'Cuenta del repartidor', detalle: 'Datos, contraseña, foto, bloquear o dar de baja'),
                 if (contacto?.telefono != null) opcion('llamar', Icons.call_rounded, 'Llamar', detalle: Formato.telefono(contacto!.telefono!)),
@@ -238,6 +244,8 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
         await _verDocumentos(item as RepartidorAdmin);
       case 'vehiculo':
         await _editarVehiculo(item as RepartidorAdmin);
+      case 'reputacion':
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => ReputacionAdminScreen(usuario: (item as RepartidorAdmin).perfil.usuario, nombre: item.nombre)));
       case 'cuenta':
         await _verCuenta(contacto!.usuario);
       case 'llamar':

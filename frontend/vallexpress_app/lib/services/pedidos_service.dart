@@ -2,6 +2,7 @@ import 'dart:convert';
 import '../config/constants.dart';
 import '../models/documento_repartidor.dart';
 import '../models/pedido.dart';
+import '../models/reputacion.dart';
 import '../models/repartidor.dart';
 import 'api_error.dart';
 import 'api_http.dart' as http;
@@ -112,6 +113,16 @@ class PedidosService {
   // -------------------------------------------------------------------------------------------
   // Pedidos de mi negocio (vendedor)
   // -------------------------------------------------------------------------------------------
+  /// El negocio califica al repartidor que se llevó el pedido (desde que lo recoge)
+  static Future<Pedido> calificarRepartidorComoNegocio(int id, {required int puntuacion, String? comentario}) async => _pedido(
+        await http.post(
+          _url('/mi-negocio/pedidos/$id/calificar-repartidor'),
+          headers: await _cabeceras(),
+          body: jsonEncode({'puntuacion': puntuacion, if (comentario != null && comentario.trim().isNotEmpty) 'comentario': comentario.trim()}),
+        ),
+        'No se pudo guardar tu calificación',
+      );
+
   static Future<({List<Pedido> pedidos, bool hayMas})> pedidosDelNegocio({String? estado, int pagina = 1}) async {
     final res = await http.get(_url('/mi-negocio/pedidos', {if (estado != null) 'estado': estado, 'page': '$pagina'}), headers: await _cabeceras());
     final datos = _json(res, 200, 'No se pudieron cargar los pedidos');
@@ -152,6 +163,9 @@ class PedidosService {
 
   /// Rechazado → vuelve a revisión (después de corregir el vehículo o la placa)
   /// Documentos que pide la verificación (cédula, selfie y, si el vehículo lleva placa, licencia y matrícula)
+  /// Lo que opinan de mí clientes y negocios, y las advertencias del administrador
+  static Future<Reputacion> miReputacion() async => Reputacion.desdeJson(_json(await http.get(_url('/repartidor/reputacion'), headers: await _cabeceras()), 200, 'No se pudo cargar tu reputación'));
+
   static Future<DocumentosRepartidor> misDocumentos() async =>
       DocumentosRepartidor.desdeJson(_json(await http.get(_url('/repartidor/documentos'), headers: await _cabeceras()), 200, 'No se pudieron cargar tus documentos'));
 

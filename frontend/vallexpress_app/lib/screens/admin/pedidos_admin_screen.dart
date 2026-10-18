@@ -299,7 +299,7 @@ class _PedidoAdminScreenState extends State<PedidoAdminScreen> {
               _Monto('Productos', p.subtotal),
               _Monto(p.distanciaKm != null ? 'Envío (${p.distanciaKm!.toStringAsFixed(1)} km)' : 'Envío', p.costoEnvio),
               _Monto('Total', p.total, fuerte: true),
-              if (p.comision != null) ...[
+              if ((p.comision ?? 0) > 0) ...[
                 Divider(color: c.borde),
                 _Monto('Comisión ValleXpress (${(p.comisionPorcentaje ?? 0).toStringAsFixed(0)} %)', p.comision!),
                 _Monto('Recibe el negocio', p.recibeNegocio ?? 0),

@@ -123,7 +123,7 @@ class Negocio {
   final String? aprobacion; // 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' (solo para el dueño)
   final String? motivoAprobacion; // por qué lo rechazaron o suspendieron
   final String? soporte; // correo de soporte (solo mientras no esté aprobado)
-  final bool bloqueadoPorDeuda; // comisión vencida sin pagar: no recibe pedidos (solo el dueño)
+  final bool bloqueadoPorDeuda; // suscripción vencida sin pagar: no recibe pedidos (solo el dueño)
 
   /// Horario de hoy (según el día del teléfono), o null si no hay horarios cargados
   HorarioDia? get horarioHoy {

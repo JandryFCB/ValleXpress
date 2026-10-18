@@ -6,7 +6,7 @@ import '../../services/api_error.dart';
 import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 
-/// Tarifas de ValleXpress: el envío por distancia (base + valor por km de ruta) y la comisión que se cobra a los
+/// Tarifas de ValleXpress: el envío por distancia (base + valor por km de ruta). Antes también la comisión a los
 /// negocios. Un simulador muestra en vivo cuánto costaría un envío y cuánto recibe cada uno. Los pedidos ya hechos
 /// no cambian: cada uno guardó las tarifas de su momento.
 class TarifasScreen extends StatefulWidget {
@@ -20,7 +20,6 @@ class _TarifasScreenState extends State<TarifasScreen> {
   final _base = TextEditingController();
   final _porKm = TextEditingController();
   final _factor = TextEditingController();
-  final _comision = TextEditingController();
   // Zona de servicio
   final _zNombre = TextEditingController();
   final _zRadio = TextEditingController();
@@ -35,7 +34,7 @@ class _TarifasScreenState extends State<TarifasScreen> {
   @override
   void initState() {
     super.initState();
-    for (final c in [_base, _porKm, _factor, _comision]) {
+    for (final c in [_base, _porKm, _factor]) {
       c.addListener(() => setState(() {}));
     }
     _cargar();
@@ -43,7 +42,7 @@ class _TarifasScreenState extends State<TarifasScreen> {
 
   @override
   void dispose() {
-    for (final c in [_base, _porKm, _factor, _comision, _zNombre, _zRadio, _zLat, _zLng]) {
+    for (final c in [_base, _porKm, _factor, _zNombre, _zRadio, _zLat, _zLng]) {
       c.dispose();
     }
     super.dispose();
@@ -65,7 +64,6 @@ class _TarifasScreenState extends State<TarifasScreen> {
     _base.text = t['envioBase']!.toStringAsFixed(2);
     _porKm.text = t['envioPorKm']!.toStringAsFixed(2);
     _factor.text = t['factorRuta']!.toString();
-    _comision.text = t['comisionPorcentaje']!.toStringAsFixed(t['comisionPorcentaje']! % 1 == 0 ? 0 : 1);
   }
 
   void _rellenarZona(Map<String, dynamic> z) {
@@ -97,7 +95,6 @@ class _TarifasScreenState extends State<TarifasScreen> {
         if (_num(_base) != null) 'envioBase': _num(_base)!,
         if (_num(_porKm) != null) 'envioPorKm': _num(_porKm)!,
         if (_num(_factor) != null) 'factorRuta': _num(_factor)!,
-        if (_num(_comision) != null) 'comisionPorcentaje': _num(_comision)!,
       };
 
   bool get _hayCambios => _actuales != null && _valores.entries.any((e) => _actuales![e.key] != e.value);
@@ -134,7 +131,7 @@ class _TarifasScreenState extends State<TarifasScreen> {
     final teclado = const TextInputType.numberWithOptions(decimal: true);
 
     return FondoValle(
-      appBar: AppBar(title: const Text('Tarifas, comisión y zona')),
+      appBar: AppBar(title: const Text('Tarifas y zona')),
       child: _actuales == null
           ? (_error != null
               ? EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar las tarifas', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar)
@@ -161,10 +158,8 @@ class _TarifasScreenState extends State<TarifasScreen> {
                     ],
                   ),
                 ),
-                const EncabezadoSeccion('Comisión de ValleXpress', subtitulo: 'Se descuenta al negocio de lo vendido en productos'),
-                TarjetaValle(
-                  child: CampoValle(controller: _comision, etiqueta: 'Comisión % (0 a 50)', icono: Icons.percent_rounded, tipoTeclado: teclado, formateadores: decimal),
-                ),
+                const SizedBox(height: 12),
+                const InsigniaValle('ValleXpress ya no cobra comisión por pedido: cobra una suscripción mensual (Inicio → Suscripciones)', color: AppTheme.infoColor, icono: Icons.info_outline),
 
                 // Simulador
                 const EncabezadoSeccion('Así quedaría', subtitulo: 'Mueve la distancia para ver el envío'),
@@ -182,9 +177,8 @@ class _TarifasScreenState extends State<TarifasScreen> {
                       Text('Pedido de \$20.00 en productos:', style: tema.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 6),
                       _Linea('El cliente paga', 20 + _envio(_kmSimulados)),
-                      _Linea('El negocio recibe', 20 - 20 * (_valores['comisionPorcentaje'] ?? 0) / 100),
-                      _Linea('El repartidor gana', _envio(_kmSimulados)),
-                      _Linea('ValleXpress gana', 20 * (_valores['comisionPorcentaje'] ?? 0) / 100, destacado: true),
+                      _Linea('El negocio recibe', 20),
+                      _Linea('El repartidor gana', _envio(_kmSimulados), destacado: true),
                     ],
                   ),
                 ),

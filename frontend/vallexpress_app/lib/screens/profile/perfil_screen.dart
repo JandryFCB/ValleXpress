@@ -18,7 +18,9 @@ import 'permisos_screen.dart';
 import 'settings_screen.dart';
 import 'telefonos_screen.dart';
 import '../../services/pedidos_service.dart';
+import '../repartidor/reputacion_screen.dart';
 import '../repartidor/vehiculo_screen.dart';
+import '../suscripcion/mi_suscripcion_screen.dart';
 import '../../widgets/documentos_repartidor.dart';
 import '../vendedor/mi_negocio_screen.dart';
 
@@ -148,7 +150,12 @@ class _PerfilScreenState extends State<PerfilScreen> {
       ),
     );
     if (confirmado != true || !mounted) return;
-    await context.read<AuthProvider>().logout();
+    try {
+      await context.read<AuthProvider>().logout();
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+      return;
+    }
     if (!mounted) return;
     Navigator.of(
       context,
@@ -320,6 +327,22 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     valor: 'Cédula, selfie, licencia y matrícula',
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _abrir(const MisDocumentosScreen()),
+                  ),
+                  Divider(height: 1, color: context.colores.borde),
+                  _Fila(
+                    icono: Icons.star_rounded,
+                    titulo: 'Mi reputación',
+                    valor: 'Calificaciones y advertencias',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(const MiReputacionScreen()),
+                  ),
+                  Divider(height: 1, color: context.colores.borde),
+                  _Fila(
+                    icono: Icons.account_balance_wallet_outlined,
+                    titulo: 'Mi suscripción',
+                    valor: 'Cuota mensual y comprobantes',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(const MiSuscripcionScreen()),
                   ),
                 ],
               ),

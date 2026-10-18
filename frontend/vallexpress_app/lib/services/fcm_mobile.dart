@@ -39,7 +39,7 @@ bool _esDePedido(String? tipo) => RegExp(
 void _abrirDesdeNotificacion(Map<String, dynamic> data) {
   final id = int.tryParse('${data['pedidoId'] ?? ''}');
   final tipo = data['tipo']?.toString();
-  if (id == null && !const {'comprobante_nuevo', 'liquidacion_pagada', 'comprobante_rechazado'}.contains(tipo)) return;
+  if (id == null && !const {'comprobante_nuevo', 'suscripcion_pagada', 'comprobante_rechazado', 'advertencia_repartidor'}.contains(tipo)) return;
   void intentar(int vez) {
     final ctx = navigatorKey.currentContext;
     if (ctx != null && ctx.read<AuthProvider>().isAuthenticated) {

@@ -525,6 +525,15 @@ class TarjetaRepartidor extends StatelessWidget {
 }
 
 /// Hoja para calificar (al negocio o al repartidor): estrellas y un comentario opcional
+/// Pide estrellas y un comentario (opcional). La usa el cliente (negocio y repartidor) y el negocio (repartidor).
+Future<({int estrellas, String comentario})?> pedirCalificacion(BuildContext context, {required String nombre, String? pregunta}) =>
+    showModalBottomSheet<({int estrellas, String comentario})>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _HojaCalificar(negocio: nombre, pregunta: pregunta),
+    );
+
 class _HojaCalificar extends StatefulWidget {
   const _HojaCalificar({required this.negocio, this.pregunta});
 

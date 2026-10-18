@@ -22,11 +22,11 @@ class _FalsoAuth extends AuthService {
   Future<Map<String, bool>?> perfilesRegistro() async => perfiles;
 
   @override
-  Future<Map<String, dynamic>> checkCedula(String cedula) async => {'exists': cedulaExiste};
+  Future<Map<String, dynamic>> checkCedula(String cedula, {String? tipo}) async => {'exists': cedulaExiste};
   @override
-  Future<Map<String, dynamic>> checkEmail(String email) async => {'exists': emailExiste};
+  Future<Map<String, dynamic>> checkEmail(String email, {String? tipo}) async => {'exists': emailExiste};
   @override
-  Future<Map<String, dynamic>> sendEmailVerification(String email, String nombre, {String? fcmToken}) async {
+  Future<Map<String, dynamic>> sendEmailVerification(String email, String nombre, {String? fcmToken, String? tipoUsuario}) async {
     envios++;
     return {'message': 'ok'};
   }
@@ -213,11 +213,11 @@ void main() {
     await _escribir(tester, 'Nombres', 'Ana');
     await _escribir(tester, 'Apellidos', 'Paz');
     await _escribir(tester, 'Cédula', cedulaValida);
-    expect(find.text('Esta cédula ya está registrada'), findsOneWidget);
+    expect(find.textContaining('con esta cédula'), findsOneWidget);
     await _escribir(tester, 'Teléfono móvil', '0991234567');
     await _continuar(tester);
     expect(find.text('Cuéntanos de ti'), findsOneWidget, reason: 'no avanza');
-    expect(find.text('Esta cédula ya está registrada'), findsWidgets);
+    expect(find.textContaining('con esta cédula'), findsWidgets);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
   });
@@ -236,7 +236,7 @@ void main() {
     await _escribir(tester, 'Teléfono móvil', '0991234567');
     await _continuar(tester);
     await _escribir(tester, 'Correo electrónico', 'ana@test.com');
-    expect(find.textContaining('ya tiene una cuenta'), findsOneWidget);
+    expect(find.textContaining('con este correo'), findsOneWidget);
     await tester.tap(find.text('Enviar código'), warnIfMissed: false);
     await tester.pump(const Duration(milliseconds: 300));
     expect(falso.envios, 0, reason: 'el botón está deshabilitado');

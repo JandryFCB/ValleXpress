@@ -12,6 +12,7 @@ import '../services/session_store.dart';
 import '../services/tiempo_real.dart';
 import 'carrito_provider.dart';
 import '../services/gps_repartidor.dart';
+import '../models/pedido.dart';
 import '../services/pedidos_service.dart';
 import '../services/fcm_mobile.dart'
     if (dart.library.html) 'fcm_stub_import.dart';
@@ -95,14 +96,14 @@ class AuthProvider with ChangeNotifier {
   /// Detalle del último login fallido (bloqueo, intentos que quedan...) para que la pantalla lo explique
   ErrorLogin? errorLogin;
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String email, String password, {String? tipoUsuario}) async {
     _isLoading = true;
     _error = null;
     errorLogin = null;
     notifyListeners();
 
     try {
-      await _iniciarSesion(await _authService.login(email, password));
+      await _iniciarSesion(await _authService.login(email, password, tipoUsuario: tipoUsuario));
       FcmService.registrarDispositivo();
       _isLoading = false;
       notifyListeners();
@@ -174,20 +175,24 @@ class AuthProvider with ChangeNotifier {
   // ---------------------------------------------------------------------------------------------
   // Cerrar sesión
   // ---------------------------------------------------------------------------------------------
+  /// Cierra la sesión. El repartidor con una entrega en curso (aceptada o recogida) NO puede: lanza el motivo para
+  /// mostrarlo (el cliente y el negocio lo están esperando). El servidor también lo verifica.
   Future<void> logout() async {
-    // Un repartidor que cierra sesión deja de estar en línea (si no, le seguirían llegando pedidos)
-    if (_usuario?['tipoUsuario'] == 'repartidor') await PedidosService.cambiarDisponibilidad(false).then((_) {}).catchError((_) {});
-    if (_token != null) await FcmService.quitarDispositivo(_token!);
-
-    // Se avisa al servidor para que este refresh token deje de servir, y se borra todo lo local
+    if (_usuario?['tipoUsuario'] == 'repartidor') {
+      final activos = await PedidosService.misEntregas(estado: 'activos').then((r) => r.pedidos).catchError((_) => <Pedido>[]);
+      final enCurso = activos.where((p) => p.enReparto).firstOrNull;
+      if (enCurso != null) throw Exception('Tienes la entrega del pedido #${enCurso.id} en curso. Termínala antes de cerrar sesión');
+    }
+    // Se avisa al servidor para que este refresh token deje de servir (y al repartidor lo saca de línea)
     await _authService.logout(await SessionStore.refreshToken());
+    if (_token != null) await FcmService.quitarDispositivo(_token!);
     await _limpiarLocal();
     notifyListeners();
   }
 
   /// Cierra la sesión en todos los dispositivos del usuario (por ejemplo si perdió el celular) y también en este.
   Future<void> cerrarSesionEnTodos() async {
-    await _authService.cerrarTodas();
+    await _authService.cerrarTodas();     // el servidor se niega si el repartidor tiene una entrega en curso
     await logout();
   }
 

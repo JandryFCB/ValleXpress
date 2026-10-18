@@ -12,7 +12,7 @@ import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import '../profile/perfil_screen.dart';
 import 'aprobaciones_screen.dart';
-import 'cobros_screen.dart';
+import 'suscripciones_admin_screen.dart';
 import 'detalle_cifra_screen.dart';
 import 'legal_admin_screen.dart';
 import 'perfiles_screen.dart';
@@ -128,7 +128,7 @@ class _ResumenState extends State<_Resumen> {
   }
 
   Future<void> _abrirCobros() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const CobrosScreen()));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SuscripcionesAdminScreen()));
     _cargar();
   }
 
@@ -210,14 +210,16 @@ class _ResumenState extends State<_Resumen> {
                   const EncabezadoSeccion('Configuración'),
                   _AccesoConfig(
                     icono: Icons.price_change_rounded,
-                    titulo: 'Tarifas, comisión y zona',
-                    detalle: 'Envío por distancia, lo que gana ValleXpress y dónde funciona',
+                    titulo: 'Tarifas y zona',
+                    detalle: 'Envío por distancia y dónde funciona ValleXpress',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TarifasScreen())),
                   ),
                   _AccesoConfig(
                     icono: Icons.savings_rounded,
-                    titulo: 'Cobros a negocios',
-                    detalle: 'Comisiones por cobrar cada semana y pagos recibidos',
+                    titulo: 'Suscripciones',
+                    detalle: r.suscripcionesVencidas > 0
+                        ? '${r.suscripcionesVencidas} con la suscripción vencida · cuotas y comprobantes'
+                        : 'Cuota mensual de vendedores y repartidores, comprobantes y pagos',
                     insignia: r.comprobantesPorRevisar,
                     onTap: _abrirCobros,
                   ),
@@ -341,9 +343,9 @@ class _Cifras extends StatelessWidget {
         color: AppTheme.accentColor,
         tipo: 'ganancia',
         titulo: 'Ganancia ValleXpress',
-        valor: DineroAnimado(r.comisionesHoy),
-        // La comisión se gana al entregar; el cobro llega cuando el negocio paga su semana
-        detalle: r.cobradoHoy > 0 ? 'Cobrado hoy: ${Formato.dinero(r.cobradoHoy)}' : 'Cobrado 7 días: ${Formato.dinero(r.cobradoSemana)}',
+        // Suscripciones cobradas (pagos aprobados): hoy, y abajo lo de los últimos 30 días
+        valor: DineroAnimado(r.cobradoHoy),
+        detalle: 'Suscripciones · 30 días: ${Formato.dinero(r.cobradoMes)}',
       ),
       _Cifra(
         icono: Icons.delivery_dining_rounded,

@@ -10,7 +10,7 @@ import '../../utils/imagen.dart';
 import '../../widgets/ui/ui.dart';
 import '../profile/address_picker_screen.dart';
 import 'horarios_screen.dart';
-import 'mis_cuentas_screen.dart';
+import '../suscripcion/mi_suscripcion_screen.dart';
 import 'mis_productos_screen.dart';
 
 /// Mi negocio (vendedor): abrir/cerrar, datos, entrega, ubicación, horario, logo, portada y acceso a los productos.
@@ -274,9 +274,9 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
                 if (!CatalogoService.gestionandoComoAdmin) ...[
                   _Fila(
                     icono: Icons.account_balance_wallet_outlined,
-                    titulo: 'Mis cuentas con ValleXpress',
-                    valor: n.bloqueadoPorDeuda ? 'Tienes comisiones vencidas: no recibes pedidos' : 'Ventas por semana y comisión',
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisCuentasScreen())),
+                    titulo: 'Mi suscripción',
+                    valor: n.bloqueadoPorDeuda ? 'Tu suscripción está vencida: no recibes pedidos' : 'Cuota mensual y comprobantes',
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MiSuscripcionScreen())),
                   ),
                   Divider(height: 1, indent: 70, color: c.borde),
                 ],

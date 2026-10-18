@@ -23,7 +23,9 @@ class TutorialScreen extends StatefulWidget {
   final String rol;
   final VoidCallback alTerminar;
 
-  static String _clave(String rol) => 'tutorial_visto_v1_$rol';
+  // Versión del tutorial de cada perfil: al cambiar su contenido se sube y solo ese perfil lo vuelve a ver
+  static const _versiones = {'vendedor': 2, 'repartidor': 2};
+  static String _clave(String rol) => 'tutorial_visto_v${_versiones[rol] ?? 1}_$rol';
 
   /// ¿Ya vio el tutorial de este perfil en este celular?
   static Future<bool> visto(String rol) async => (await SharedPreferences.getInstance()).getBool(_clave(rol)) ?? false;
@@ -57,10 +59,14 @@ class _TutorialScreenState extends State<TutorialScreen> {
               'Márcalo "Listo" y un repartidor lo recoge',
               'Sigue al repartidor en el mapa',
             ]),
-            _Pagina(Icons.account_balance_wallet_rounded, AppTheme.accentColor, 'Tus cuentas, claras', 'En "Mis cuentas" ves lo que vendiste cada semana y la comisión de ValleXpress.', [
-              'Paga la comisión por transferencia',
-              'Sube la foto del comprobante desde la app',
-              'Si una semana se vence sin pagar, dejas de recibir pedidos',
+            _Pagina(Icons.account_balance_wallet_rounded, AppTheme.accentColor, 'Sin comisiones', 'ValleXpress no te cobra por pedido: pagas una suscripción mensual fija.', [
+              'El primer mes es gratis',
+              'Transfiere y sube el comprobante en "Mi suscripción"',
+              'Si pasa el día límite sin pagar, dejas de recibir pedidos',
+            ]),
+            _Pagina(Icons.star_rounded, AppTheme.warningColor, 'Califica al repartidor', 'Cuando recoja tu pedido, dinos qué tal te atendió.', [
+              'Nos ayuda a mantener buenos repartidores',
+              'Con la misma cédula y correo puedes tener también cuenta de cliente',
             ]),
           ],
         'repartidor' => const [
@@ -80,12 +86,22 @@ class _TutorialScreenState extends State<TutorialScreen> {
               'El valor de los productos es del negocio',
               'Tu ubicación se comparte solo mientras estás en línea',
             ]),
+            _Pagina(Icons.account_balance_wallet_rounded, AppTheme.infoColor, 'Tu suscripción', 'Pagas una cuota mensual fija para usar ValleXpress.', [
+              'El primer mes es gratis',
+              'Transfiere y sube el comprobante en "Mi suscripción"',
+              'Si pasa el día límite sin pagar, no podrás conectarte',
+            ]),
+            _Pagina(Icons.star_rounded, AppTheme.warningColor, 'Tu reputación', 'Clientes y negocios califican cada entrega.', [
+              'Trata bien a todos y entrega a tiempo',
+              'Con quejas recibirás advertencias y puedes ser dado de baja',
+              'Con una entrega en curso no puedes cerrar sesión',
+            ]),
           ],
         'administrador' => const [
             _Pagina(Icons.admin_panel_settings_rounded, AppTheme.infoColor, 'Panel de ValleXpress', 'Desde aquí manejas toda la plataforma.'),
             _Pagina(Icons.insights_rounded, AppTheme.successColor, 'Resumen', 'Las cifras del día. Toca cualquier tarjeta para ver el detalle: pedidos, ventas, ganancias, envíos y repartidores en línea.'),
-            _Pagina(Icons.fact_check_rounded, AppTheme.warningColor, 'Gestión', 'Aprueba negocios y repartidores (revisa sus documentos), atiende comprobantes de pago y administra usuarios y pedidos.'),
-            _Pagina(Icons.tune_rounded, AppTheme.accentColor, 'Configuración', 'Tarifas y comisión, zona de servicio, cobros a negocios, perfiles y permisos, y los términos y la privacidad.'),
+            _Pagina(Icons.fact_check_rounded, AppTheme.warningColor, 'Gestión', 'Aprueba negocios y repartidores (revisa sus documentos y su reputación), atiende comprobantes de pago y administra usuarios y pedidos.'),
+            _Pagina(Icons.tune_rounded, AppTheme.accentColor, 'Configuración', 'Tarifas y zona de servicio, suscripciones de vendedores y repartidores, perfiles y permisos, y los términos y la privacidad.'),
           ],
         _ => const [
             _Pagina(Icons.shopping_bag_rounded, AppTheme.successColor, '¡Bienvenido a ValleXpress!', 'Pide de los negocios de Yantzaza y recíbelo en tu puerta.'),

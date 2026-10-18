@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../config/theme.dart';
-import '../models/liquidacion.dart';
+import '../models/suscripcion.dart';
 import '../utils/formato.dart';
 import 'ui/ui.dart';
 
 const _meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 String _dia(DateTime d) => '${d.day} ${_meses[d.month - 1]}';
 
-/// Estado de cuenta de un negocio con ValleXpress: lo que debe, si está bloqueado, a dónde transferir y sus
-/// semanas. El vendedor sube el comprobante de cada semana ([onSubirComprobante]); el administrador lo revisa
+/// Suscripción mensual de un vendedor o repartidor: lo que debe, si está bloqueado, a dónde transferir y sus meses.
+/// El vendedor o repartidor sube el comprobante de cada mes ([onSubirComprobante]); el administrador lo revisa
 /// ([onAprobar] / [onRechazar]) o registra un pago sin comprobante ([onPagar]).
-class EstadoCuentaVista extends StatelessWidget {
-  const EstadoCuentaVista({
+class EstadoSuscripcionVista extends StatelessWidget {
+  const EstadoSuscripcionVista({
     super.key,
     required this.cuenta,
     this.paraAdmin = false,
@@ -22,23 +22,34 @@ class EstadoCuentaVista extends StatelessWidget {
     this.onRechazar,
   });
 
-  final EstadoDeCuenta cuenta;
+  final EstadoSuscripcion cuenta;
   final bool paraAdmin;
-  final void Function(SemanaLiquidacion semana)? onSubirComprobante;
-  final void Function(SemanaLiquidacion semana)? onPagar;
-  final void Function(ComprobantePago comprobante)? onAprobar;
-  final void Function(ComprobantePago comprobante)? onRechazar;
+  final void Function(MesSuscripcion mes)? onSubirComprobante;
+  final void Function(MesSuscripcion mes)? onPagar;
+  final void Function(PagoSuscripcion comprobante)? onAprobar;
+  final void Function(PagoSuscripcion comprobante)? onRechazar;
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
+    if (!cuenta.aplica) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: EstadoVacio(
+          icono: Icons.hourglass_empty_rounded,
+          titulo: 'Aún no pagas suscripción',
+          mensaje: 'La suscripción se cobra desde que aprobamos tu cuenta (el primer mes es gratis).',
+        ),
+      );
+    }
     final debe = cuenta.saldoPendiente > 0;
-    final soloRevision = debe && !cuenta.bloqueado && cuenta.saldoPorPagar <= 0; // todo lo que debe ya tiene comprobante
+    final soloRevision = !debe && cuenta.enRevision > 0;
     final color = cuenta.bloqueado
         ? AppTheme.errorColor
         : soloRevision
             ? AppTheme.infoColor
             : (debe ? AppTheme.warningColor : AppTheme.successColor);
+    final quien = cuenta.tipo == 'vendedor' ? 'tus negocios no reciben pedidos' : 'no puedes conectarte ni aceptar pedidos';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -50,42 +61,38 @@ class EstadoCuentaVista extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(soloRevision ? 'Comprobante en revisión' : debe ? (paraAdmin ? 'Debe a ValleXpress' : 'Por pagar a ValleXpress') : 'Estás al día', style: tema.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w800)),
+              Text(
+                cuenta.bloqueado ? 'Suscripción vencida' : soloRevision ? 'Comprobante en revisión' : debe ? 'Por pagar' : 'Estás al día',
+                style: tema.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 4),
               DineroAnimado(cuenta.saldoPendiente, estilo: tema.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               Text(
                 cuenta.bloqueado
-                    ? (paraAdmin
-                        ? 'Tiene una semana vencida: no está recibiendo pedidos hasta que pague'
-                        : 'Tienes una semana vencida: no estás recibiendo pedidos. Transfiere y sube el comprobante')
+                    ? (paraAdmin ? 'Tiene un mes vencido: está bloqueado hasta que pague' : 'Tienes un mes vencido: $quien. Transfiere y sube el comprobante')
                     : soloRevision
                         ? (paraAdmin ? 'Envió el comprobante: revísalo abajo para aprobarlo o rechazarlo' : 'Ya enviaste el comprobante. Te avisamos apenas lo revisemos')
-                    : debe
-                        ? '${cuenta.saldoEnRevision > 0 ? '${Formato.dinero(cuenta.saldoEnRevision)} en revisión. ' : ''}La comisión de cada semana se paga dentro de ${cuenta.diasGracia} días después de que termina'
-                        : 'No hay comisiones pendientes',
+                        : 'Cuota de ${Formato.dinero(cuenta.cuota ?? 0)} al mes. Se paga hasta el día ${cuenta.diasGracia} de cada mes',
                 style: tema.bodySmall,
               ),
             ],
           ),
         ),
         if (!paraAdmin) ...[const SizedBox(height: 12), _TarjetaCuenta(cuenta: cuenta.cuenta)],
-        EncabezadoSeccion('Semanas', subtitulo: paraAdmin ? 'Comisión de los pedidos entregados' : 'Lo que vendiste y la comisión de ValleXpress'),
-        if (cuenta.semanas.isEmpty)
-          const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: EstadoVacio(icono: Icons.receipt_long_outlined, titulo: 'Aún no hay ventas', mensaje: 'Cuando entregues pedidos, verás aquí cada semana.'))
-        else
-          for (final (i, s) in cuenta.semanas.indexed)
-            Aparecer(
-              indice: i,
-              child: _TarjetaSemana(
-                s: s,
-                paraAdmin: paraAdmin,
-                onSubir: onSubirComprobante == null || !s.puedeSubirComprobante ? null : () => onSubirComprobante!(s),
-                onPagar: onPagar == null || !s.porPagar ? null : () => onPagar!(s),
-                onAprobar: onAprobar,
-                onRechazar: onRechazar,
-              ),
+        EncabezadoSeccion('Meses', subtitulo: paraAdmin ? null : 'El mes en que te aprobamos es gratis'),
+        for (final (i, m) in cuenta.meses.indexed)
+          Aparecer(
+            indice: i,
+            child: _TarjetaMes(
+              m: m,
+              paraAdmin: paraAdmin,
+              onSubir: onSubirComprobante == null || !m.pagable ? null : () => onSubirComprobante!(m),
+              onPagar: onPagar == null || !m.pagable ? null : () => onPagar!(m),
+              onAprobar: onAprobar,
+              onRechazar: onRechazar,
             ),
+          ),
       ],
     );
   }
@@ -148,25 +155,20 @@ class _TarjetaCuenta extends StatelessWidget {
   }
 }
 
-class _TarjetaSemana extends StatelessWidget {
-  const _TarjetaSemana({required this.s, required this.paraAdmin, this.onSubir, this.onPagar, this.onAprobar, this.onRechazar});
+class _TarjetaMes extends StatelessWidget {
+  const _TarjetaMes({required this.m, required this.paraAdmin, this.onSubir, this.onPagar, this.onAprobar, this.onRechazar});
 
-  final SemanaLiquidacion s;
+  final MesSuscripcion m;
   final bool paraAdmin;
   final VoidCallback? onSubir;
   final VoidCallback? onPagar;
-  final void Function(ComprobantePago comprobante)? onAprobar;
-  final void Function(ComprobantePago comprobante)? onRechazar;
+  final void Function(PagoSuscripcion comprobante)? onAprobar;
+  final void Function(PagoSuscripcion comprobante)? onRechazar;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colores;
     final tema = Theme.of(context).textTheme;
-    final comp = s.comprobante;
-    Widget linea(String t, String v, {bool fuerte = false}) => Row(children: [
-          Expanded(child: Text(t, style: fuerte ? tema.bodyMedium?.copyWith(fontWeight: FontWeight.w800) : tema.bodySmall?.copyWith(color: c.textoSuave))),
-          Text(v, style: fuerte ? tema.bodyMedium?.copyWith(fontWeight: FontWeight.w800) : tema.bodySmall),
-        ]);
+    final comp = m.comprobante ?? m.rechazado;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TarjetaValle(
@@ -174,33 +176,41 @@ class _TarjetaSemana extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Expanded(child: Text('${_dia(s.semana)} – ${_dia(s.hasta)}', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
-              InsigniaValle(s.estado.etiqueta, color: s.estado.color, icono: s.estado.icono),
+              Expanded(child: Text(m.titulo, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
+              Text(Formato.dinero(m.monto), style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(width: 8),
+              InsigniaValle(m.estado.etiqueta, color: m.estado.color, icono: m.estado.icono),
             ]),
-            const SizedBox(height: 8),
-            linea('${s.pedidos} ${s.pedidos == 1 ? 'pedido' : 'pedidos'} · vendido', Formato.dinero(s.ventas)),
-            linea('Comisión ValleXpress', Formato.dinero(s.comision), fuerte: true),
-            linea('El negocio recibió', Formato.dinero(s.recibeNegocio)),
-            if (s.porPagar && s.vence != null && s.estado != EstadoSemana.enRevision) ...[
+            if (m.estado == EstadoMes.porPagar || m.estado == EstadoMes.vencido || m.estado == EstadoMes.proximo) ...[
               const SizedBox(height: 6),
-              Text(s.estado == EstadoSemana.vencida ? 'Venció el ${_dia(s.vence!)}' : 'Paga hasta el ${_dia(s.vence!)}', style: tema.bodySmall?.copyWith(color: s.estado.color, fontWeight: FontWeight.w700)),
+              Text(
+                m.estado == EstadoMes.vencido
+                    ? 'Venció el ${_dia(m.vence)}'
+                    : m.estado == EstadoMes.proximo
+                        ? 'Puedes adelantarlo · se paga hasta el ${_dia(m.vence)}'
+                        : 'Paga hasta el ${_dia(m.vence)}',
+                style: tema.bodySmall?.copyWith(color: m.estado.color, fontWeight: FontWeight.w700),
+              ),
             ],
-            if (s.estado == EstadoSemana.pagada && s.fechaPago != null) ...[
+            if (m.estado == EstadoMes.pagado && m.pago != null) ...[
               const SizedBox(height: 6),
-              Text('Pagada el ${_dia(s.fechaPago!.toLocal())}${s.referencia != null ? ' · ${s.referencia}' : ''}', style: tema.bodySmall?.copyWith(color: AppTheme.successColor)),
+              Text(
+                'Pagado${m.pago!.revisadoEn != null ? ' el ${_dia(m.pago!.revisadoEn!.toLocal())}' : ''}${m.pago!.referencia != null ? ' · ${m.pago!.referencia}' : ''}',
+                style: tema.bodySmall?.copyWith(color: AppTheme.successColor),
+              ),
             ],
 
             // Comprobante: en revisión (con la foto) o rechazado (con el motivo)
-            if (comp != null && (comp.enviado || comp.rechazado)) ...[
+            if (comp != null && m.estado != EstadoMes.pagado) ...[
               const SizedBox(height: 10),
               _Comprobante(comp: comp),
             ],
-            if (paraAdmin && comp != null && comp.enviado) ...[
+            if (paraAdmin && m.comprobante != null) ...[
               const SizedBox(height: 10),
               Row(children: [
-                Expanded(child: BotonValle(texto: 'Rechazar', tipo: TipoBoton.secundario, onPressed: onRechazar == null ? null : () => onRechazar!(comp))),
+                Expanded(child: BotonValle(texto: 'Rechazar', tipo: TipoBoton.secundario, onPressed: onRechazar == null ? null : () => onRechazar!(m.comprobante!))),
                 const SizedBox(width: 10),
-                Expanded(child: BotonValle(texto: 'Aprobar', icono: Icons.check_rounded, onPressed: onAprobar == null ? null : () => onAprobar!(comp))),
+                Expanded(child: BotonValle(texto: 'Aprobar', icono: Icons.check_rounded, onPressed: onAprobar == null ? null : () => onAprobar!(m.comprobante!))),
               ]),
             ] else if (onPagar != null) ...[
               const SizedBox(height: 10),
@@ -208,7 +218,12 @@ class _TarjetaSemana extends StatelessWidget {
             ],
             if (onSubir != null) ...[
               const SizedBox(height: 10),
-              BotonValle(texto: comp?.rechazado == true ? 'Subir otro comprobante' : 'Subir comprobante de pago', icono: Icons.upload_file_rounded, onPressed: onSubir),
+              BotonValle(
+                texto: m.rechazado != null ? 'Subir otro comprobante' : m.estado == EstadoMes.proximo ? 'Adelantar este mes' : 'Subir comprobante de pago',
+                icono: Icons.upload_file_rounded,
+                tipo: m.estado == EstadoMes.proximo ? TipoBoton.secundario : TipoBoton.principal,
+                onPressed: onSubir,
+              ),
             ],
           ],
         ),
@@ -221,7 +236,7 @@ class _TarjetaSemana extends StatelessWidget {
 class _Comprobante extends StatelessWidget {
   const _Comprobante({required this.comp});
 
-  final ComprobantePago comp;
+  final PagoSuscripcion comp;
 
   @override
   Widget build(BuildContext context) {
@@ -234,15 +249,7 @@ class _Comprobante extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: comp.imagen == null
-                ? null
-                : () => showDialog<void>(
-                      context: context,
-                      builder: (ctx) => Dialog(
-                        insetPadding: const EdgeInsets.all(12),
-                        child: InteractiveViewer(child: ImagenRed(url: comp.imagen, radio: 12, fit: BoxFit.contain)),
-                      ),
-                    ),
+            onTap: comp.imagen == null ? null : () => verComprobante(context, comp.imagen!),
             child: ImagenRed(url: comp.imagen, ancho: 64, alto: 84, radio: 10, icono: Icons.receipt_long_rounded),
           ),
           const SizedBox(width: 12),
@@ -262,3 +269,12 @@ class _Comprobante extends StatelessWidget {
     );
   }
 }
+
+/// Abre la foto de un comprobante en grande (se puede ampliar con los dedos)
+void verComprobante(BuildContext context, String url) => showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        child: InteractiveViewer(maxScale: 5, child: ImagenRed(url: url, radio: 12, fit: BoxFit.contain)),
+      ),
+    );

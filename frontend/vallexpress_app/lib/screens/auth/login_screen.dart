@@ -58,12 +58,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _entrar() async {
+  Future<void> _entrar({String? tipoUsuario}) async {
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final auth = context.read<AuthProvider>();
-    final ok = await auth.login(_usuarioController.text.trim(), _claveController.text);
+    final ok = await auth.login(_usuarioController.text.trim(), _claveController.text, tipoUsuario: tipoUsuario);
     if (!mounted) return;
 
     if (ok) {
@@ -72,6 +72,13 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     final e = auth.errorLogin;
+    // Tiene varias cuentas (una por perfil) con ese correo y esa clave: elige con cuál entrar
+    if (e != null && e.elegirCuenta && tipoUsuario == null) {
+      setState(() => _aviso = null);
+      final elegido = await _elegirCuenta(e.cuentas);
+      if (elegido != null && mounted) await _entrar(tipoUsuario: elegido);
+      return;
+    }
     // Bloqueos y avisos de intentos: tarjeta fija con la explicación. Lo demás (clave mala, sin internet): mensaje breve
     if (e != null && (e.bloqueoTemporal || e.desactivada || e.intentosRestantes != null)) {
       HapticFeedback.heavyImpact();
@@ -82,6 +89,54 @@ class _LoginScreenState extends State<LoginScreen> {
       mostrarError(context, auth.error ?? 'No se pudo iniciar sesión');
     }
   }
+
+  static const _perfiles = {
+    'cliente': (Icons.shopping_bag_rounded, 'Cliente', 'Pedir a los negocios'),
+    'vendedor': (Icons.storefront_rounded, 'Negocio', 'Atender los pedidos de tu negocio'),
+    'repartidor': (Icons.delivery_dining_rounded, 'Repartidor', 'Llevar pedidos'),
+    'administrador': (Icons.admin_panel_settings_rounded, 'Administrador', 'Panel de ValleXpress'),
+  };
+
+  Future<String?> _elegirCuenta(List<Map<String, String>> cuentas) => showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (ctx) {
+          final tema = Theme.of(ctx).textTheme;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('¿Con qué cuenta quieres entrar?', style: tema.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text('Tienes varias cuentas con este correo.', style: tema.bodySmall),
+                  const SizedBox(height: 12),
+                  for (final c in cuentas)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: TarjetaValle(
+                        onTap: () => Navigator.pop(ctx, c['tipoUsuario']),
+                        child: Row(children: [
+                          Icon(_perfiles[c['tipoUsuario']]?.$1 ?? Icons.person_rounded, color: ctx.colores.primario, size: 30),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(_perfiles[c['tipoUsuario']]?.$2 ?? '${c['tipoUsuario']}', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                              Text('${_perfiles[c['tipoUsuario']]?.$3 ?? ''} · usuario ${c['usuario']}', style: tema.bodySmall),
+                            ]),
+                          ),
+                          const Icon(Icons.chevron_right_rounded),
+                        ]),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
 
   // Al cambiar la contraseña la cuenta se desbloquea en el servidor: al volver se quita el aviso y la cuenta
   // regresiva (si sigue bloqueada, el próximo intento lo vuelve a mostrar) y se borra la contraseña vieja

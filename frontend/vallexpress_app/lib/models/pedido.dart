@@ -191,6 +191,7 @@ class Pedido {
     this.calificacion,
     this.comentarioCalificacion,
     this.calificacionRepartidor,
+    this.calificacionRepartidorNegocio,
     this.cliente,
     this.repartidor,
     this.negocioLocal,
@@ -232,6 +233,7 @@ class Pedido {
   final int? calificacion;
   final String? comentarioCalificacion;
   final int? calificacionRepartidor;
+  final int? calificacionRepartidorNegocio; // la que dio el negocio (la ven el negocio y el admin)
 
   /// Solo llega al negocio y al repartidor asignado
   final Contacto? cliente;
@@ -257,6 +259,9 @@ class Pedido {
   bool get puedeCancelar => estado == EstadoPedido.pendiente;
   bool get puedeConfirmarRecibido => estado == EstadoPedido.entregado;
   bool get puedeCalificar => (estado == EstadoPedido.entregado || estado == EstadoPedido.recibido) && calificacion == null;
+  /// El negocio califica al repartidor desde que recoge el pedido
+  bool get negocioPuedeCalificarRepartidor =>
+      const {EstadoPedido.recogido, EstadoPedido.entregado, EstadoPedido.recibido}.contains(estado) && repartidor != null && calificacionRepartidorNegocio == null;
   bool get puedeCalificarRepartidor => (estado == EstadoPedido.entregado || estado == EstadoPedido.recibido) && repartidor != null && calificacionRepartidor == null;
 
   /// El repartidor ya lo tiene y va en camino: se muestra el mapa en vivo
@@ -301,6 +306,7 @@ class Pedido {
       calificacion: (calif?['puntuacion'] as num?)?.toInt(),
       comentarioCalificacion: _texto(calif?['comentario']),
       calificacionRepartidor: ((j['calificacionRepartidor'] as Map?)?['puntuacion'] as num?)?.toInt(),
+      calificacionRepartidorNegocio: ((j['calificacionRepartidorNegocio'] as Map?)?['puntuacion'] as num?)?.toInt(),
       cliente: Contacto.desdeJson(j['cliente']),
       repartidor: RepartidorPedido.desdeJson(j['repartidor']),
       negocioLocal: Punto.desdeJson(local),

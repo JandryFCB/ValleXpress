@@ -124,8 +124,14 @@ class RegistroController extends ChangeNotifier {
 
   void elegirRol(String valor) {
     if (!registroAbierto(valor)) return;
+    final cambio = rol != null && rol != valor;
     rol = valor;
     _avisar();
+    // La cédula y el correo se validan según el perfil (puede tener una cuenta de cada uno): se vuelven a consultar
+    if (cambio) {
+      if (cedula.text.trim().isNotEmpty) alCambiarCedula(cedula.text);
+      if (email.text.trim().isNotEmpty) alCambiarEmail(email.text);
+    }
   }
 
   Future<void> cargarPerfiles() async {
@@ -175,11 +181,15 @@ class RegistroController extends ChangeNotifier {
     _avisar();
     _esperaCedula = Timer(const Duration(milliseconds: 450), () async {
       try {
-        final r = await _servicio.checkCedula(v);
+        final r = await _servicio.checkCedula(v, tipo: rol);
         if (_liberado || cedula.text.trim() != v) return; // el usuario ya escribió otra cosa
         final existe = r['exists'] == true;
         estadoCedula = existe ? EstadoCampo.error : EstadoCampo.correcto;
-        mensajeCedula = existe ? 'Esta cédula ya está registrada' : 'Cédula válida';
+        mensajeCedula = existe
+            ? (rol != null ? 'Ya tienes una cuenta ${_deRol()} con esta cédula' : 'Esta cédula ya está registrada')
+            : r['otroPerfil'] == true
+                ? 'Ya tienes otra cuenta: usa tu mismo correo para crear esta'
+                : 'Cédula válida';
       } catch (_) {
         if (_liberado) return;
         estadoCedula = EstadoCampo.neutro; // sin conexión: el servidor la vuelve a validar al registrar
@@ -246,11 +256,15 @@ class RegistroController extends ChangeNotifier {
     _avisar();
     _esperaEmail = Timer(const Duration(milliseconds: 450), () async {
       try {
-        final r = await _servicio.checkEmail(v);
+        final r = await _servicio.checkEmail(v, tipo: rol);
         if (_liberado || email.text.trim().toLowerCase() != v) return;
         final existe = r['exists'] == true;
         estadoEmail = existe ? EstadoCampo.error : EstadoCampo.correcto;
-        mensajeEmail = existe ? 'Este correo ya tiene una cuenta. ¿Quieres iniciar sesión?' : 'Correo disponible';
+        mensajeEmail = existe
+            ? (rol != null ? 'Ya tienes una cuenta ${_deRol()} con este correo. ¿Quieres iniciar sesión?' : 'Este correo ya tiene una cuenta. ¿Quieres iniciar sesión?')
+            : r['otroPerfil'] == true
+                ? 'Ya tienes otra cuenta con este correo: crearemos tu cuenta ${_deRol()} con tus mismos datos'
+                : 'Correo disponible';
       } catch (_) {
         if (_liberado) return;
         estadoEmail = EstadoCampo.neutro;
@@ -259,6 +273,8 @@ class RegistroController extends ChangeNotifier {
       _avisar();
     });
   }
+
+  String _deRol() => switch (rol) { 'vendedor' => 'de negocio', 'repartidor' => 'de repartidor', _ => 'de cliente' };
 
   // ---------------------------------------------------------------------------------------------
   // Verificación del correo
@@ -271,7 +287,7 @@ class RegistroController extends ChangeNotifier {
     enviandoCodigo = true;
     _avisar();
     try {
-      await _servicio.sendEmailVerification(correo, nombre.text.trim(), fcmToken: await _tokenFcm());
+      await _servicio.sendEmailVerification(correo, nombre.text.trim(), fcmToken: await _tokenFcm(), tipoUsuario: rol);
       codigoEnviado = true;
       _iniciarEspera(60);
       return null;

@@ -104,7 +104,9 @@ class _AceptarLegalScreenState extends State<AceptarLegalScreen> {
               const SizedBox(height: 8),
               BotonValle(texto: 'Aceptar y continuar', icono: Icons.check_rounded, cargando: _enviando, onPressed: _acepta ? _aceptar : null),
               const SizedBox(height: 8),
-              TextButton(onPressed: _enviando ? null : () => context.read<AuthProvider>().logout(), child: const Text('Ahora no, cerrar sesión')),
+              TextButton(onPressed: _enviando ? null : () => context.read<AuthProvider>().logout().catchError((e) {
+                        if (context.mounted) mostrarError(context, textoDeError(e));
+                      }), child: const Text('Ahora no, cerrar sesión')),
             ],
           ),
         ),

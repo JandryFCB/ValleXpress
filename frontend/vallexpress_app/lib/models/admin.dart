@@ -43,6 +43,8 @@ class ResumenAdmin {
     this.comprobantesPorRevisar = 0,
     this.cobradoHoy = 0,
     this.cobradoSemana = 0,
+    this.cobradoMes = 0,
+    this.suscripcionesVencidas = 0,
     this.correoConfigurado = true,
   });
 
@@ -59,9 +61,11 @@ class ResumenAdmin {
   final Map<String, int> repartidores;
   final int repartidoresEnLinea;
   final int pendientes;
-  final int comprobantesPorRevisar; // pagos de comisión que esperan tu revisión
-  final double cobradoHoy; // comisiones que los negocios pagaron hoy (plata que entró)
+  final int comprobantesPorRevisar; // comprobantes de suscripción que esperan tu revisión
+  final double cobradoHoy; // suscripciones cobradas hoy (pagos aprobados: plata que entró)
   final double cobradoSemana;
+  final double cobradoMes; // últimos 30 días
+  final int suscripcionesVencidas; // vendedores y repartidores bloqueados por no pagar
   final bool correoConfigurado;
 
   int get totalEnCurso => enCurso.values.fold(0, (a, b) => a + b);
@@ -95,6 +99,8 @@ class ResumenAdmin {
       comprobantesPorRevisar: (j['comprobantesPorRevisar'] as num?)?.toInt() ?? 0,
       cobradoHoy: _num((j['cobrado'] as Map?)?['hoy']),
       cobradoSemana: _num((j['cobrado'] as Map?)?['semana']),
+      cobradoMes: _num((j['cobrado'] as Map?)?['mes']),
+      suscripcionesVencidas: (j['suscripcionesVencidas'] as num?)?.toInt() ?? 0,
       correoConfigurado: j['correoConfigurado'] != false,
     );
   }

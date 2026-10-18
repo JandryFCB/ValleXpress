@@ -9,7 +9,7 @@ import 'session_store.dart';
 /// cuenta bloqueada por intentos (con los segundos que faltan), bloqueada o dada de baja por el administrador,
 /// o cuántos intentos quedan antes del bloqueo.
 class ErrorLogin implements Exception {
-  const ErrorLogin(this.mensaje, {this.codigo, this.segundos, this.intentosRestantes, this.estatus, this.soporte});
+  const ErrorLogin(this.mensaje, {this.codigo, this.segundos, this.intentosRestantes, this.estatus, this.soporte, this.cuentas = const []});
 
   final String mensaje;
   final String? codigo;
@@ -24,6 +24,10 @@ class ErrorLogin implements Exception {
   /// Correo de soporte para escribir
   final String? soporte;
 
+  /// Varias cuentas (una por perfil) con el mismo correo y la misma clave: [{usuario, tipoUsuario}] para elegir
+  final List<Map<String, String>> cuentas;
+
+  bool get elegirCuenta => codigo == 'ELEGIRCUENTA' && cuentas.isNotEmpty;
   bool get bloqueoTemporal => codigo == 'CUENTABLOQUEADA';
   bool get desactivada => codigo == 'CUENTADESACTIVADA';
 
@@ -33,13 +37,14 @@ class ErrorLogin implements Exception {
 
 class AuthService {
   // Login
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  // tipoUsuario: con qué cuenta entrar cuando la persona tiene varias con el mismo correo (ELEGIRCUENTA)
+  Future<Map<String, dynamic>> login(String email, String password, {String? tipoUsuario}) async {
     final http.Response response;
     try {
       response = await http.post(
         Uri.parse('${AppConstants.baseUrl}/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'email': email, 'password': password, ...await datosDispositivo()}),
+        body: json.encode({'email': email, 'password': password, if (tipoUsuario != null) 'tipoUsuario': tipoUsuario, ...await datosDispositivo()}),
       );
     } catch (e) {
       throw const ErrorLogin('No pudimos conectarnos. Revisa tu internet e intenta de nuevo', codigo: 'SINCONEXION');
@@ -59,6 +64,10 @@ class AuthService {
       intentosRestantes: (e['intentosRestantes'] as num?)?.toInt(),
       estatus: e['estatus']?.toString(),
       soporte: e['soporte']?.toString(),
+      cuentas: [
+        for (final c in (e['cuentas'] as List? ?? const []))
+          if (c is Map) {'usuario': '${c['usuario']}', 'tipoUsuario': '${c['tipoUsuario']}'},
+      ],
     );
   }
 
@@ -114,12 +123,13 @@ class AuthService {
     }
   }
 
-  // Cierra la sesión de este equipo en el servidor (el refresh token deja de servir). Nunca lanza error:
-  // si no hay internet, igual se cierra la sesión local.
+  // Cierra la sesión de este equipo en el servidor (el refresh token deja de servir). Si no hay internet, igual se
+  // cierra la sesión local. Solo lanza error si el servidor se niega: el repartidor con una entrega en curso (409).
   Future<void> logout(String? refreshToken) async {
     if (refreshToken == null) return;
+    final http.Response res;
     try {
-      await http
+      res = await http
           .post(
             Uri.parse('${AppConstants.baseUrl}/auth/logout'),
             headers: {'Content-Type': 'application/json'},
@@ -127,8 +137,9 @@ class AuthService {
           )
           .timeout(const Duration(seconds: 8));
     } catch (_) {
-      // sin red: la sesión local se cierra igual
+      return; // sin red: la sesión local se cierra igual
     }
+    if (res.statusCode == 409) throw Exception(mensajeDeError(res, 'Termina tu entrega antes de cerrar sesión'));
   }
 
   // Cierra la sesión en TODOS los equipos del usuario (incluido este). Necesita el token de acceso.
@@ -228,9 +239,10 @@ class AuthService {
     String email,
     String nombre, {
     String? fcmToken,
+    String? tipoUsuario,
   }) async {
     try {
-      final body = {'email': email, 'nombre': nombre};
+      final body = {'email': email, 'nombre': nombre, if (tipoUsuario != null) 'tipoUsuario': tipoUsuario};
 
       // Agregar FCM token si está disponible
       if (fcmToken != null && fcmToken.isNotEmpty) {
@@ -291,10 +303,11 @@ class AuthService {
   }
 
   // ✅ Verificar si cédula ya existe (validación en tiempo real)
-  Future<Map<String, dynamic>> checkCedula(String cedula) async {
+  // tipo: el perfil que está creando (una persona puede tener una cuenta de cada perfil)
+  Future<Map<String, dynamic>> checkCedula(String cedula, {String? tipo}) async {
     try {
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/auth/check-cedula/$cedula'),
+        Uri.parse('${AppConstants.baseUrl}/auth/check-cedula/$cedula${tipo != null ? '?tipo=$tipo' : ''}'),
         headers: {'Content-Type': 'application/json'},
       );
 
@@ -310,10 +323,10 @@ class AuthService {
   }
 
   // ✅ Verificar si email ya existe (validación en tiempo real)
-  Future<Map<String, dynamic>> checkEmail(String email) async {
+  Future<Map<String, dynamic>> checkEmail(String email, {String? tipo}) async {
     try {
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/auth/check-email/$email'),
+        Uri.parse('${AppConstants.baseUrl}/auth/check-email/$email${tipo != null ? '?tipo=$tipo' : ''}'),
         headers: {'Content-Type': 'application/json'},
       );
 

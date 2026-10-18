@@ -20,6 +20,7 @@ import '../../widgets/ui/ui.dart';
 import '../pedidos/mis_pedidos_screen.dart' show TarjetaPedido;
 import '../profile/perfil_screen.dart';
 import '../profile/permisos_screen.dart';
+import '../suscripcion/mi_suscripcion_screen.dart';
 import 'entrega_screen.dart';
 import 'vehiculo_screen.dart';
 
@@ -270,6 +271,7 @@ class _EntregasState extends State<_Entregas> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
           const AvisoPermisos(rol: 'repartidor'),
+          const AvisoSuscripcion(margen: EdgeInsets.only(bottom: 12)),
           // En línea
           TarjetaValle(
             color: perfil.disponible ? c.primario.withValues(alpha: 0.12) : null,

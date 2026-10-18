@@ -9,7 +9,7 @@ import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
 import '../../widgets/mapa_pedido.dart';
 import '../../widgets/ui/ui.dart';
-import '../pedidos/pedido_detalle_screen.dart' show TarjetaRepartidor;
+import '../pedidos/pedido_detalle_screen.dart' show TarjetaRepartidor, pedirCalificacion;
 import 'pedidos_negocio_screen.dart';
 
 /// Un pedido visto por el negocio: cliente, productos con sus notas (lo que necesita la cocina), entrega, pago,
@@ -152,12 +152,13 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
               Row(children: [Expanded(child: Text('Envío (para el repartidor)', style: tema.bodyMedium)), Text(Formato.dinero(p.costoEnvio))]),
               const SizedBox(height: 4),
               Row(children: [Expanded(child: Text('Total que paga el cliente', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))), Text(Formato.dinero(p.total), style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))]),
-              // Lo que es del negocio: los productos menos la comisión de ValleXpress (el envío es del repartidor)
+              // Lo que es del negocio: los productos (el envío es del repartidor). Los pedidos de antes del 18 de octubre
+              // de 2026 tenían la comisión de ValleXpress; desde entonces se cobra una suscripción mensual.
               if (p.recibeNegocio != null) ...[
                 const SizedBox(height: 10),
                 Divider(height: 1, color: c.borde),
                 const SizedBox(height: 10),
-                Row(children: [
+                if ((p.comision ?? 0) > 0) Row(children: [
                   Expanded(child: Text('Comisión ValleXpress (${(p.comisionPorcentaje ?? 0).toStringAsFixed((p.comisionPorcentaje ?? 0) % 1 == 0 ? 0 : 1)} %)', style: tema.bodyMedium?.copyWith(color: c.textoSuave))),
                   Text('−${Formato.dinero(p.comision ?? 0)}', style: tema.bodyMedium?.copyWith(color: c.textoSuave)),
                 ]),
@@ -234,6 +235,32 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
             haciaNegocio: e == EstadoPedido.enCamino,
             iconoRepartidor: p.repartidor?.vehiculo?.icono ?? Icons.two_wheeler_rounded,
           ),
+        ],
+        // El negocio califica al repartidor (desde que recoge el pedido)
+        if (p.negocioPuedeCalificarRepartidor) ...[
+          const SizedBox(height: 12),
+          BotonValle(
+            texto: '¿Qué tal ${p.repartidor!.nombre}? Califícalo',
+            icono: Icons.star_outline_rounded,
+            tipo: TipoBoton.secundario,
+            onPressed: () async {
+              final r = await pedirCalificacion(context, nombre: p.repartidor!.nombre, pregunta: '¿Cómo te atendió ${p.repartidor!.nombre}?');
+              if (r == null || !mounted) return;
+              try {
+                await PedidosService.calificarRepartidorComoNegocio(p.id, puntuacion: r.estrellas, comentario: r.comentario);
+                if (mounted) mostrarExito(context, '¡Gracias! Nos ayuda a mantener buenos repartidores');
+                _cargar();
+              } catch (e) {
+                if (mounted) mostrarError(context, textoDeError(e));
+              }
+            },
+          ),
+        ] else if (p.calificacionRepartidorNegocio != null) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            Text('Calificaste al repartidor: ', style: tema.bodySmall),
+            for (var i = 1; i <= 5; i++) Icon(i <= p.calificacionRepartidorNegocio! ? Icons.star_rounded : Icons.star_border_rounded, size: 18, color: AppTheme.accentColor),
+          ]),
         ],
         if (p.calificacion != null) ...[
           const EncabezadoSeccion('Calificación del cliente'),
