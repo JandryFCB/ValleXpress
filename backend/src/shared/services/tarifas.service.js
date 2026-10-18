@@ -3,7 +3,8 @@ const { distanciaKm } = require('../utils/geo');
 
 // TARIFAS de ValleXpress (TCONFIGURACIONES, las cambia el administrador):
 //   envío    = base + porKm × km de ruta (línea recta × factor de ruta), redondeado hacia ARRIBA a 5 centavos
-//   comisión = subtotal de productos × porcentaje (la paga el negocio; el cliente no paga de más)
+//   comisión = subtotal de productos × porcentaje. Desde 2026-10-18 es 0: ValleXpress cobra una suscripción mensual
+//              a vendedores y repartidores (suscripcion.service.js); ya no se puede cambiar desde el panel.
 // El repartidor se lleva el 100 % del envío. Precios con IVA incluido: aquí no se suman impuestos.
 // Todo se calcula en CENTAVOS (enteros) para no arrastrar errores de punto flotante.
 const CLAVES = Object.freeze({
@@ -18,7 +19,6 @@ const LIMITES = Object.freeze({
   envioBase: [0, 20],
   envioPorKm: [0, 5],
   factorRuta: [1, 3],
-  comisionPorcentaje: [0, 50],
 });
 
 const numero = (v, porDefecto) => (Number.isFinite(Number(v)) ? Number(v) : porDefecto);
@@ -47,7 +47,7 @@ async function fijar(cambios, { transaction } = {}) {
   const actual = await tarifas();
   const hechos = {};
   for (const [campo, valor] of Object.entries(cambios)) {
-    if (!CLAVES[campo] || valor === undefined || Number(valor) === actual[campo]) continue;
+    if (!CLAVES[campo] || !LIMITES[campo] || valor === undefined || Number(valor) === actual[campo]) continue;   // la comisión ya no se cambia
     await ConfiguracionService.fijar(CLAVES[campo][0], Number(valor), { transaction });
     hechos[campo] = Number(valor);
   }

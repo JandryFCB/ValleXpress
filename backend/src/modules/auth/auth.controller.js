@@ -68,14 +68,19 @@ const verifyEmailCode = asyncHandler(async (req, res) => {
   res.json(await authService.verificarCodigoEmail(req.body));
 });
 
+// ?tipo=repartidor: la cédula o el correo solo están "ocupados" si ya tienen ese perfil (una persona puede tener
+// una cuenta de cada perfil). "otroPerfil" = existe con otro perfil: puede agregar este con los mismos datos.
+const OTROPERFIL = 'Ya tienes una cuenta: puedes crear este perfil con tu misma cédula y tu mismo correo';
 const checkCedula = asyncHandler(async (req, res) => {
-  const exists = await authService.existeCedula(req.params.cedula);
-  res.json({ exists, message: exists ? 'Esta cédula ya está registrada' : 'Cédula disponible' });
+  const { tipo } = req.query;
+  const { exists, otroPerfil } = await authService.existeCedula(req.params.cedula, tipo);
+  res.json({ exists, otroPerfil, message: exists ? (tipo ? `Ya tienes una cuenta de ${tipo} con esta cédula` : 'Esta cédula ya está registrada') : otroPerfil ? OTROPERFIL : 'Cédula disponible' });
 });
 
 const checkEmail = asyncHandler(async (req, res) => {
-  const exists = await authService.existeEmail(req.params.email);
-  res.json({ exists, message: exists ? 'Este email ya está registrado' : 'Email disponible' });
+  const { tipo } = req.query;
+  const { exists, otroPerfil } = await authService.existeEmail(req.params.email, tipo);
+  res.json({ exists, otroPerfil, message: exists ? (tipo ? `Ya tienes una cuenta de ${tipo} con este correo` : 'Este email ya está registrado') : otroPerfil ? OTROPERFIL : 'Email disponible' });
 });
 
 // Perfiles con el registro abierto: { cliente: true, vendedor: true, repartidor: false }

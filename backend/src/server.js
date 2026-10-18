@@ -72,6 +72,7 @@ const notificacionesRoutes = require('./modules/notificaciones/notificacion.rout
 const repartidorRoutes = require('./modules/repartidores/repartidor.routes');
 const adminRoutes = require('./modules/admin/admin.routes');
 const legalRoutes = require('./modules/legal/legal.routes');
+const suscripcionRoutes = require('./modules/suscripciones/suscripcion.routes');
 const legalWeb = require('./modules/legal/legal.web');
 const registrarUbicacionSocket = require('./modules/repartidores/ubicacion.socket');
 
@@ -211,6 +212,7 @@ app.use('/api/notificaciones', notificacionesRoutes);
 app.use('/api/repartidor', repartidorRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/legal', legalRoutes);
+app.use('/api/suscripcion', suscripcionRoutes);
 
 // Páginas web públicas: términos, privacidad y cómo eliminar la cuenta (las URL que pide Google Play)
 app.use('/legal', limite.general, legalWeb);

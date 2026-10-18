@@ -18,6 +18,8 @@ router.post('/revision', controller.revision);
 router.get('/documentos', controller.documentos);
 router.put('/documentos/:tipo', [param('tipo').isIn(require('./documentos.service').TIPOS).withMessage('Documento inválido'), body('imagen').isString().notEmpty().withMessage('Falta la foto del documento')], validar, controller.subirDocumento);
 router.patch('/disponibilidad', schema.disponibilidad, validar, controller.disponibilidad);
+// Lo que opinan de él clientes y negocios, y las advertencias del administrador
+router.get('/reputacion', controller.reputacion);
 router.put('/ubicacion', schema.ubicacion, validar, controller.ubicacion);
 
 router.get('/pedidos/libres', controller.libres);

@@ -26,4 +26,7 @@ const DocumentosService = require('./documentos.service');
 const documentos = asyncHandler(async (req, res) => res.json(await DocumentosService.documentos(u(req), req)));
 const subirDocumento = asyncHandler(async (req, res) => res.json(await DocumentosService.subir(u(req), req.params.tipo, req.body.imagen, req)));
 
-module.exports = { documentos, subirDocumento, miPerfil, crear, actualizar, revision, disponibilidad, ubicacion, libres, misEntregas, aceptar, recoger, entregar };
+const reputacion = asyncHandler(async (req, res) => res.json(await require('./reputacion.service').reputacion(req.usuario.id)));
+
+module.exports = {
+  reputacion, documentos, subirDocumento, miPerfil, crear, actualizar, revision, disponibilidad, ubicacion, libres, misEntregas, aceptar, recoger, entregar };

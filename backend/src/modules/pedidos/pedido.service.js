@@ -17,7 +17,7 @@ const { auditar } = require('../../shared/services/log.service');
 const { distanciaKm } = require('../../shared/utils/geo');
 const TarifasService = require('../../shared/services/tarifas.service');
 const ZonaService = require('../../shared/services/zona.service');
-const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const SuscripcionService = require('../suscripciones/suscripcion.service');
 const {
   ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO, VEHICULOAAPI,
 } = require('../../shared/constants/codigos');
@@ -95,7 +95,7 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
   const salida = [];
   for (const p of lista) {
     const n = p.negocio;
-    const calif = (destino) => (p.calificaciones || []).find((c) => c.destino === destino);
+    const calif = (destino, origen = 'CLIENTE') => (p.calificaciones || []).find((c) => c.destino === destino && (c.origen || 'CLIENTE') === origen);
     const item = {
       id: Number(p.id),
       estado: ESTADOPEDIDOAAPI[p.estado],
@@ -142,6 +142,10 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
       repartidor: repartidorApi(p),
       calificacion: calif('NEGOCIO') ? { puntuacion: calif('NEGOCIO').puntuacion, comentario: calif('NEGOCIO').comentario } : null,
       calificacionRepartidor: calif('REPARTIDOR') ? { puntuacion: calif('REPARTIDOR').puntuacion, comentario: calif('REPARTIDOR').comentario } : null,
+      // Lo que el negocio dijo del repartidor (la ven el negocio y el administrador)
+      ...((rol === 'vendedor' || rol === 'administrador') && {
+        calificacionRepartidorNegocio: calif('REPARTIDOR', 'NEGOCIO') ? { puntuacion: calif('REPARTIDOR', 'NEGOCIO').puntuacion, comentario: calif('REPARTIDOR', 'NEGOCIO').comentario } : null,
+      }),
       ...(['vendedor', 'repartidor', 'administrador'].includes(rol) && { cliente: persona(p.cliente) }),
     };
     if (rol === 'candidato') delete item.calificacion;
@@ -283,10 +287,16 @@ async function crear(cliente, datos, req) {
   // Una dirección guardada antes de que se achicara la zona no sirve para pedir
   const destino = await Direccion.findOne({ where: { id: datos.direccionId, personaId: cliente.personaId }, attributes: ['latitud', 'longitud'] });
   if (destino) await ZonaService.exigirDentro({ lat: num(destino.latitud), lng: num(destino.longitud) });
-  // Un negocio con la comisión vencida sin pagar no recibe pedidos (al cliente no se le explica el motivo)
-  if ((await LiquidacionService.conDeudaVencida([Number(datos.negocioId)])).size) {
+  // Un negocio cuyo dueño tiene la suscripción vencida no recibe pedidos (al cliente no se le explica el motivo)
+  if ((await SuscripcionService.negociosBloqueados([Number(datos.negocioId)])).size) {
     throw AppError.conflict('El negocio no está recibiendo pedidos ahora', 'NEGOCIOCONDEUDA');
   }
+  // Con su cuenta de cliente no puede pedirle a su propio negocio (la misma persona con otro perfil)
+  const [propio] = await sequelize.query(`
+    SELECT 1 FROM tnegocios n JOIN tusuarios d ON d.cusuario = n.cusuario AND d.fhasta = '2999-12-31 00:00:00-05'
+     WHERE n.cnegocio = :negocio AND n.fhasta = '2999-12-31 00:00:00-05' AND d.cpersona = :persona LIMIT 1`,
+  { replacements: { negocio: Number(datos.negocioId), persona: cliente.personaId }, type: QueryTypes.SELECT });
+  if (propio) throw AppError.conflict('No puedes hacer pedidos a tu propio negocio', 'PEDIDOPROPIO');
   const { pedido, negocio } = await withTransaction(async (t) => {
     const negocio = await Negocio.findOne({
       where: { id: datos.negocioId },
@@ -322,7 +332,8 @@ async function crear(cliente, datos, req) {
       if (p.controlaStock) await descontarStock(p, it.cantidad, t);
     }
 
-    // El envío es del repartidor; la comisión de ValleXpress sale de lo vendido en productos (el cliente no la ve)
+    // El envío es del repartidor. Desde 2026-10-18 ValleXpress cobra una suscripción mensual en vez de comisión
+    // (COMISIONPORCENTAJE = 0): la columna queda por compatibilidad con los pedidos anteriores.
     const comision = TarifasService.comisionDe(subtotal, tarifas.comisionPorcentaje);
     const nuevo = await Pedido.create({
       clienteId: cliente.id,
@@ -486,10 +497,23 @@ async function listarDelRepartidor(usuarioId, query, req) {
   return listar({ repartidorId: usuarioId, ...(estado && { estado }) }, query, req, 'repartidor');
 }
 
+// ¿El repartidor es la misma persona que pidió el pedido o que es dueña del negocio? (una persona puede tener las tres cuentas)
+async function esDeLaMismaPersona(repartidorId, p, t) {
+  const [fila] = await sequelize.query(`
+    SELECT 1 FROM tusuarios r
+      JOIN tusuarios o ON o.cpersona = r.cpersona AND o.fhasta = '2999-12-31 00:00:00-05'
+     WHERE r.cusuario = :repartidor AND r.fhasta = '2999-12-31 00:00:00-05'
+       AND (o.cusuario = :cliente OR o.cusuario = (SELECT cusuario FROM tnegocios WHERE cnegocio = :negocio AND fhasta = '2999-12-31 00:00:00-05'))
+     LIMIT 1`,
+  { replacements: { repartidor: repartidorId, cliente: p.clienteId, negocio: p.negocioId }, type: QueryTypes.SELECT, transaction: t });
+  return !!fila;
+}
+
 async function aceptar(usuario, id, req) {
   const r = await RepartidorService.exigirPerfil(usuario.id);
   RepartidorService.exigirAprobado(r);
   if (!r.estado?.disponible) throw AppError.conflict('Conéctate ("En línea") para aceptar pedidos', 'REPARTIDORDESCONECTADO');
+  await SuscripcionService.exigirAlDia(usuario.id);
 
   const pedido = await withTransaction(async (t) => {
     // Una entrega a la vez: así el cliente sabe que va directo hacia él
@@ -500,6 +524,7 @@ async function aceptar(usuario, id, req) {
     if (!p) throw noEncontrado();
     if (p.repartidorId) throw AppError.conflict('Otro repartidor ya tomó este pedido', 'PEDIDOASIGNADO');
     if (p.estado !== E.LISTO) throw AppError.conflict('El negocio todavía no tiene listo este pedido', 'PEDIDONOLISTO');
+    if (await esDeLaMismaPersona(usuario.id, p, t)) throw AppError.conflict('No puedes entregar un pedido tuyo ni de tu propio negocio', 'PEDIDOPROPIO');
     validarTransicion(p.estado, E.ENCAMINO, 'repartidor');
     await p.update({ estado: E.ENCAMINO, repartidorId: usuario.id }, { transaction: t });
     return p;
@@ -618,11 +643,11 @@ async function calificar(usuario, id, { puntuacion, comentario, destino = 'negoc
   if (![E.ENTREGADO, E.RECIBIDO].includes(p.estado)) throw AppError.conflict('Podrás calificar cuando recibas tu pedido', 'PEDIDONOENTREGADO');
   const DESTINO = String(destino).toUpperCase();
   if (DESTINO === 'REPARTIDOR' && !p.repartidorId) throw AppError.badRequest('Este pedido no tuvo repartidor', 'SINREPARTIDOR');
-  if (await Calificacion.findOne({ where: { pedidoId: id, destino: DESTINO } })) throw AppError.conflict('Ya calificaste este pedido', 'YACALIFICADO');
+  if (await Calificacion.findOne({ where: { pedidoId: id, destino: DESTINO, origen: 'CLIENTE' } })) throw AppError.conflict('Ya calificaste este pedido', 'YACALIFICADO');
 
   await withTransaction(async (t) => {
     await Calificacion.create({
-      pedidoId: p.id, destino: DESTINO, autorId: usuario.id, puntuacion, comentario: comentario?.trim() || null,
+      pedidoId: p.id, destino: DESTINO, origen: 'CLIENTE', autorId: usuario.id, puntuacion, comentario: comentario?.trim() || null,
       negocioId: DESTINO === 'NEGOCIO' ? p.negocioId : null, repartidorId: DESTINO === 'REPARTIDOR' ? p.repartidorId : null,
     }, { transaction: t });
     if (DESTINO === 'NEGOCIO') await recalcularNegocio(p.negocioId, t);
@@ -630,7 +655,39 @@ async function calificar(usuario, id, { puntuacion, comentario, destino = 'negoc
   }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'PEDIDOCALIFICADO', entidad: 'CALIFICACIONES', entidadId: id, detalle: { destino: DESTINO, puntuacion }, req });
+  if (DESTINO === 'REPARTIDOR') await avisarCalificacionBaja(req, p, puntuacion, comentario, 'el cliente');
   return aApi(await cargar(id), req, { detalle: true });
+}
+
+// El negocio califica al repartidor que se llevó su pedido (desde que lo recogió)
+async function calificarRepartidorComoNegocio(usuario, id, { puntuacion, comentario }, req) {
+  const p = await Pedido.findOne({ where: { id }, include: [{ model: Negocio, as: 'negocio', attributes: ['id', 'duenoId', 'nombre'] }] });
+  if (!p || p.negocio?.duenoId !== usuario.id) throw noEncontrado();
+  if (!p.repartidorId) throw AppError.badRequest('Este pedido no tuvo repartidor', 'SINREPARTIDOR');
+  if (![E.RECOGIDO, E.ENTREGADO, E.RECIBIDO].includes(p.estado)) throw AppError.conflict('Podrás calificar al repartidor cuando recoja el pedido', 'PEDIDONORECOGIDO');
+  if (await Calificacion.findOne({ where: { pedidoId: id, destino: 'REPARTIDOR', origen: 'NEGOCIO' } })) throw AppError.conflict('Ya calificaste al repartidor de este pedido', 'YACALIFICADO');
+
+  await withTransaction(async (t) => {
+    await Calificacion.create({
+      pedidoId: p.id, destino: 'REPARTIDOR', origen: 'NEGOCIO', autorId: usuario.id, puntuacion, comentario: comentario?.trim() || null,
+      repartidorId: p.repartidorId,
+    }, { transaction: t });
+    await recalcularRepartidor(p.repartidorId, t);
+  }, { usuarioId: usuario.id });
+
+  auditar({ usuarioId: usuario.id, accion: 'REPARTIDORCALIFICADO', entidad: 'CALIFICACIONES', entidadId: id, detalle: { origen: 'NEGOCIO', puntuacion }, req });
+  await avisarCalificacionBaja(req, p, puntuacion, comentario, p.negocio.nombre);
+  return aApi(await cargar(id), req, { rol: 'vendedor', detalle: true });
+}
+
+// 1 o 2 estrellas al repartidor: los administradores se enteran (para advertirle o darlo de baja)
+async function avisarCalificacionBaja(req, p, puntuacion, comentario, quien) {
+  if (puntuacion > 2) return;
+  await NotificacionService.notificarAdministradores({
+    io: req.io, tipo: 'calificacion_baja', titulo: `Calificación baja a un repartidor (${puntuacion}★)`,
+    mensaje: `Pedido #${p.id}: ${quien} calificó a ${p.repartidorId} con ${puntuacion}★${comentario?.trim() ? `: "${comentario.trim()}"` : ''}`,
+    pedidoId: p.id, datos: { repartidor: p.repartidorId },
+  });
 }
 
 // Métodos de pago que la app puede ofrecer hoy
@@ -643,7 +700,7 @@ async function metodosPago() {
 }
 
 module.exports = {
-  crear, cotizar, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, metodosPago,
+  crear, cotizar, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, calificarRepartidorComoNegocio, metodosPago,
   libresParaRepartidor, listarDelRepartidor, aceptar,
   recoger: (usuario, id, req) => pasoRepartidor(usuario, id, E.RECOGIDO, req),
   entregar: (usuario, id, req) => pasoRepartidor(usuario, id, E.ENTREGADO, req),

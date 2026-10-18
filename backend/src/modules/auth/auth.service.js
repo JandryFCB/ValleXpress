@@ -14,7 +14,7 @@ const NegocioService = require('../negocios/negocio.service');
 const RepartidorService = require('../repartidores/repartidor.service');
 const LegalService = require('../legal/legal.service');
 const DocumentosService = require('../repartidores/documentos.service');
-const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const SuscripcionService = require('../suscripciones/suscripcion.service');
 const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
@@ -107,6 +107,29 @@ async function enviarCorreoCodigo(tipo, { email, codigo, nombre }, req) {
 // ---------------------------------------------------------------------------------------------
 // Crea la persona, la cuenta (el CUSUARIO lo genera la BD a partir del nombre) y el teléfono principal.
 // El perfil de negocio (vendedor) o de reparto (repartidor) se completa en sus propios módulos.
+// Varios perfiles por persona: la persona es una sola (su cédula y su correo) y tiene a lo sumo una cuenta de cada
+// perfil (cliente, vendedor, repartidor). Devuelve la persona si ya existe con ESA cédula y ESE correo y todavía no
+// tiene este perfil; null si es nueva. Una cuenta dada de baja o bloqueada también cuenta (no se puede volver a
+// registrar el mismo perfil para saltarse una baja).
+const NOMBREPERFIL = { cliente: 'cliente', vendedor: 'vendedor', repartidor: 'repartidor', administrador: 'administrador' };
+const perfilDuplicado = (tipo) => AppError.conflict(
+  `Ya tienes una cuenta de ${NOMBREPERFIL[tipo] || tipo} con esta cédula y este correo. Inicia sesión con ella`, 'PERFILDUPLICADO');
+
+async function personaParaRegistro(tipo, { email, cedula }, t) {
+  const porCorreo = await Persona.findOne({ where: { correo: email }, transaction: t });
+  const porCedula = await Persona.findOne({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: cedula }, transaction: t });
+  if (!porCorreo && !porCedula) return null;
+  if (porCorreo && porCedula && String(porCorreo.id) === String(porCedula.id)) {
+    const cuentas = await Usuario.findAll({ where: { personaId: porCorreo.id }, attributes: ['id', 'rol'], transaction: t });
+    if (cuentas.some((c) => c.tipoUsuario === tipo)) throw perfilDuplicado(tipo);
+    return porCorreo;
+  }
+  if (porCedula) {
+    throw AppError.conflict('Esta cédula ya está registrada con otro correo. Para crear otro perfil usa el mismo correo de tu cuenta', 'CEDULADUPLICADA');
+  }
+  throw AppError.conflict('Este correo ya está registrado con otra cédula', 'EMAILDUPLICADO');
+}
+
 // Crea persona, cuenta, teléfono principal y, según el rol, el negocio o el perfil de reparto, dentro de la
 // transacción "t". La usan el registro público (con el correo ya verificado) y el administrador.
 // Si el negocio o el repartidor nacen aprobados lo decide el permiso de su perfil, salvo que se indique "aprobado".
@@ -115,13 +138,13 @@ async function crearCuenta(tipo, datos, t, { correoVerificadoEn = new Date(), ap
   const telefono = normalizarTelefono(datos.telefono);
   const ahora = new Date();
 
-  // Datos únicos entre las personas vigentes
-  if (await Persona.findOne({ where: { correo: email }, transaction: t })) throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
-  if (await Persona.findOne({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: datos.cedula }, transaction: t })) throw AppError.conflict('La cédula ya está registrada', 'CEDULADUPLICADA');
-  if (await Telefono.findOne({ where: { numero: telefono }, transaction: t })) throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
+  // Una persona (cédula + correo) puede tener una cuenta por perfil: si ya existe se le agrega este perfil
+  const existente = await personaParaRegistro(tipo, { email, cedula: datos.cedula }, t);
+  const telefonoUsado = await Telefono.findOne({ where: { numero: telefono }, transaction: t });
+  if (telefonoUsado && String(telefonoUsado.personaId) !== String(existente?.id)) throw AppError.conflict('El teléfono ya está registrado', 'TELEFONODUPLICADO');
 
   // Persona -> cuenta -> teléfono (la BD asigna CPERSONA desde el 2 y genera el CUSUARIO)
-  const persona = await Persona.create({
+  const persona = existente || await Persona.create({
     tipoDoc: TIPODOCCEDULA,
     numeroDoc: datos.cedula,
     nombres: datos.nombre.trim(),
@@ -138,7 +161,7 @@ async function crearCuenta(tipo, datos, t, { correoVerificadoEn = new Date(), ap
     terminosVer: LegalService.versionDe(`terminos-${tipo}`),
   }, { transaction: t });
 
-  await Telefono.create({ personaId: persona.id, numero: telefono, principal: true }, { transaction: t });
+  if (!telefonoUsado) await Telefono.create({ personaId: persona.id, numero: telefono, principal: !existente }, { transaction: t });
 
   // El vendedor nace con su negocio (nombre y categoría; el resto lo completa en "Mi negocio")
   if (tipo === 'vendedor' && datos.nombreNegocio?.trim()) {
@@ -188,40 +211,73 @@ async function registrar(datos, req) {
 // ---------------------------------------------------------------------------------------------
 // Login (con bloqueo temporal por intentos fallidos)
 // ---------------------------------------------------------------------------------------------
-// "email" puede traer el correo o el usuario (jcayapa): si lleva @ es un correo
-async function login({ email: identificador, password }, req) {
+// "email" puede traer el correo o el usuario (jcayapa): si lleva @ es un correo.
+// Una persona puede tener varias cuentas con el mismo correo (una por perfil): se entra a la que tenga esa clave; si
+// varias la comparten, la app pregunta con cuál ("ELEGIRCUENTA") y repite el login con "tipoUsuario".
+async function login({ email: identificador, password, tipoUsuario }, req) {
   const id = normalizarEmail(identificador);
-  const usuario = await Usuario.findOne({ where: id.includes('@') ? { email: id } : { id } });
+  let candidatos = id.includes('@') ? await Usuario.findAll({ where: { email: id }, order: [['rol', 'ASC']] }) : [await Usuario.findOne({ where: { id } })].filter(Boolean);
+  if (tipoUsuario) candidatos = candidatos.filter((c) => c.tipoUsuario === tipoUsuario);
 
-  if (!usuario) {
+  if (!candidatos.length) {
     await compararClave(password, HASHRELLENO);     // mismo tiempo de respuesta exista o no la cuenta
     throw AppError.unauthorized('Credenciales inválidas', 'CREDENCIALESINVALIDAS');
   }
+
+  let usuario = candidatos[0];
+  if (candidatos.length > 1) {
+    // Varias cuentas: cuentan las que pueden entrar ahora (activas y sin bloqueo temporal)
+    const ahora = new Date();
+    const habilitadas = candidatos.filter((c) => c.activo && !(c.bloqueadoHasta && new Date(c.bloqueadoHasta) > ahora));
+    const coinciden = [];
+    for (const c of habilitadas) if (await c.verificarClave(password)) coinciden.push(c);
+    if (coinciden.length > 1) {
+      throw AppError.conflict('Tienes varias cuentas con este correo: elige con cuál quieres entrar', 'ELEGIRCUENTA', {
+        cuentas: coinciden.map((c) => ({ usuario: c.id, tipoUsuario: c.tipoUsuario })),
+      });
+    }
+    if (coinciden.length === 1) return entrar(coinciden[0], req);
+    // Ninguna coincide: si todas están inactivas o bloqueadas se dice eso; si no, cuenta como intento fallido
+    if (!habilitadas.length) {
+      if (!usuario.activo) throw cuentaInactiva(usuario);
+      throw bloqueoTemporal(usuario.bloqueadoHasta);
+    }
+    for (const otra of habilitadas.slice(1)) await registrarFallo(otra, req);
+    return registrarFallo(habilitadas[0], req, { lanzar: true });
+  }
+
   // Cuenta bloqueada o dada de baja por el administrador: se dice claramente y a quién escribir
   if (!usuario.activo) throw cuentaInactiva(usuario);
 
   if (usuario.bloqueadoHasta && new Date(usuario.bloqueadoHasta) > new Date()) throw bloqueoTemporal(usuario.bloqueadoHasta);
 
-  if (!(await usuario.verificarClave(password))) {
-    const intentos = usuario.intentosFallidos + 1;
-    const bloquear = intentos >= MAXINTENTOSFALLIDOS;
-    const hasta = new Date(Date.now() + MINUTOSBLOQUEO * 60 * 1000);
-    await UsuarioAcceso.update({ intentos: bloquear ? 0 : intentos, bloqueadoHasta: bloquear ? hasta : null }, { where: { id: usuario.id } });
-    auditar({ usuarioId: usuario.id, accion: 'LOGINFALLIDO', entidad: 'USUARIOS', entidadId: usuario.id, detalle: { intentos, bloqueado: bloquear }, req });
-    if (bloquear) {
-      Correo.bloqueoTemporal({ para: usuario.email, nombre: usuario.nombre, minutos: MINUTOSBLOQUEO });
-      throw bloqueoTemporal(hasta);
-    }
-    // Avisa antes de bloquear: en los dos últimos intentos dice cuántos le quedan
-    const restantes = MAXINTENTOSFALLIDOS - intentos;
-    if (restantes > 2) throw AppError.unauthorized('Credenciales inválidas', 'CREDENCIALESINVALIDAS');
-    throw AppError.unauthorized(
-      `Contraseña incorrecta. Te ${restantes === 1 ? 'queda 1 intento' : `quedan ${restantes} intentos`} antes de que bloqueemos tu cuenta ${MINUTOSBLOQUEO} minutos`,
-      'CREDENCIALESINVALIDAS',
-      { intentosRestantes: restantes },
-    );
-  }
+  if (!(await usuario.verificarClave(password))) return registrarFallo(usuario, req, { lanzar: true });
+  return entrar(usuario, req);
+}
 
+// Clave incorrecta: suma el intento y, al llegar al máximo, bloquea la cuenta unos minutos
+async function registrarFallo(usuario, req, { lanzar = false } = {}) {
+  const intentos = usuario.intentosFallidos + 1;
+  const bloquear = intentos >= MAXINTENTOSFALLIDOS;
+  const hasta = new Date(Date.now() + MINUTOSBLOQUEO * 60 * 1000);
+  await UsuarioAcceso.update({ intentos: bloquear ? 0 : intentos, bloqueadoHasta: bloquear ? hasta : null }, { where: { id: usuario.id } });
+  auditar({ usuarioId: usuario.id, accion: 'LOGINFALLIDO', entidad: 'USUARIOS', entidadId: usuario.id, detalle: { intentos, bloqueado: bloquear }, req });
+  if (!lanzar) return;
+  if (bloquear) {
+    Correo.bloqueoTemporal({ para: usuario.email, nombre: usuario.nombre, minutos: MINUTOSBLOQUEO });
+    throw bloqueoTemporal(hasta);
+  }
+  // Avisa antes de bloquear: en los dos últimos intentos dice cuántos le quedan
+  const restantes = MAXINTENTOSFALLIDOS - intentos;
+  if (restantes > 2) throw AppError.unauthorized('Credenciales inválidas', 'CREDENCIALESINVALIDAS');
+  throw AppError.unauthorized(
+    `Contraseña incorrecta. Te ${restantes === 1 ? 'queda 1 intento' : `quedan ${restantes} intentos`} antes de que bloqueemos tu cuenta ${MINUTOSBLOQUEO} minutos`,
+    'CREDENCIALESINVALIDAS',
+    { intentosRestantes: restantes },
+  );
+}
+
+async function entrar(usuario, req) {
   await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null, ultimaConexion: new Date(), ultimaIp: ipDe(req) }, { where: { id: usuario.id } });
   auditar({ usuarioId: usuario.id, accion: 'LOGIN', entidad: 'USUARIOS', entidadId: usuario.id, req });
   return { usuario: usuarioPublico(usuario), ...(await abrirSesion(usuario, req)) };
@@ -237,15 +293,37 @@ async function refrescar({ refreshToken }, req) {
   return { usuario: usuarioPublico(usuario), token: TokenService.crear(usuario), refreshToken: nuevo, expiresIn: TokenService.segundosAcceso() };
 }
 
+// El repartidor con una entrega en curso (aceptada o recogida) no puede cerrar sesión: el cliente y el negocio lo
+// están esperando y su ubicación se dejaría de ver. Al cerrar sesión deja de estar "En línea".
+async function exigirSinEntregaEnCurso(usuarioId) {
+  if (!usuarioId) return;
+  const [f] = await consulta(
+    `SELECT cpedido FROM tpedidos WHERE fhasta = '2999-12-31 00:00:00-05' AND cusuario_repartidor = :u AND cestatuspedido IN (:estados) LIMIT 1`,
+    { u: usuarioId, estados: [E.ENCAMINO, E.RECOGIDO] },
+  );
+  if (f) {
+    throw AppError.conflict(`Tienes la entrega del pedido #${f.cpedido} en curso. Termínala antes de cerrar sesión`, 'ENTREGAENCURSO', { pedidoId: Number(f.cpedido) });
+  }
+}
+const desconectarRepartidor = (usuarioId) => sequelize.query(
+  'UPDATE trepartidoresestado SET estadisponible = FALSE, fultimocambio = now() WHERE cusuario = :u AND estadisponible',
+  { replacements: { u: usuarioId } },
+).catch(() => {});
+
 // Cierra la sesión de este equipo
 async function cerrarSesion({ refreshToken }, req) {
+  const usuarioId = await SesionService.usuarioDe(refreshToken);
+  await exigirSinEntregaEnCurso(usuarioId);
   await SesionService.cerrar(refreshToken);
-  auditar({ accion: 'LOGOUT', entidad: 'USUARIOS', req });
+  if (usuarioId) await desconectarRepartidor(usuarioId);
+  auditar({ usuarioId, accion: 'LOGOUT', entidad: 'USUARIOS', req });
 }
 
 // Cierra la sesión en todos los equipos del usuario
 async function cerrarTodasLasSesiones(usuarioId, req) {
+  await exigirSinEntregaEnCurso(usuarioId);
   const cerradas = await SesionService.cerrarTodas(usuarioId, 'CIERRETODAS');
+  await desconectarRepartidor(usuarioId);
   auditar({ usuarioId, accion: 'LOGOUTTODAS', entidad: 'USUARIOS', entidadId: usuarioId, detalle: { cerradas }, req });
   return { cerradas };
 }
@@ -345,11 +423,11 @@ async function eliminarCuenta(id, { password }, req) {
   );
   if (Number(enCurso.total) > 0) throw AppError.conflict('Tienes un pedido en curso. Espera a que termine para eliminar tu cuenta', 'PEDIDOENCURSO');
 
-  for (const n of negocios) {
-    const cuenta = await LiquidacionService.estadoDeCuenta(n, req);
-    const enCursoSemana = cuenta.semanas.find((s) => s.estado === 'en_curso')?.comision || 0;
-    const debe = Number((cuenta.saldoPendiente + enCursoSemana).toFixed(2));
-    if (debe > 0) throw AppError.conflict(`Tienes $${debe.toFixed(2)} de comisiones por pagar. Págalas en "Mis cuentas" antes de eliminar tu cuenta`, 'COMISIONESPENDIENTES');
+  // Vendedor o repartidor con meses de suscripción vencidos: primero se pone al día
+  if (['vendedor', 'repartidor'].includes(usuario.tipoUsuario)) {
+    const cuenta = await SuscripcionService.estado(id);
+    const debe = cuenta.meses.filter((m) => m.estado === 'vencido').reduce((t, m) => t + m.monto, 0);
+    if (debe > 0) throw AppError.conflict(`Tienes $${debe.toFixed(2)} de tu suscripción por pagar. Págala en "Mi suscripción" antes de eliminar tu cuenta`, 'SUSCRIPCIONPENDIENTE');
   }
 
   const fotos = await withTransaction(async (t) => {
@@ -420,11 +498,13 @@ async function restablecerClave({ resetToken, newPassword }, req) {
   const cambioActual = usuario.claveCambiadaEn ? new Date(usuario.claveCambiadaEn).getTime() : 0;
   if (cambioActual !== (payload.cc || 0)) throw AppError.unauthorized('Este enlace ya fue utilizado', 'TOKENRESETUSADO');
 
+  // El correo es de la persona: la clave nueva queda en TODAS sus cuentas (cliente, vendedor, repartidor)
   const claveHash = await hashClave(newPassword);
+  const cuentas = (await Usuario.findAll({ where: { personaId: usuario.personaId }, attributes: ['id'] })).map((c) => c.id);
   await withTransaction(async (t) => {
-    await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id: usuario.id }, transaction: t });
-    await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null }, { where: { id: usuario.id }, transaction: t });
-    await SesionService.cerrarTodas(usuario.id, 'CLAVE', { transaction: t });     // las sesiones viejas dejan de servir
+    await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id: cuentas }, transaction: t });
+    await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null }, { where: { id: cuentas }, transaction: t });
+    for (const c of cuentas) await SesionService.cerrarTodas(c, 'CLAVE', { transaction: t });     // las sesiones viejas dejan de servir
   }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'RESETCLAVE', entidad: 'USUARIOS', entidadId: usuario.id, req });
@@ -433,12 +513,15 @@ async function restablecerClave({ resetToken, newPassword }, req) {
 // ---------------------------------------------------------------------------------------------
 // Verificación de email (antes de registrarse)
 // ---------------------------------------------------------------------------------------------
-async function enviarCodigoEmail({ email: emailEntrada, nombre, fcmToken }, req) {
+async function enviarCodigoEmail({ email: emailEntrada, nombre, fcmToken, tipoUsuario }, req) {
   const email = normalizarEmail(emailEntrada);
 
-  // No se envían códigos a cuentas que ya existen (evita spam a usuarios registrados)
-  if (await Persona.findOne({ where: { correo: email } })) {
-    throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
+  // A un correo ya registrado solo se le envía código si está creando OTRO perfil (repartidor teniendo cuenta de
+  // cliente, por ejemplo). Sin perfil (versiones viejas de la app) o con el perfil que ya tiene, se rechaza.
+  const persona = await Persona.findOne({ where: { correo: email } });
+  if (persona) {
+    if (!tipoUsuario) throw AppError.conflict('El email ya está registrado', 'EMAILDUPLICADO');
+    if (await tienePerfil(persona.id, tipoUsuario)) throw perfilDuplicado(tipoUsuario);
   }
 
   const { codigo } = await CodigoService.generar({
@@ -468,8 +551,18 @@ async function verificarCodigoEmail({ email: emailEntrada, code }) {
 // ---------------------------------------------------------------------------------------------
 // Consultas en tiempo real del formulario de registro
 // ---------------------------------------------------------------------------------------------
-const existeCedula = async (cedula) => (await Persona.count({ where: { tipoDoc: TIPODOCCEDULA, numeroDoc: cedula } })) > 0;
-const existeEmail = async (email) => (await Persona.count({ where: { correo: normalizarEmail(email) } })) > 0;
+// Con "tipo" (el perfil que está creando) solo se considera ocupado si esa persona ya tiene ese perfil; si existe
+// con otro perfil, "otroPerfil" avisa que puede agregarlo con la misma cédula y el mismo correo.
+const tienePerfil = async (personaId, tipo) => (await Usuario.findAll({ where: { personaId }, attributes: ['id', 'rol'] })).some((c) => c.tipoUsuario === tipo);
+async function consultarUnico(where, tipo) {
+  const persona = await Persona.findOne({ where, attributes: ['id'] });
+  if (!persona) return { exists: false, otroPerfil: false };
+  if (!tipo) return { exists: true, otroPerfil: false };
+  const mismo = await tienePerfil(persona.id, tipo);
+  return { exists: mismo, otroPerfil: !mismo };
+}
+const existeCedula = (cedula, tipo) => consultarUnico({ tipoDoc: TIPODOCCEDULA, numeroDoc: cedula }, tipo);
+const existeEmail = (email, tipo) => consultarUnico({ correo: normalizarEmail(email) }, tipo);
 
 module.exports = {
   ROLES,

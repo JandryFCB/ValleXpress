@@ -1,8 +1,8 @@
 ---
 titulo: Términos y condiciones para negocios afiliados
-version: 2.0
-vigencia: 2026-10-17
-resumen: La comisión semanal, cómo se paga, el bloqueo por deuda, tus obligaciones como vendedor y la cancelación de pedidos.
+version: 3.0
+vigencia: 2026-10-18
+resumen: Ya no cobramos comisión por pedido: ahora pagas una suscripción mensual fija. Además, puedes calificar al repartidor que se lleva tus pedidos.
 ---
 
 Estos términos regulan la relación entre ValleXpress y los negocios que venden a través de la plataforma ("el negocio"). Al registrarte y marcar "Acepto", declaras, en nombre propio o del negocio que representas, haberlos leído y aceptado, junto con la **Política de privacidad**.
@@ -22,6 +22,7 @@ ValleXpress es una plataforma tecnológica operada por **Jandry Franklin Cayapa 
 - Debes registrar información verdadera y mantenerla actualizada: datos del responsable, nombre del negocio, dirección y ubicación del local, horarios, productos y precios.
 - ValleXpress puede revisar la solicitud y aprobarla, pedir correcciones o rechazarla. El negocio empieza a recibir pedidos cuando su cuenta está aprobada.
 - Si la información resulta falsa o el negocio deja de cumplir estos términos, la cuenta puede suspenderse.
+- Con tu misma cédula y tu mismo correo puedes tener **una cuenta de cada perfil** (cliente, negocio y repartidor), nunca dos del mismo. Cada cuenta tiene su propio usuario; si usan la misma contraseña, al entrar con tu correo la app te pregunta con cuál quieres entrar.
 
 ## 4. Obligaciones del negocio
 
@@ -34,21 +35,20 @@ ValleXpress es una plataforma tecnológica operada por **Jandry Franklin Cayapa 
 - Atender los reclamos de los clientes sobre sus productos (faltantes, mal estado o errores) y darles solución.
 - No vender productos prohibidos o de venta restringida (por ejemplo, armas, medicamentos que requieren receta, sustancias ilícitas, o alcohol y tabaco a menores de edad).
 
-## 5. Comisión
+## 5. Suscripción mensual
 
-- ValleXpress cobra al negocio una **comisión del {{comision}} %** sobre el valor de los productos de cada pedido **entregado**. Los pedidos cancelados o rechazados no generan comisión.
-- La comisión no se calcula sobre el costo de envío, que corresponde íntegramente al repartidor.
-- El porcentaje vigente se muestra siempre en la app. Si cambia, lo avisaremos con al menos 15 días de anticipación y te pediremos aceptar los términos actualizados.
+- ValleXpress **no cobra comisión** sobre tus ventas. A cambio, el negocio paga una **suscripción mensual fija de {{cuotaVendedor}}** por usar la plataforma, sin importar cuántos pedidos reciba. Si tienes varios negocios en la misma cuenta, pagas una sola suscripción.
+- El mes en que se aprueba tu cuenta es **gratis**: pagas desde el mes siguiente. La suscripción se cobra desde {{inicioCobro}}.
+- La cuota vigente se muestra siempre en la app. Si cambia, lo avisaremos con al menos 15 días de anticipación y te pediremos aceptar los términos actualizados.
 
-## 6. Liquidación semanal y pago
+## 6. Cómo se paga
 
-- Las comisiones se agrupan por semana (de lunes a domingo). En *Mi negocio → Mis cuentas* ves cada semana con lo vendido, la comisión y su estado.
-- Cuando la semana termina, tienes **{{diasGracia}} días** para pagar la comisión por transferencia a la cuenta que se indica en la app y subir el comprobante.
+- Pagas cada mes por transferencia a la cuenta que se indica en la app y subes la foto del comprobante en *Mi suscripción*. Tienes **hasta el día {{diaPago}} de cada mes** para hacerlo. También puedes adelantar el mes siguiente.
 - ValleXpress revisa el comprobante:
-  - Si lo aprueba, la semana queda pagada.
+  - Si lo aprueba, el mes queda pagado.
   - Si lo rechaza, te indica el motivo (por ejemplo, monto distinto o imagen ilegible) y puedes subir otro.
-- **Si una semana vence sin pago ni comprobante en revisión, el negocio deja de recibir pedidos nuevos** hasta ponerse al día. Al registrar el pago, vuelve a recibirlos automáticamente.
-- ValleXpress emitirá el comprobante de venta por la comisión cuando así lo exija la normativa tributaria.
+- **Si pasa el día {{diaPago}} sin pago ni comprobante en revisión, tus negocios dejan de recibir pedidos nuevos** hasta ponerte al día. Al aprobarse el pago, vuelven a recibirlos automáticamente.
+- ValleXpress emitirá el comprobante de venta por la suscripción cuando así lo exija la normativa tributaria.
 
 ## 7. Pagos de los clientes
 
@@ -63,6 +63,7 @@ ValleXpress es una plataforma tecnológica operada por **Jandry Franklin Cayapa 
 - Si nadie recoge un pedido listo dentro de {{venceSinRepartidor}} minutos, se cancela automáticamente.
 - Los rechazos o cancelaciones frecuentes atribuibles al negocio pueden llevar a la suspensión de la cuenta.
 - Ante un reclamo del cliente, ValleXpress puede actuar como mediador. La responsabilidad por el producto es del negocio.
+- Cuando el repartidor recoge un pedido, puedes **calificarlo** (1 a 5 estrellas y un comentario). Tu calificación la ve el equipo de ValleXpress y sirve para advertir o dar de baja a los repartidores que no cumplen. Califica con honestidad.
 
 ## 9. Contenido y marca
 
@@ -79,9 +80,9 @@ ValleXpress se compromete a mantener la plataforma funcionando con diligencia, p
 
 ## 11. Suspensión y terminación
 
-- El negocio puede dejar la plataforma cuando quiera eliminando su cuenta, siempre que no tenga pedidos en curso ni comisiones pendientes.
+- El negocio puede dejar la plataforma cuando quiera eliminando su cuenta, siempre que no tenga pedidos en curso ni meses de suscripción vencidos.
 - ValleXpress puede suspender o terminar la afiliación por incumplimiento de estos términos, informando el motivo.
-- Las comisiones generadas antes de la terminación siguen siendo exigibles.
+- Los meses de suscripción vencidos antes de la terminación (y las comisiones de los pedidos anteriores al 18 de octubre de 2026) siguen siendo exigibles.
 
 ## 12. Cambios a estos términos
 

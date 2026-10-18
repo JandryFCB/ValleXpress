@@ -51,6 +51,7 @@ const Detalle = sequelize.define('PedidoDetalle', {
 const Calificacion = sequelize.define('Calificacion', {
   pedidoId: { type: DataTypes.BIGINT, primaryKey: true, field: 'cpedido' },
   destino: { type: DataTypes.STRING(10), primaryKey: true, field: 'destino' },
+  origen: { type: DataTypes.STRING(10), primaryKey: true, allowNull: false, defaultValue: 'CLIENTE', field: 'origen' },   // CLIENTE | NEGOCIO
   autorId: { type: DataTypes.STRING(30), allowNull: false, field: 'cusuario' },
   negocioId: { type: DataTypes.BIGINT, field: 'cnegocio' },
   repartidorId: { type: DataTypes.STRING(30), field: 'cusuario_repartidor' },

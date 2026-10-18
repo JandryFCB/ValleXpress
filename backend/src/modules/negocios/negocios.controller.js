@@ -1,4 +1,3 @@
-const LiquidacionService = require('../liquidaciones/liquidacion.service');
 const ZonaService = require('../../shared/services/zona.service');
 const asyncHandler = require('../../shared/helpers/asyncHandler');
 const NegocioService = require('./negocio.service');
@@ -19,9 +18,6 @@ const u = (req) => req.duenoId || req.usuario.id;
 const miNegocio = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.miNegocio(u(req), req) }));
 const crear = asyncHandler(async (req, res) => res.status(201).json({ negocio: await NegocioService.crear(u(req), req.body, req) }));
 const actualizar = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.actualizar(u(req), req.body, req) }));
-// Estado de cuenta con ValleXpress (solo el dueño)
-const liquidaciones = asyncHandler(async (req, res) => res.json(await LiquidacionService.estadoDeCuenta((await NegocioService.exigirMio(req.usuario.id)).id, req)));
-const comprobante = asyncHandler(async (req, res) => res.status(201).json(await LiquidacionService.subirComprobante(req.usuario, (await NegocioService.exigirMio(req.usuario.id)).id, req.body, req)));
 const zona = asyncHandler(async (req, res) => res.json({ zona: await ZonaService.zona() }));
 
 // Solo el dueño (no el administrador que gestiona) pide una nueva revisión
@@ -47,7 +43,7 @@ const eliminarProducto = asyncHandler(async (req, res) => {
 
 module.exports = {
   categorias, listar, obtener, menu,
-  revision, zona, liquidaciones, comprobante,
+  revision, zona,
   miNegocio, crear, actualizar, local, horarios, estado, logo, portada,
   misProductos, crearProducto, actualizarProducto, estadoProducto, stockProducto, imagenProducto, eliminarProducto,
 };

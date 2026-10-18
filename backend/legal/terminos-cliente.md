@@ -1,8 +1,8 @@
 ---
 titulo: Términos y condiciones para clientes
-version: 2.0
-vigencia: 2026-10-17
-resumen: Cómo funcionan los pedidos, el costo de envío, el pago en efectivo, las cancelaciones y los reclamos.
+version: 2.1
+vigencia: 2026-10-18
+resumen: Ahora puedes tener, con tu misma cédula y correo, una cuenta de cliente, una de negocio y una de repartidor.
 ---
 
 Estos términos regulan el uso de ValleXpress por parte de quienes compran a través de la app. Al crear tu cuenta y marcar "Acepto", declaras haberlos leído y aceptado, junto con la **Política de privacidad**. Si no estás de acuerdo, no uses la plataforma.
@@ -26,6 +26,7 @@ ValleXpress conecta a tres partes:
 - Debes ser mayor de 18 años y registrar datos verdaderos: nombre, cédula, correo y celular.
 - Tu cuenta es personal. Cuida tu contraseña: lo que se haga con tu cuenta es tu responsabilidad. Si sospechas de un acceso indebido, cambia tu contraseña o cierra la sesión en todos tus equipos desde *Configuración*.
 - Puedes eliminar tu cuenta en cualquier momento desde *Perfil → Configuración → Eliminar mi cuenta*.
+- Con tu misma cédula y tu mismo correo puedes tener **una cuenta de cada perfil** (cliente, negocio y repartidor), nunca dos del mismo. Cada cuenta tiene su propio usuario; si usan la misma contraseña, al entrar con tu correo la app te pregunta con cuál quieres entrar.
 
 ## 4. Zona de servicio
 

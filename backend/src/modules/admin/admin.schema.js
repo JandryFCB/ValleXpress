@@ -5,7 +5,7 @@ const { normalizarEmail, normalizarTelefono } = require('../../shared/utils/norm
 const { ROLESPERFIL } = require('../../shared/services/perfiles.service');
 const { LIMITES } = require('../../shared/services/tarifas.service');
 const { LIMITES: LIMITESZONA } = require('../../shared/services/zona.service');
-const { TIPOSCUENTA } = require('../liquidaciones/liquidacion.service');
+const { TIPOSCUENTA } = require('../suscripciones/suscripcion.service');
 
 // Reglas de validación de /api/admin.
 const APROBACIONES = Object.values(APROBACIONAAPI);
@@ -96,13 +96,17 @@ const zona = [
   body().custom((b) => ['nombre', ...Object.keys(LIMITESZONA)].some((c) => b[c] !== undefined)).withMessage('Indica qué cambiar de la zona'),
 ];
 
-// Cobro de comisiones
-const pagoLiquidacion = [
-  body('semana').isISO8601({ strict: true }).withMessage('Indica la semana (fecha del lunes, AAAA-MM-DD)'),
+// Suscripción mensual de vendedores y repartidores
+const pagoSuscripcion = [
+  body('mes').matches(/^\d{4}-\d{2}(-\d{2})?$/).withMessage('Indica el mes (AAAA-MM)')
+    .customSanitizer((v) => (String(v).length === 7 ? `${v}-01` : v)),
   body('referencia').optional({ values: 'null' }).isString().trim().isLength({ max: 100 }).withMessage('La referencia es muy larga'),
 ];
-const configLiquidaciones = [
-  body('diasGracia').optional().isInt({ min: 0, max: 60 }).withMessage('Los días de gracia van de 0 a 60').toInt(),
+const configSuscripciones = [
+  body('cuotaVendedor').optional().isFloat({ min: 0, max: 500 }).withMessage('La cuota del vendedor va de $0 a $500').toFloat(),
+  body('cuotaRepartidor').optional().isFloat({ min: 0, max: 500 }).withMessage('La cuota del repartidor va de $0 a $500').toFloat(),
+  body('diasGracia').optional().isInt({ min: 1, max: 28 }).withMessage('El día límite para pagar va del 1 al 28').toInt(),
+  body('inicio').optional().matches(/^\d{4}-\d{2}(-\d{2})?$/).withMessage('Indica desde qué mes se cobra (AAAA-MM)'),
   body('cuenta').optional().isObject().withMessage('Los datos de la cuenta van como objeto'),
   body('cuenta.banco').optional().isString().trim().isLength({ max: 60 }).withMessage('El nombre del banco es muy largo'),
   body('cuenta.tipo').optional().isIn(TIPOSCUENTA).withMessage(`El tipo de cuenta es ${TIPOSCUENTA.join(' o ')}`),
@@ -110,9 +114,10 @@ const configLiquidaciones = [
   body('cuenta.titular').optional().isString().trim().isLength({ max: 100 }).withMessage('El titular es muy largo'),
   body('cuenta.identificacion').optional().isString().trim().matches(/^(\d{10}|\d{13})?$/).withMessage('La cédula (10 dígitos) o el RUC (13) no son válidos'),
   body('cuenta.notas').optional().isString().trim().isLength({ max: 200 }).withMessage('Las notas son muy largas'),
-  body().custom((b) => b.diasGracia !== undefined || b.cuenta !== undefined).withMessage('Indica qué cambiar'),
+  body().custom((b) => ['cuotaVendedor', 'cuotaRepartidor', 'diasGracia', 'inicio', 'cuenta'].some((c) => b[c] !== undefined)).withMessage('Indica qué cambiar'),
 ];
 const idComprobante = [param('id').isInt({ min: 1 }).withMessage('Comprobante inválido').toInt()];
+const advertencia = [body('motivo').isString().trim().isLength({ min: 10, max: 500 }).withMessage('Escribe el motivo de la advertencia (10 a 500 letras)')];
 const rechazoComprobante = [body('motivo').isString().trim().isLength({ min: 5, max: 300 }).withMessage('Escribe el motivo del rechazo (5 a 300 letras)')];
 
 // Permisos de un perfil: al menos un cambio; aprobarPendientes solo acompaña a la aprobación automática
@@ -127,6 +132,6 @@ const perfil = [
 ];
 
 module.exports = {
-  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoLiquidacion, configLiquidaciones, idComprobante, rechazoComprobante,
+  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoSuscripcion, configSuscripciones, idComprobante, rechazoComprobante, advertencia,
   crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, negocioGestion, editarRepartidor,
 };

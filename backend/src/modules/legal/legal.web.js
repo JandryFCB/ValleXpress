@@ -68,7 +68,7 @@ router.get('/eliminar-cuenta', asyncHandler(async (req, res) => {
     <h2>Desde la app (inmediato)</h2>
     <ol><li>Abre ValleXpress e inicia sesión.</li><li>Ve a <strong>Perfil → Configuración → Eliminar mi cuenta</strong>.</li>
     <li>Confirma con tu contraseña.</li></ol>
-    <p>No puedes eliminarla mientras tengas un pedido en curso o, si eres un negocio, comisiones por pagar.</p>
+    <p>No puedes eliminarla mientras tengas un pedido en curso o, si eres un negocio o repartidor, meses de suscripción vencidos.</p>
     <h2>Si ya no tienes la app</h2>
     <p>Escríbenos a ${contacto} <strong>desde el correo con el que te registraste</strong>, con el asunto "Eliminar mi cuenta". La eliminamos en un máximo de 15 días y te confirmamos por correo.</p>
     <h2>Qué datos borramos</h2>
@@ -76,7 +76,7 @@ router.get('/eliminar-cuenta', asyncHandler(async (req, res) => {
     <li>Direcciones guardadas, vehículo y placa, recorridos de entregas y equipos registrados para notificaciones.</li>
     <li>Tus sesiones se cierran en todos los equipos.</li></ul>
     <h2>Qué conservamos</h2>
-    <ul><li>Los pedidos, pagos y comisiones, <strong>sin tus datos de contacto</strong>, hasta 7 años, porque son registros contables que exige la normativa tributaria.</li>
+    <ul><li>Los pedidos, pagos y suscripciones, <strong>sin tus datos de contacto</strong>, hasta 7 años, porque son registros contables que exige la normativa tributaria.</li>
     <li>Las copias de seguridad se renuevan solas: los datos eliminados desaparecen de ellas en un máximo de 30 días.</li></ul>
     <p>Más detalles en la <a href="/legal/privacidad">Política de privacidad</a>.</p>`));
 }));

@@ -25,6 +25,8 @@ router.get('/repartidores', schema.listadoAprobacion, validar, controller.repart
 router.patch('/repartidores/:usuario/aprobacion', schema.usuario, schema.aprobacion, validar, controller.aprobacionRepartidor);
 router.put('/repartidores/:usuario', schema.editarRepartidor, validar, controller.editarRepartidor);
 router.get('/repartidores/:usuario/documentos', schema.usuario, validar, controller.documentosRepartidor);
+router.get('/repartidores/:usuario/reputacion', schema.usuario, validar, controller.reputacionRepartidor);
+router.post('/repartidores/:usuario/advertencias', schema.usuario, schema.advertencia, validar, controller.advertirRepartidor);
 
 router.get('/pedidos', schema.listadoPedidos, validar, controller.pedidos);
 router.get('/pedidos/:id', schema.idPedido, validar, controller.pedido);
@@ -41,11 +43,12 @@ router.delete('/usuarios/:usuario', schema.bajaUsuario, validar, controller.baja
 
 router.get('/tarifas', controller.tarifas);
 router.put('/tarifas', schema.tarifas, validar, controller.cambiarTarifas);
-router.get('/liquidaciones', controller.liquidacionesPendientes);
 router.get('/legal', controller.legal);
-router.put('/liquidaciones/config', schema.configLiquidaciones, validar, controller.configLiquidaciones);
-router.get('/negocios/:id/liquidaciones', schema.idNegocio, validar, controller.liquidacionesNegocio);
-router.post('/negocios/:id/liquidaciones', schema.idNegocio, schema.pagoLiquidacion, validar, controller.registrarLiquidacion);
+// Suscripción mensual: quiénes pagan, comprobantes por revisar, pagos a mano y la configuración del cobro
+router.get('/suscripciones', controller.suscripciones);
+router.put('/suscripciones/config', schema.configSuscripciones, validar, controller.configSuscripciones);
+router.get('/suscripciones/:usuario', schema.usuario, validar, controller.suscripcionDe);
+router.post('/suscripciones/:usuario/pagos', schema.usuario, schema.pagoSuscripcion, validar, controller.registrarSuscripcion);
 router.post('/comprobantes/:id/aprobar', schema.idComprobante, validar, controller.aprobarComprobante);
 router.post('/comprobantes/:id/rechazar', schema.idComprobante, schema.rechazoComprobante, validar, controller.rechazarComprobante);
 router.get('/zona', controller.zona);

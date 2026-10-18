@@ -1,4 +1,4 @@
-const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const SuscripcionService = require('../suscripciones/suscripcion.service');
 const LegalService = require('../legal/legal.service');
 const asyncHandler = require('../../shared/helpers/asyncHandler');
 const service = require('./admin.service');
@@ -34,12 +34,12 @@ const resolverDueno = asyncHandler(async (req, res, next) => { await service.res
 
 const tarifas = asyncHandler(async (req, res) => res.json({ tarifas: await service.tarifas() }));
 const cambiarTarifas = asyncHandler(async (req, res) => res.json({ tarifas: await service.cambiarTarifas(req.usuario, req.body, req) }));
-const liquidacionesPendientes = asyncHandler(async (req, res) => res.json({ pendientes: await LiquidacionService.pendientes(), config: await LiquidacionService.config() }));
-const liquidacionesNegocio = asyncHandler(async (req, res) => res.json(await LiquidacionService.estadoDeCuenta(Number(req.params.id), req)));
-const aprobarComprobante = asyncHandler(async (req, res) => res.json(await LiquidacionService.aprobarComprobante(req.usuario, Number(req.params.id), req)));
-const rechazarComprobante = asyncHandler(async (req, res) => res.json(await LiquidacionService.rechazarComprobante(req.usuario, Number(req.params.id), req.body, req)));
-const registrarLiquidacion = asyncHandler(async (req, res) => res.status(201).json(await LiquidacionService.registrarPago(req.usuario, Number(req.params.id), req.body, req)));
-const configLiquidaciones = asyncHandler(async (req, res) => res.json({ config: await service.cambiarConfigLiquidaciones(req.usuario, req.body, req) }));
+const suscripciones = asyncHandler(async (req, res) => res.json(await SuscripcionService.resumen(req)));
+const suscripcionDe = asyncHandler(async (req, res) => res.json(await SuscripcionService.estado(req.params.usuario, req)));
+const aprobarComprobante = asyncHandler(async (req, res) => res.json(await SuscripcionService.aprobar(req.usuario, Number(req.params.id), req)));
+const rechazarComprobante = asyncHandler(async (req, res) => res.json(await SuscripcionService.rechazar(req.usuario, Number(req.params.id), req.body, req)));
+const registrarSuscripcion = asyncHandler(async (req, res) => res.status(201).json(await SuscripcionService.registrarPago(req.usuario, req.params.usuario, req.body, req)));
+const configSuscripciones = asyncHandler(async (req, res) => res.json({ config: await service.cambiarConfigSuscripciones(req.usuario, req.body, req) }));
 const zona = asyncHandler(async (req, res) => res.json({ zona: await service.zona() }));
 const cambiarZona = asyncHandler(async (req, res) => res.json({ zona: await service.cambiarZona(req.usuario, req.body, req) }));
 const perfiles = asyncHandler(async (req, res) => res.json({ perfiles: await service.perfiles() }));
@@ -49,8 +49,11 @@ const legal = asyncHandler(async (req, res) => res.json({ documentos: await Lega
 
 const detalleCifra = asyncHandler(async (req, res) => res.json(await service.detalleCifra(req.params.tipo, req.query.rango)));
 
+const reputacionRepartidor = asyncHandler(async (req, res) => res.json(await require('../repartidores/reputacion.service').reputacion(req.params.usuario, { completo: true })));
+const advertirRepartidor = asyncHandler(async (req, res) => res.status(201).json(await require('../repartidores/reputacion.service').advertir(req.usuario, req.params.usuario, req.body, req)));
+
 const documentosRepartidor = asyncHandler(async (req, res) => res.json(await require('../repartidores/documentos.service').documentos(req.params.usuario, req)));
 
-module.exports = { documentosRepartidor, detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
-  liquidacionesPendientes, liquidacionesNegocio, registrarLiquidacion, configLiquidaciones, aprobarComprobante, rechazarComprobante,
+module.exports = { reputacionRepartidor, advertirRepartidor, documentosRepartidor, detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
+  suscripciones, suscripcionDe, registrarSuscripcion, configSuscripciones, aprobarComprobante, rechazarComprobante,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

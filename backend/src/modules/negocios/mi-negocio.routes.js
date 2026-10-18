@@ -33,13 +33,12 @@ const router = express.Router();
 router.use(verificarToken, verificarRol('vendedor'));
 router.post('/', schema.crear, validar, controller.crear);
 router.post('/revision', controller.revision);
-router.get('/liquidaciones', controller.liquidaciones);
-router.post('/liquidaciones/comprobante', schema.comprobante, validar, controller.comprobante);
 rutasDeGestion(router);
 
 // Pedidos que recibe el negocio
 router.get('/pedidos', pedidoSchema.listado, validar, pedidoController.delNegocio);
 router.patch('/pedidos/:id/estado', pedidoSchema.estadoNegocio, validar, pedidoController.estadoNegocio);
+router.post('/pedidos/:id/calificar-repartidor', pedidoSchema.calificar, validar, pedidoController.calificarRepartidor);
 
 module.exports = router;
 module.exports.rutasDeGestion = rutasDeGestion;

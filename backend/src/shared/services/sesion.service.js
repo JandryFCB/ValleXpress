@@ -123,4 +123,11 @@ const listar = (usuarioId) => Sesion.findAll({
   order: [['creadoEn', 'DESC']],
 });
 
-module.exports = { crear, rotar, cerrar, cerrarTodas, listar, DIASVIDA };
+// Dueño de la sesión de un refresh token (o null si no existe)
+async function usuarioDe(refreshToken) {
+  if (typeof refreshToken !== 'string' || !refreshToken) return null;
+  const sesion = await Sesion.findOne({ where: { tokenHash: hash(refreshToken) }, attributes: ['usuarioId'] });
+  return sesion?.usuarioId || null;
+}
+
+module.exports = { crear, rotar, cerrar, cerrarTodas, listar, usuarioDe, DIASVIDA };

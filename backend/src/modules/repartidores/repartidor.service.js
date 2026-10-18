@@ -128,7 +128,10 @@ async function actualizar(usuarioId, datos, req, { comoAdmin = false } = {}) {
 // En línea = recibe avisos de pedidos listos y puede aceptarlos. Solo un repartidor aprobado puede conectarse.
 async function cambiarDisponibilidad(usuarioId, disponible, req) {
   const r = await exigirPerfil(usuarioId);
-  if (disponible) exigirAprobado(r);
+  if (disponible) {
+    exigirAprobado(r);
+    await require('../suscripciones/suscripcion.service').exigirAlDia(usuarioId);    // perezoso: evita un ciclo
+  }
   await RepartidorEstado.update({ disponible, ultimoCambio: new Date() }, { where: { usuarioId } });
   auditar({ usuarioId, accion: disponible ? 'REPARTIDORENLINEA' : 'REPARTIDORFUERADELINEA', entidad: 'REPARTIDORES', entidadId: usuarioId, req });
   return aApi(await cargar(usuarioId));

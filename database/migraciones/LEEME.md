@@ -21,6 +21,11 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `013_zona_servicio.sql` | Zona de servicio (Yantzaza, centro y radio): direcciones y locales fuera de ella se rechazan |
 | `014_liquidaciones.sql` | Cobro semanal de la comisión a cada negocio: `TLIQUIDACIONES` (pagos), días de gracia y cuenta para transferir |
 | `015_comprobantes.sql` | Cuenta de cobro con sus datos (banco, tipo, número, titular, cédula/RUC) y `TLIQUIDACIONCOMPROBANTES` (el negocio sube la foto de su transferencia; el admin la aprueba o rechaza) |
+| `016_legal.sql` | Aceptaciones de los textos legales (`TACEPTACIONESLEGALES`), modo borrado del historial y `ELIMINARDATOSPERSONALES` |
+| `017_fncfhasta.sql` | `FNCFHASTA()`: la fecha de las filas vigentes (2999-12-31) |
+| `018_version_app.sql` | Versión de la app (última, mínima, URL de descarga y novedades) |
+| `019_documentos_repartidor.sql` | Fotos de los documentos del repartidor (`TREPARTIDORDOCUMENTOS`) |
+| `020_multiperfil_suscripciones.sql` | Una cuenta por perfil y persona, `RENOMBRARUSUARIO()`, suscripción mensual (`TSUSCRIPCIONPAGOS`, la comisión pasa a 0), el negocio califica al repartidor y advertencias (`TREPARTIDORADVERTENCIAS`) |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

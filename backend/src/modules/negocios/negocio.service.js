@@ -10,7 +10,7 @@ const CatalogoService = require('../../shared/services/catalogo.service');
 const PerfilesService = require('../../shared/services/perfiles.service');
 const TarifasService = require('../../shared/services/tarifas.service');
 const ZonaService = require('../../shared/services/zona.service');
-const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const SuscripcionService = require('../suscripciones/suscripcion.service');
 const { auditar } = require('../../shared/services/log.service');
 const { APROBACION, CATEGORIA, TIPODIRECCION } = require('../../shared/constants/codigos');
 
@@ -72,7 +72,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
   const categorias = await mapaCategorias();
   const tarifas = await TarifasService.tarifas();
   const desde = privado ? null : await direccionDe(req);
-  const conDeuda = await LiquidacionService.conDeudaVencida(lista.map((n) => Number(n.id)));
+  const conDeuda = await SuscripcionService.negociosBloqueados(lista.map((n) => Number(n.id)));
   const envioDe = (n) => {
     const local = n.local ? { lat: num(n.local.latitud), lng: num(n.local.longitud) } : null;
     const e = TarifasService.envioEntre(tarifas, local && desde ? local : null, local && desde ? desde : null);

@@ -62,12 +62,5 @@ const estado = [
 
 const imagen = [body('imagen').isString().withMessage('Envía la imagen').notEmpty().withMessage('Envía la imagen')];
 
-// Comprobante de pago de la comisión de una semana
-const comprobante = [
-  body('semana').isISO8601({ strict: true }).withMessage('Indica la semana (fecha del lunes, AAAA-MM-DD)'),
-  body('imagen').isString().withMessage('Adjunta la foto del comprobante').notEmpty().withMessage('Adjunta la foto del comprobante'),
-  body('referencia').optional({ values: 'null' }).isString().trim().isLength({ max: 100 }).withMessage('La referencia es muy larga'),
-];
-
 module.exports = {
-  comprobante, id, listar, crear: datos(true), actualizar: datos(false), local, horarios, estado, imagen };
+  id, listar, crear: datos(true), actualizar: datos(false), local, horarios, estado, imagen };

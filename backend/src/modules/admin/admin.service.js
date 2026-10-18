@@ -20,7 +20,7 @@ const ConfiguracionService = require('../../shared/services/configuracion.servic
 const PerfilesService = require('../../shared/services/perfiles.service');
 const TarifasService = require('../../shared/services/tarifas.service');
 const ZonaService = require('../../shared/services/zona.service');
-const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const SuscripcionService = require('../suscripciones/suscripcion.service');
 const DocumentosService = require('../repartidores/documentos.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
@@ -84,12 +84,14 @@ async function resumen() {
   const negocios = await consulta(`SELECT cestatusaprobacion AS clave, COUNT(*) AS total FROM tnegocios WHERE fhasta = ${VIGENTE} GROUP BY cestatusaprobacion`);
   const repartidores = await consulta(`SELECT cestatusaprobacion AS clave, COUNT(*) AS total FROM trepartidores WHERE fhasta = ${VIGENTE} GROUP BY cestatusaprobacion`);
   const [enLinea] = await consulta('SELECT COUNT(*) AS total FROM trepartidoresestado WHERE estadisponible');
-  const [comprobantes] = await consulta("SELECT COUNT(*) AS total FROM tliquidacioncomprobantes WHERE estado = 'ENVIADO'");
-  // Lo que los negocios ya pagaron de su comisión (la plata que de verdad entró), hoy y en los últimos 7 días
+  const comprobantes = { total: await SuscripcionService.contarPorRevisar() };
+  // Lo que ValleXpress cobró de suscripciones (pagos aprobados: la plata que de verdad entró)
   const [cobrado] = await consulta(`
-    SELECT COALESCE(SUM(comision) FILTER (WHERE (fpago AT TIME ZONE :zona)::date = (now() AT TIME ZONE :zona)::date), 0) AS hoy,
-           COALESCE(SUM(comision) FILTER (WHERE (fpago AT TIME ZONE :zona)::date >= (now() AT TIME ZONE :zona)::date - 6), 0) AS semana
-      FROM tliquidaciones`, { zona: ZONA });
+    SELECT COALESCE(SUM(monto) FILTER (WHERE (frevision AT TIME ZONE :zona)::date = (now() AT TIME ZONE :zona)::date), 0) AS hoy,
+           COALESCE(SUM(monto) FILTER (WHERE (frevision AT TIME ZONE :zona)::date >= (now() AT TIME ZONE :zona)::date - 6), 0) AS semana,
+           COALESCE(SUM(monto) FILTER (WHERE (frevision AT TIME ZONE :zona)::date >= (now() AT TIME ZONE :zona)::date - 29), 0) AS mes
+      FROM tsuscripcionpagos WHERE estado = 'APROBADO'`, { zona: ZONA });
+  const deudores = await SuscripcionService.bloqueados();
 
   const negociosPor = conteo(negocios, (c) => APROBACIONAAPI[c]);
   const repartidoresPor = conteo(repartidores, (c) => APROBACIONAAPI[c]);
@@ -103,7 +105,8 @@ async function resumen() {
     repartidores: { ...repartidoresPor, enLinea: Number(enLinea.total) },
     pendientes: (negociosPor.pendiente || 0) + (repartidoresPor.pendiente || 0),
     comprobantesPorRevisar: Number(comprobantes.total),
-    cobrado: { hoy: num(cobrado.hoy), semana: num(cobrado.semana) },
+    cobrado: { hoy: num(cobrado.hoy), semana: num(cobrado.semana), mes: num(cobrado.mes) },
+    suscripcionesVencidas: deudores.size,
     correoConfigurado: Correo.configurado(),
   };
 }
@@ -201,27 +204,36 @@ async function detalleCifra(tipo, rangoTexto = 'hoy') {
     };
   }
 
+  // Ganancia de ValleXpress = suscripciones cobradas (pagos aprobados en el rango)
   if (tipo === 'ganancia') {
-    const lista = (await pedidos(`p.cestatuspedido IN (${vendidos}) AND ${enRango('p.fpedido')}`)).filter((p) => Number(p.comision) > 0);
-    const pagos = await consulta(`
-      SELECT n.nombre AS negocio, to_char(l.semana, 'YYYY-MM-DD') AS semana, l.comision, l.referencia, l.fpago AS fecha
-        FROM tliquidaciones l JOIN tnegocios n ON n.cnegocio = l.cnegocio AND n.fhasta = ${VIGENTE}
-       WHERE ${enRango('l.fpago')} ORDER BY l.fpago DESC LIMIT 200`, { zona: ZONA });
-    const porCobrar = (await LiquidacionService.pendientes()).reduce((t, d) => t + Number(d.saldo || 0), 0);
+    const [{ desde }] = await consulta(`SELECT to_char((now() AT TIME ZONE :zona)::date - ${RANGOS[rango]}, 'YYYY-MM-DD') AS desde`, { zona: ZONA });
+    const pagos = await SuscripcionService.cobrado({ desde });
+    const { suscriptores } = await SuscripcionService.resumen();
+    const porCobrar = suscriptores.reduce((t, s) => t + s.saldoPendiente, 0);
+    const deTipo = (t) => pagos.filter((p) => p.tipo === t);
     return {
       tipo, rango,
-      total: { etiqueta: 'Comisión ganada', valor: dinero(suma(lista, 'comision')), formato: 'dinero' },
+      total: { etiqueta: 'Suscripciones cobradas', valor: dinero(suma(pagos, 'monto')), formato: 'dinero' },
       resumen: [
-        { etiqueta: 'Pagos recibidos', valor: dinero(suma(pagos, 'comision')), formato: 'dinero' },
+        { etiqueta: 'De vendedores', valor: dinero(suma(deTipo('vendedor'), 'monto')), formato: 'dinero' },
+        { etiqueta: 'De repartidores', valor: dinero(suma(deTipo('repartidor'), 'monto')), formato: 'dinero' },
         { etiqueta: 'Por cobrar', valor: dinero(porCobrar), formato: 'dinero' },
       ],
       secciones: [
-        { titulo: 'Por local', filas: agrupar(lista, 'negocioId', (p) => p.negocio, 'comision', 'local') },
         {
-          titulo: 'Pagos recibidos de los locales',
-          filas: pagos.map((l) => ({ titulo: l.negocio, detalle: `Semana del ${l.semana}${l.referencia ? ` · ${l.referencia}` : ''}`, valor: dinero(l.comision), formato: 'dinero', fecha: l.fecha, icono: 'pago' })),
+          titulo: 'Pagos recibidos',
+          filas: pagos.map((p) => ({
+            titulo: p.nombre, detalle: `${p.tipo === 'vendedor' ? 'Vendedor' : 'Repartidor'} · ${p.nombreMes}${p.referencia ? ` · ${p.referencia}` : ''}`,
+            valor: dinero(p.monto), formato: 'dinero', fecha: p.fecha, icono: 'pago',
+          })),
         },
-        { titulo: 'Comisión por pedido', filas: lista.map((p) => filaPedido(p, p.comision, `de ${plata(p.subtotal)} en productos`)) },
+        {
+          titulo: 'Con pagos pendientes',
+          filas: suscriptores.filter((s) => s.saldoPendiente > 0).map((s) => ({
+            titulo: s.nombre, detalle: `${s.tipo === 'vendedor' ? 'Vendedor' : 'Repartidor'}${s.bloqueado ? ' · vencida' : ' · por pagar'}`,
+            valor: dinero(s.saldoPendiente), formato: 'dinero', icono: s.tipo === 'vendedor' ? 'local' : 'repartidor',
+          })),
+        },
       ],
     };
   }
@@ -603,12 +615,12 @@ async function cambiarTarifas(admin, cambios, req) {
   return TarifasService.tarifas();
 }
 
-// Cobro de comisiones: días de gracia y la cuenta donde transfieren los negocios
-async function cambiarConfigLiquidaciones(admin, cambios, req) {
-  const hechos = await withTransaction((t) => LiquidacionService.fijarConfig(cambios, { transaction: t }), { usuarioId: admin.id });
+// Suscripción: cuotas, día límite para pagar, desde qué mes se cobra y la cuenta donde transferir
+async function cambiarConfigSuscripciones(admin, cambios, req) {
+  const hechos = await withTransaction((t) => SuscripcionService.fijarConfig(cambios, { transaction: t }), { usuarioId: admin.id });
   ConfiguracionService.limpiarCache();
-  if (Object.keys(hechos).length) auditar({ usuarioId: admin.id, accion: 'CONFIGLIQUIDACIONES', entidad: 'CONFIGURACIONES', entidadId: 'LIQUIDACIONES', detalle: hechos, req });
-  return LiquidacionService.config();
+  if (Object.keys(hechos).length) auditar({ usuarioId: admin.id, accion: 'CONFIGSUSCRIPCIONES', entidad: 'CONFIGURACIONES', entidadId: 'SUSCRIPCIONES', detalle: hechos, req });
+  return SuscripcionService.config();
 }
 
 // Zona de servicio (por ahora una sola ciudad)
@@ -681,5 +693,5 @@ module.exports = {
   usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
   resolverDueno, editarRepartidor, perfiles, cambiarPerfil, cambiarTarifas,
   tarifas: () => TarifasService.tarifas(),
-  zona: () => ZonaService.zona(), cambiarZona, cambiarConfigLiquidaciones,
+  zona: () => ZonaService.zona(), cambiarZona, cambiarConfigSuscripciones,
 };

@@ -1,5 +1,6 @@
 // Prueba de extremo a extremo de las TARIFAS: envío por distancia (base + km de ruta, redondeado a 5 centavos),
-// comisión de ValleXpress al negocio, cotización en el carrito, estimación en la lista de negocios y el admin.
+// comisión (desde 2026-10-18 es 0: se cobra una suscripción mensual), cotización en el carrito, estimación en la lista
+// de negocios y el admin.
 // Uso:  npm run test:tarifas   (desde la carpeta backend, con Docker/Postgres en marcha)
 const crearArnes = require('./arnes');
 
@@ -33,7 +34,7 @@ const envioEsperado = ({ base, porKm, factor }, a, b) => {
     seccion('1. Tarifas por defecto');
     let r = await api('GET', '/api/admin/tarifas', null, A);
     const T = r.body.tarifas;
-    check('envío $1.00 base + $0.30/km, factor 1.3 y comisión 10 %', r.status === 200 && T.envioBase === 1 && T.envioPorKm === 0.3 && T.factorRuta === 1.3 && T.comisionPorcentaje === 10, JSON.stringify(r.body));
+    check('envío $1.00 base + $0.30/km, factor 1.3 y comisión 0 % (ahora hay suscripción)', r.status === 200 && T.envioBase === 1 && T.envioPorKm === 0.3 && T.factorRuta === 1.3 && T.comisionPorcentaje === 0, JSON.stringify(r.body));
 
     seccion('2. Preparación');
     const luis = await t.registrar('luis@test.com', 'Luis', 'Mora', 'vendedor', { nombreNegocio: 'Pizzería Luis' });
@@ -74,18 +75,18 @@ const envioEsperado = ({ base, porKm, factor }, a, b) => {
     check(`envío $${esp.costo} y total = 25.00 + envío`, r.status === 201 && p1.costoEnvio === esp.costo && p1.total === Number((25 + esp.costo).toFixed(2)) && p1.distanciaKm === esp.ruta, JSON.stringify(r.body));
     check('el cliente NO ve la comisión', !('comision' in p1) && !('recibeNegocio' in p1));
     const fila = (await q("SELECT comision, comisionporcentaje, distanciakm FROM tpedidos WHERE cpedido=$1 AND fhasta='2999-12-31 00:00:00-05'", [p1.id]))[0];
-    check('en la BD: comisión 10 % de 25.00 = 2.50 y la distancia', Number(fila.comision) === 2.5 && Number(fila.comisionporcentaje) === 10 && Number(fila.distanciakm) === esp.ruta, JSON.stringify(fila));
+    check('en la BD: sin comisión y con la distancia', Number(fila.comision) === 0 && Number(fila.comisionporcentaje) === 0 && Number(fila.distanciakm) === esp.ruta, JSON.stringify(fila));
     r = await api('GET', `/api/pedidos/${p1.id}`, null, L);
-    check('el negocio ve la comisión y lo que recibe (25.00 − 2.50 = 22.50)', r.body.pedido?.comision === 2.5 && r.body.pedido.comisionPorcentaje === 10 && r.body.pedido.recibeNegocio === 22.5, JSON.stringify(r.body.pedido));
+    check('el negocio recibe todo lo vendido en productos (25.00)', r.body.pedido?.comision === 0 && r.body.pedido.recibeNegocio === 25, JSON.stringify(r.body.pedido));
     r = await api('GET', `/api/admin/pedidos/${p1.id}`, null, A);
-    check('el administrador también', r.body.pedido?.comision === 2.5);
+    check('el administrador también', r.body.pedido?.comision === 0);
 
     seccion('5. El admin cambia las tarifas');
     r = await api('PUT', '/api/admin/tarifas', { envioBase: 1.5, envioPorKm: 0.5, comisionPorcentaje: 12 }, A);
-    check('nuevas tarifas guardadas', r.status === 200 && r.body.tarifas.envioBase === 1.5 && r.body.tarifas.envioPorKm === 0.5 && r.body.tarifas.comisionPorcentaje === 12, JSON.stringify(r.body));
+    check('nuevas tarifas guardadas; la comisión ya no se cambia (sigue en 0)', r.status === 200 && r.body.tarifas.envioBase === 1.5 && r.body.tarifas.envioPorKm === 0.5 && r.body.tarifas.comisionPorcentaje === 0, JSON.stringify(r.body));
     check('quedan en la auditoría', (await q("SELECT 1 FROM tauditoria WHERE accion='TARIFASCAMBIADAS'")).length === 1);
-    r = await api('PUT', '/api/admin/tarifas', { comisionPorcentaje: 80 }, A);
-    check('comisión fuera de rango (máx. 50 %): 400', r.status === 400);
+    r = await api('PUT', '/api/admin/tarifas', { comisionPorcentaje: 10 }, A);
+    check('solo la comisión: 400 (no hay nada que cambiar)', r.status === 400);
     r = await api('PUT', '/api/admin/tarifas', {}, A);
     check('sin ningún cambio: 400', r.status === 400);
     r = await api('PUT', '/api/admin/tarifas', { envioBase: 0 }, L);
@@ -94,9 +95,9 @@ const envioEsperado = ({ base, porKm, factor }, a, b) => {
     r = await pedir();
     const p2 = r.body.pedido;
     check(`el pedido nuevo usa las nuevas: envío $${esp2.costo}`, p2?.costoEnvio === esp2.costo, JSON.stringify(r.body));
-    check('y comisión 12 % de 25.00 = 3.00', Number((await q("SELECT comision FROM tpedidos WHERE cpedido=$1 AND fhasta='2999-12-31 00:00:00-05'", [p2.id]))[0].comision) === 3);
+    check('y sin comisión', Number((await q("SELECT comision FROM tpedidos WHERE cpedido=$1 AND fhasta='2999-12-31 00:00:00-05'", [p2.id]))[0].comision) === 0);
     r = await api('GET', `/api/pedidos/${p1.id}`, null, L);
-    check('el pedido viejo NO cambia (sigue con su envío y su 10 %)', r.body.pedido.costoEnvio === esp.costo && r.body.pedido.comision === 2.5);
+    check('el pedido viejo NO cambia (sigue con su envío)', r.body.pedido.costoEnvio === esp.costo);
 
     seccion('6. Repartidor y resumen');
     const pedro = await t.registrar('pedro@test.com', 'Pedro', 'Vera', 'repartidor', { vehiculo: 'Moto', placa: 'ABC1234' });
@@ -107,7 +108,7 @@ const envioEsperado = ({ base, porKm, factor }, a, b) => {
     check('el repartidor ve lo que gana: el envío completo', libre?.costoEnvio === esp.costo && !('comision' in libre), JSON.stringify(libre));
     for (const paso of ['aceptar', 'recogido', 'entregado']) await api('PATCH', `/api/repartidor/pedidos/${p1.id}/${paso}`, null, pedro.token);
     r = await api('GET', '/api/admin/resumen', null, A);
-    check('el resumen de hoy muestra lo que ganó ValleXpress (2.50)', r.body.hoy?.comisiones === 2.5 && r.body.ultimos7Dias.at(-1).comisiones === 2.5, JSON.stringify(r.body.hoy));
+    check('el resumen de hoy ya no suma comisión por pedido', r.body.hoy?.comisiones === 0 && r.body.hoy.entregados === 1, JSON.stringify(r.body.hoy));
 
     seccion('7. Zona de servicio');
     r = await api('GET', '/api/negocios/zona', null, C);

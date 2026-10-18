@@ -37,17 +37,23 @@ function exigirDocumento(id) {
   return d;
 }
 
+// "2026-11-01" -> "noviembre de 2026"
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const inicioCobro = (f) => `${MESES[Number(f.slice(5, 7)) - 1] || 'noviembre'} de ${f.slice(0, 4)}`;
+
 // Valores vigentes que se insertan en los textos
 async function valores() {
   const dinero = (v) => `$${Number(v).toFixed(2)}`;
   const c = (clave, defecto) => ConfiguracionService.obtener(clave, defecto);
   return {
     correo: Correo.soporte() || 'el correo de soporte indicado en la app',
-    comision: String(Number(await c('COMISIONPORCENTAJE', 10))),
+    cuotaVendedor: dinero(await c('SUSCRIPCIONVENDEDOR', 10)),
+    cuotaRepartidor: dinero(await c('SUSCRIPCIONREPARTIDOR', 10)),
+    diaPago: String(Number(await c('SUSCRIPCIONDIASGRACIA', 5))),
+    inicioCobro: inicioCobro(String(await c('SUSCRIPCIONINICIO', '2026-11-01'))),
     zona: String(await c('ZONANOMBRE', 'Yantzaza')),
     envioBase: dinero(await c('ENVIOBASE', 1)),
     envioPorKm: dinero(await c('ENVIOPORKM', 0.3)),
-    diasGracia: String(Number(await c('LIQUIDACIONDIASGRACIA', 7))),
     venceSinRepartidor: String(Number(await c('PEDIDOVENCESINREPARTIDORMIN', 60))),
     vencePendiente: String(Number(await c('PEDIDOVENCEPENDIENTEMIN', 30))),
   };
