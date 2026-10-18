@@ -11,6 +11,7 @@ import '../../services/tiempo_real.dart';
 import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
 import '../../widgets/aviso_ubicacion.dart';
+import '../../widgets/documentos_repartidor.dart';
 import '../../widgets/panel_aprobacion.dart';
 import '../../services/permisos_celular.dart';
 import '../../widgets/aviso_permisos.dart';
@@ -256,6 +257,7 @@ class _EntregasState extends State<_Entregas> {
           await _cargar();
         },
         onActualizar: _cargar,
+        extra: const MisDocumentos(),
       );
     }
     final c = context.colores;

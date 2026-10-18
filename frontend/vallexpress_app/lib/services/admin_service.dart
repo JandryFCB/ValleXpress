@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../config/constants.dart';
 import '../models/admin.dart';
+import '../models/documento_repartidor.dart';
 import '../models/legal.dart';
 import '../models/liquidacion.dart';
 import '../models/pedido.dart';
@@ -112,6 +113,10 @@ class AdminService {
   /// Dar de baja: la cuenta queda inactiva (no se borra su historial) y se puede reactivar
   static Future<UsuarioAdmin> darDeBaja(String usuario, String motivo) async =>
       _usuario(await http.delete(_url('/usuarios/$usuario'), headers: await _cabeceras(), body: jsonEncode({'motivo': motivo})), 'No se pudo dar de baja la cuenta');
+
+  /// Documentos que subió un repartidor (para revisarlos antes de aprobarlo)
+  static Future<DocumentosRepartidor> documentosRepartidor(String usuario) async =>
+      DocumentosRepartidor.desdeJson(_json(await http.get(_url('/repartidores/$usuario/documentos'), headers: await _cabeceras()), 'No se pudieron cargar los documentos'));
 
   static Future<RepartidorAdmin> editarRepartidor(String usuario, {required String vehiculo, String? placa, String? color}) async {
     final res = await http.put(_url('/repartidores/$usuario'), headers: await _cabeceras(), body: jsonEncode({'vehiculo': vehiculo, 'placa': placa, 'color': color}));

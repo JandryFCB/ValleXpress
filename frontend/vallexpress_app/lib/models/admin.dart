@@ -172,7 +172,10 @@ class NegocioAdmin {
 
 /// Un repartidor visto por el administrador: su perfil (vehículo, placa, entregas) y su contacto
 class RepartidorAdmin {
-  const RepartidorAdmin({required this.perfil, required this.aprobacion, this.aprobadoEn, this.contacto});
+  const RepartidorAdmin({required this.perfil, required this.aprobacion, this.aprobadoEn, this.contacto, this.documentosSubidos = 0, this.documentosRequeridos = 0});
+
+  final int documentosSubidos; // fotos de documentos que ya subió
+  final int documentosRequeridos;
 
   final PerfilRepartidor perfil;
   final Aprobacion aprobacion;
@@ -186,6 +189,8 @@ class RepartidorAdmin {
         aprobacion: Aprobacion.deCodigo(j['aprobacion']?.toString()),
         aprobadoEn: _fecha(j['aprobadoEn']),
         contacto: CuentaContacto.desdeJson(j['contacto']),
+        documentosSubidos: ((j['documentos'] as Map?)?['subidos'] as num?)?.toInt() ?? 0,
+        documentosRequeridos: ((j['documentos'] as Map?)?['requeridos'] as num?)?.toInt() ?? 0,
       );
 }
 

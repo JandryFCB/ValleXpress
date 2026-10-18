@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../config/constants.dart';
+import '../models/documento_repartidor.dart';
 import '../models/pedido.dart';
 import '../models/repartidor.dart';
 import 'api_error.dart';
@@ -150,6 +151,14 @@ class PedidosService {
   }
 
   /// Rechazado → vuelve a revisión (después de corregir el vehículo o la placa)
+  /// Documentos que pide la verificación (cédula, selfie y, si el vehículo lleva placa, licencia y matrícula)
+  static Future<DocumentosRepartidor> misDocumentos() async =>
+      DocumentosRepartidor.desdeJson(_json(await http.get(_url('/repartidor/documentos'), headers: await _cabeceras()), 200, 'No se pudieron cargar tus documentos'));
+
+  /// Sube (o reemplaza) la foto de un documento
+  static Future<DocumentosRepartidor> subirDocumento(String tipo, String imagen) async => DocumentosRepartidor.desdeJson(
+      _json(await http.put(_url('/repartidor/documentos/$tipo'), headers: await _cabeceras(), body: jsonEncode({'imagen': imagen})), 200, 'No se pudo subir el documento'));
+
   static Future<PerfilRepartidor> pedirRevisionRepartidor() async => _perfil(await http.post(_url('/repartidor/revision'), headers: await _cabeceras()));
 
   static Future<PerfilRepartidor> cambiarDisponibilidad(bool disponible) async =>

@@ -9,6 +9,7 @@ import '../../services/api_error.dart';
 import '../../services/profile_service.dart';
 import '../legal/documento_legal_screen.dart';
 import 'eliminar_cuenta_screen.dart';
+import '../inicio/tutorial_screen.dart';
 import '../../services/version_app.dart';
 import '../../widgets/ui/ui.dart';
 
@@ -185,6 +186,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   Divider(height: 1, color: context.colores.borde),
                 ],
+                ListTile(
+                  leading: const Icon(Icons.school_outlined),
+                  title: const Text('Ver el tutorial'),
+                  subtitle: const Text('Lo que puedes hacer en la app'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => TutorialScreen.abrir(context, rol),
+                ),
+                Divider(height: 1, color: context.colores.borde),
                 ListTile(
                   leading: const Icon(Icons.privacy_tip_outlined),
                   title: const Text('Política de privacidad'),

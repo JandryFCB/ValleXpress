@@ -27,6 +27,7 @@ class PanelAprobacion extends StatefulWidget {
     this.onMientras,
     required this.onPedirRevision,
     required this.onActualizar,
+    this.extra,
   });
 
   final TipoSolicitud tipo;
@@ -41,6 +42,9 @@ class PanelAprobacion extends StatefulWidget {
   /// Pendiente: algo útil para adelantar mientras esperan ("Armar mi menú")
   final String? textoMientras;
   final VoidCallback? onMientras;
+
+  /// Contenido propio del tipo de solicitud (el repartidor: sus documentos), debajo de los pasos
+  final Widget? extra;
 
   final Future<void> Function() onPedirRevision;
   final Future<void> Function() onActualizar;
@@ -163,6 +167,7 @@ class _PanelAprobacionState extends State<PanelAprobacion> {
                 ),
               ),
             ),
+          if (widget.extra != null && widget.aprobacion != 'suspendido') ...[const SizedBox(height: 16), Aparecer(indice: 2, child: widget.extra!)],
           const SizedBox(height: 24),
 
           // Acciones

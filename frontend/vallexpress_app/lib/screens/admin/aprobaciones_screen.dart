@@ -9,6 +9,8 @@ import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import '../repartidor/vehiculo_screen.dart';
+import '../../models/documento_repartidor.dart';
+import '../../widgets/documentos_repartidor.dart';
 import '../vendedor/mi_negocio_screen.dart';
 import 'pedir_motivo.dart';
 import 'usuarios_admin_screen.dart';
@@ -108,6 +110,25 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
     final esNegocio = item is NegocioAdmin;
     final nombre = esNegocio ? item.negocio.nombre : (item as RepartidorAdmin).nombre;
     String? motivo;
+    if (!esNegocio && nueva == Aprobacion.aprobado) {
+      final r = item as RepartidorAdmin;
+      final faltan = r.documentosRequeridos - r.documentosSubidos;
+      if (faltan > 0) {
+        final seguir = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            icon: const Icon(Icons.warning_amber_rounded, color: AppTheme.warningColor, size: 36),
+            title: const Text('Faltan documentos'),
+            content: Text('$nombre todavía no subió ${faltan == 1 ? '1 documento' : '$faltan documentos'}. ¿Quieres aprobarlo igual?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Esperar')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Aprobar igual')),
+            ],
+          ),
+        );
+        if (seguir != true || !mounted) return;
+      }
+    }
     if (nueva == Aprobacion.rechazado || nueva == Aprobacion.suspendido) {
       motivo = await pedirMotivo(
         context,
@@ -145,6 +166,10 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
   Future<void> _gestionarNegocio(NegocioAdmin n) async {
     await CatalogoService.gestionarComoAdmin(n.negocio.id, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MiNegocioScreen())));
     if (mounted) _cargar();
+  }
+
+  Future<void> _verDocumentos(RepartidorAdmin r) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => DocumentosAdminScreen(repartidor: r)));
   }
 
   Future<void> _editarVehiculo(RepartidorAdmin r) async {
@@ -187,6 +212,9 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
                 if (a == Aprobacion.pendiente) opcion('rechazar', Icons.block_rounded, 'Rechazar solicitud', color: AppTheme.errorColor),
                 if (a == Aprobacion.aprobado) opcion('suspender', Icons.pause_circle_rounded, 'Suspender', color: AppTheme.errorColor, detalle: esNegocio ? 'Se cierra y deja de recibir pedidos' : 'Queda fuera de línea'),
                 if (esNegocio) opcion('gestionar', Icons.edit_rounded, 'Editar negocio', detalle: 'Datos, horario, ubicación, logo, portada y productos'),
+                if (!esNegocio)
+                  opcion('documentos', Icons.verified_user_rounded, 'Ver documentos',
+                      detalle: '${(item as RepartidorAdmin).documentosSubidos} de ${item.documentosRequeridos} subidos'),
                 if (!esNegocio) opcion('vehiculo', Icons.two_wheeler_rounded, 'Editar vehículo', detalle: 'Tipo, placa y color'),
                 if (contacto != null) opcion('cuenta', Icons.manage_accounts_rounded, esNegocio ? 'Cuenta del dueño' : 'Cuenta del repartidor', detalle: 'Datos, contraseña, foto, bloquear o dar de baja'),
                 if (contacto?.telefono != null) opcion('llamar', Icons.call_rounded, 'Llamar', detalle: Formato.telefono(contacto!.telefono!)),
@@ -206,6 +234,8 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
         await _cambiarAprobacion(item, Aprobacion.suspendido);
       case 'gestionar':
         await _gestionarNegocio(item as NegocioAdmin);
+      case 'documentos':
+        await _verDocumentos(item as RepartidorAdmin);
       case 'vehiculo':
         await _editarVehiculo(item as RepartidorAdmin);
       case 'cuenta':
@@ -294,6 +324,10 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
               child: Column(
                 children: [
                   item is NegocioAdmin ? _CabeceraNegocio(n: item) : _CabeceraRepartidor(r: item as RepartidorAdmin),
+                  if (pendiente && item is RepartidorAdmin) ...[
+                    const SizedBox(height: 12),
+                    BotonValle(texto: 'Ver documentos', icono: Icons.verified_user_rounded, tipo: TipoBoton.texto, onPressed: () => _verDocumentos(item)),
+                  ],
                   if (pendiente) ...[
                     const SizedBox(height: 12),
                     Row(
@@ -389,6 +423,12 @@ class _CabeceraRepartidor extends StatelessWidget {
               const SizedBox(height: 6),
               Wrap(spacing: 6, runSpacing: 4, children: [
                 InsigniaValle(r.aprobacion.etiqueta, color: r.aprobacion.color, icono: r.aprobacion.icono),
+                if (r.documentosRequeridos > 0)
+                  InsigniaValle(
+                    'Documentos ${r.documentosSubidos}/${r.documentosRequeridos}',
+                    color: r.documentosSubidos >= r.documentosRequeridos ? AppTheme.successColor : AppTheme.warningColor,
+                    icono: Icons.verified_user_rounded,
+                  ),
                 if (p.disponible) const InsigniaValle('En línea', color: AppTheme.successColor, icono: Icons.circle),
                 InsigniaValle(p.numeroEntregas == 1 ? '1 entrega' : '${p.numeroEntregas} entregas', color: AppTheme.infoColor),
                 if (p.numeroCalificaciones > 0) InsigniaValle('${p.calificacion.toStringAsFixed(1)} ★', color: AppTheme.accentColor),
@@ -398,6 +438,87 @@ class _CabeceraRepartidor extends StatelessWidget {
         ),
         Icon(Icons.more_vert_rounded, color: c.textoSuave),
       ],
+    );
+  }
+}
+
+/// Documentos de un repartidor para revisarlos antes de aprobarlo: cada foto en grande (tocarla la amplía)
+class DocumentosAdminScreen extends StatefulWidget {
+  const DocumentosAdminScreen({super.key, required this.repartidor});
+
+  final RepartidorAdmin repartidor;
+
+  @override
+  State<DocumentosAdminScreen> createState() => _DocumentosAdminScreenState();
+}
+
+class _DocumentosAdminScreenState extends State<DocumentosAdminScreen> {
+  DocumentosRepartidor? _docs;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    try {
+      final d = await AdminService.documentosRepartidor(widget.repartidor.perfil.usuario);
+      if (mounted) setState(() => (_docs = d, _error = null));
+    } catch (e) {
+      if (mounted) setState(() => _error = textoDeError(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final c = context.colores;
+    final docs = _docs;
+    final p = widget.repartidor.perfil;
+    return FondoValle(
+      appBar: AppBar(title: Text(widget.repartidor.nombre)),
+      child: docs == null
+          ? (_error != null
+              ? EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar los documentos', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar)
+              : const EsqueletoLista(cantidad: 3, conImagen: false))
+          : RefreshIndicator(
+              onRefresh: _cargar,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                children: [
+                  TarjetaValle(
+                    child: Row(children: [
+                      Icon(p.vehiculo.icono, color: AppTheme.repartidorColor),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          [p.vehiculo.etiqueta, if (p.placa != null) 'placa ${p.placa}', if (p.color != null && p.color!.isNotEmpty) p.color!].join(' · '),
+                          style: tema.titleSmall,
+                        ),
+                      ),
+                      InsigniaValle(docs.completos ? 'Completos' : 'Faltan ${docs.faltan}', color: docs.completos ? AppTheme.successColor : AppTheme.warningColor),
+                    ]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Revisa que el nombre y la cara coincidan con la cédula y, si lleva placa, que la matrícula sea de ese vehículo.',
+                      style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                  for (final d in docs.documentos) ...[
+                    EncabezadoSeccion(d.titulo, subtitulo: d.subido ? (d.fecha == null ? null : 'Subido ${Formato.fechaRelativa(d.fecha!).toLowerCase()}') : 'Todavía no lo sube'),
+                    d.subido
+                        ? GestureDetector(onTap: () => verDocumento(context, d), child: ImagenRed(url: d.url, alto: 200, radio: 16, fit: BoxFit.cover))
+                        : TarjetaValle(
+                            child: Row(children: [
+                              const Icon(Icons.hourglass_empty_rounded, color: AppTheme.warningColor),
+                              const SizedBox(width: 10),
+                              Expanded(child: Text(d.ayuda, style: tema.bodySmall)),
+                            ]),
+                          ),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 }

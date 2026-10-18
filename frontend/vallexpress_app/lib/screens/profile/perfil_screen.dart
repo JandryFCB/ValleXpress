@@ -19,6 +19,7 @@ import 'settings_screen.dart';
 import 'telefonos_screen.dart';
 import '../../services/pedidos_service.dart';
 import '../repartidor/vehiculo_screen.dart';
+import '../../widgets/documentos_repartidor.dart';
 import '../vendedor/mi_negocio_screen.dart';
 
 /// Mi perfil: el mismo para cliente, vendedor y repartidor. Datos de la cuenta, teléfonos, direcciones, configuración
@@ -299,16 +300,28 @@ class _PerfilScreenState extends State<PerfilScreen> {
             const EncabezadoSeccion('Reparto'),
             TarjetaValle(
               padding: EdgeInsets.zero,
-              child: _Fila(
-                icono: Icons.two_wheeler_rounded,
-                titulo: 'Mi vehículo',
-                valor: 'Tipo, placa y color',
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () async {
-                  final perfil = await PedidosService.miPerfilRepartidor()
-                      .catchError((_) => null);
-                  if (mounted) _abrir(VehiculoScreen(actual: perfil));
-                },
+              child: Column(
+                children: [
+                  _Fila(
+                    icono: Icons.two_wheeler_rounded,
+                    titulo: 'Mi vehículo',
+                    valor: 'Tipo, placa y color',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () async {
+                      final perfil = await PedidosService.miPerfilRepartidor()
+                          .catchError((_) => null);
+                      if (mounted) _abrir(VehiculoScreen(actual: perfil));
+                    },
+                  ),
+                  Divider(height: 1, color: context.colores.borde),
+                  _Fila(
+                    icono: Icons.verified_user_rounded,
+                    titulo: 'Mis documentos',
+                    valor: 'Cédula, selfie, licencia y matrícula',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(const MisDocumentosScreen()),
+                  ),
+                ],
               ),
             ),
           ],

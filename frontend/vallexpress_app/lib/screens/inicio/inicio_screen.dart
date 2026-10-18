@@ -13,6 +13,7 @@ import '../../services/tiempo_real.dart';
 import '../../widgets/ui/ui.dart';
 import '../catalogo/negocio_detalle_screen.dart';
 import '../legal/aceptar_legal_screen.dart';
+import 'tutorial_screen.dart';
 import '../catalogo/negocios_screen.dart';
 import '../admin/inicio_admin_screen.dart';
 import '../repartidor/inicio_repartidor_screen.dart';
@@ -35,10 +36,14 @@ class InicioScreen extends StatefulWidget {
 class _InicioScreenState extends State<InicioScreen> {
   List<DocumentoLegal> _pendientes = const [];
   String? _revisadoPara;
+  bool _tutorial = false; // primera vez con este perfil en el celular: tutorial de bienvenida
 
   // Una vez por usuario. Sin conexión no se bloquea: se vuelve a revisar en la próxima entrada.
-  Future<void> _revisarLegal(String usuario) async {
+  Future<void> _revisarLegal(String usuario, String rol) async {
     _revisadoPara = usuario;
+    TutorialScreen.visto(rol).then((visto) {
+      if (mounted && _revisadoPara == usuario && !visto) setState(() => _tutorial = true);
+    });
     try {
       final p = await LegalService.pendientes();
       if (mounted && _revisadoPara == usuario) setState(() => _pendientes = p);
@@ -51,11 +56,13 @@ class _InicioScreenState extends State<InicioScreen> {
     final usuario = context.select<AuthProvider, String>((a) => '${a.usuario?['id'] ?? ''}');
     if (usuario.isNotEmpty && _revisadoPara != usuario) {
       _pendientes = const [];
-      _revisarLegal(usuario);
+      _tutorial = false;
+      _revisarLegal(usuario, rol);
     }
     if (_pendientes.isNotEmpty) {
       return AceptarLegalScreen(key: ValueKey(usuario), pendientes: _pendientes, alAceptar: () => setState(() => _pendientes = const []));
     }
+    if (_tutorial) return TutorialScreen(key: ValueKey('tutorial-$rol'), rol: rol, alTerminar: () => setState(() => _tutorial = false));
     return switch (rol) {
       'vendedor' => const InicioVendedorScreen(),
       'repartidor' => const InicioRepartidorScreen(),
