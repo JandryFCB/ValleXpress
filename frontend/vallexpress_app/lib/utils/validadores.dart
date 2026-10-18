@@ -24,9 +24,9 @@ class Validadores {
     return (10 - (suma % 10)) % 10 == d[9];
   }
 
-  /// Placa: AB1234 (antigua) o ABC123 (nueva); se ignoran guiones y espacios
+  /// Placa de Ecuador (la misma regla que el servidor): ABC-1234 o ABC-123 (auto), AB-123C o AB-1234 (moto)
   static bool placa(String v) =>
-      RegExp(r'^([A-Z]{2}\d{4}|[A-Z]{3}\d{3})$').hasMatch(v.toUpperCase().replaceAll(RegExp(r'[\s\-]'), ''));
+      RegExp(r'^[A-Z]{2,3}\d{3,4}[A-Z]?$').hasMatch(v.toUpperCase().replaceAll(RegExp(r'[\s\-]'), ''));
 
   /// Fuerza de la contraseña de 0 (vacía) a 4 (fuerte): largo, mayúsculas y minúsculas, números y símbolos.
   static int fuerzaClave(String v) {

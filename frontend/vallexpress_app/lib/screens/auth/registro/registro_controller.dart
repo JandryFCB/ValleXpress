@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import '../../../models/pedido.dart' show Vehiculo;
 import '../../../providers/auth_provider.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/api_error.dart';
@@ -16,7 +17,6 @@ class RegistroController extends ChangeNotifier {
   final AuthService _servicio;
 
   static const int totalPasos = 4;
-  static const List<String> vehiculos = ['Moto', 'Bicicleta', 'Auto', 'Otro'];
 
   int paso = 0;
   String? rol; // 'cliente' | 'vendedor' | 'repartidor'
@@ -25,7 +25,7 @@ class RegistroController extends ChangeNotifier {
   /// todos y el servidor vuelve a validar al registrar.
   Map<String, bool>? perfilesAbiertos;
   bool registroAbierto(String valor) => perfilesAbiertos?[valor] ?? true;
-  String? vehiculo;
+  Vehiculo? vehiculo; // bicicleta y a pie no llevan placa
   bool aceptaTerminos = false;
 
   final nombre = TextEditingController();
@@ -89,7 +89,7 @@ class RegistroController extends ChangeNotifier {
         if (rol == 'vendedor' && negocio.text.trim().isEmpty) return 'Escribe el nombre de tu negocio';
         if (rol == 'repartidor') {
           if (vehiculo == null) return 'Elige tu tipo de vehículo';
-          if (!Validadores.placa(placa.text)) return 'La placa no es válida (ej: ABC-123 o AB1234)';
+          if (vehiculo!.llevaPlaca && !Validadores.placa(placa.text)) return 'La placa no es válida (ej: ABC-1234 o AB-123C)';
         }
         return null;
       case 2:
@@ -136,8 +136,13 @@ class RegistroController extends ChangeNotifier {
     _avisar();
   }
 
-  void elegirVehiculo(String? valor) {
+  void elegirVehiculo(Vehiculo? valor) {
     vehiculo = valor;
+    if (valor != null && !valor.llevaPlaca) {
+      placa.clear();
+      estadoPlaca = EstadoCampo.neutro;
+      mensajePlaca = null;
+    }
     _avisar();
   }
 
@@ -212,7 +217,7 @@ class RegistroController extends ChangeNotifier {
       mensajePlaca = 'Placa válida';
     } else {
       estadoPlaca = v.replaceAll(RegExp(r'[\s\-]'), '').length >= 6 ? EstadoCampo.error : EstadoCampo.neutro;
-      mensajePlaca = 'Formato: ABC-123 o AB1234';
+      mensajePlaca = 'Formato: ABC-1234 (auto) o AB-123C (moto)';
     }
     _avisar();
   }
@@ -347,8 +352,8 @@ class RegistroController extends ChangeNotifier {
         password: clave.text,
         tipoUsuario: rol!,
         nombreNegocio: rol == 'vendedor' ? negocio.text.trim() : null,
-        vehiculo: rol == 'repartidor' ? vehiculo : null,
-        placa: rol == 'repartidor' ? placa.text.trim() : null,
+        vehiculo: rol == 'repartidor' ? vehiculo?.codigo : null,
+        placa: rol == 'repartidor' && (vehiculo?.llevaPlaca ?? false) ? placa.text.trim() : null,
       );
       return ok ? null : (auth.error ?? 'No pudimos crear tu cuenta');
     } finally {

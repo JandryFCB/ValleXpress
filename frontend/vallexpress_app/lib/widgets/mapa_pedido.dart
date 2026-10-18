@@ -117,7 +117,7 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.vallexpress_app',
+                  userAgentPackageName: 'ec.vallexpress.app',
                   tileBuilder: oscuro ? darkModeTileBuilder : null,
                 ),
                 if (repartidor != null && destino != null)

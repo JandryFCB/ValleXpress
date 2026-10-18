@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../config/constants.dart';
 import '../../config/theme.dart';
+import '../../models/pedido.dart' show Vehiculo;
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../../utils/validadores.dart';
@@ -416,12 +417,17 @@ class _PasoDatos extends StatelessWidget {
         if (c.rol == 'repartidor') ...[
           const SizedBox(height: 28),
           const EncabezadoSeccion('Tu vehículo', subtitulo: 'Lo usamos para asignarte pedidos adecuados'),
-          DropdownButtonFormField<String>(
+          DropdownButtonFormField<Vehiculo>(
             initialValue: c.vehiculo,
-            decoration: const InputDecoration(labelText: 'Tipo de vehículo', prefixIcon: Icon(Icons.two_wheeler_outlined)),
-            items: [for (final v in RegistroController.vehiculos) DropdownMenuItem(value: v, child: Text(v))],
+            decoration: InputDecoration(labelText: 'Tipo de vehículo', prefixIcon: Icon(c.vehiculo?.icono ?? Icons.two_wheeler_outlined)),
+            items: [
+              for (final v in Vehiculo.values)
+                DropdownMenuItem(value: v, child: Row(children: [Icon(v.icono, size: 20), const SizedBox(width: 10), Text(v.etiqueta)])),
+            ],
             onChanged: c.elegirVehiculo,
           ),
+          // Bicicleta y a pie no llevan placa
+          if (c.vehiculo?.llevaPlaca ?? false) ...[
           const SizedBox(height: 16),
           CampoValle(
             controller: c.placa,
@@ -431,10 +437,11 @@ class _PasoDatos extends StatelessWidget {
             formateadores: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\- ]'))],
             maxLongitud: 8,
             estado: c.estadoPlaca,
-            ayuda: c.mensajePlaca ?? 'Ej: ABC-123',
+            ayuda: c.mensajePlaca ?? 'Ej: ABC-1234 (auto) o AB-123C (moto)',
             accion: TextInputAction.done,
             onChanged: c.alCambiarPlaca,
           ),
+          ],
         ],
       ],
     );

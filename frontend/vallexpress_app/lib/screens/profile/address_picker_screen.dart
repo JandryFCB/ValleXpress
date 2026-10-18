@@ -182,9 +182,11 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
                   children: [
                     TileLayer(
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.vallexpress_app',
+                      userAgentPackageName: 'ec.vallexpress.app',
                       tileBuilder: oscuro ? darkModeTileBuilder : null,
                     ),
+                    // OpenStreetMap exige mostrar el crédito en el mapa
+                    const RichAttributionWidget(attributions: [TextSourceAttribution('© OpenStreetMap')], alignment: AttributionAlignment.bottomLeft),
                   ],
                 ),
                 // El pin: su punta queda exactamente en el centro del mapa
