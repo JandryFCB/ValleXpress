@@ -1,8 +1,8 @@
 ---
 titulo: Política de privacidad
-version: 1.0
-vigencia: 2026-10-17
-resumen: Qué datos tuyos usamos, para qué, con quién los compartimos y cómo ejercer tus derechos.
+version: 1.1
+vigencia: 2026-10-18
+resumen: Agregamos las fotos de documentos que suben los repartidores para verificar su identidad y su vehículo.
 ---
 
 En ValleXpress cuidamos tus datos personales. Esta política explica, en lenguaje sencillo, qué datos tratamos, para qué y cuáles son tus derechos, conforme a la Ley Orgánica de Protección de Datos Personales del Ecuador (LOPDP) y su reglamento.
@@ -37,6 +37,7 @@ Para cualquier asunto sobre tus datos escríbenos a **{{correo}}**.
 **Repartidores**
 
 - Tipo de vehículo, placa y color.
+- **Fotos de tus documentos** para verificar tu identidad y tu vehículo: cédula (frente y reverso), una selfie sosteniendo tu cédula y, si tu vehículo lleva placa, tu licencia de conducir y la matrícula. Solo las ve el equipo de ValleXpress que aprueba las cuentas; no las ven los clientes ni los negocios.
 - **Ubicación precisa en tiempo real**, solo mientras estás "En línea" o llevas un pedido. Se sigue enviando aunque la app esté minimizada o la pantalla apagada; mientras eso ocurre, tu celular muestra una notificación fija que lo indica. Al desconectarte, deja de enviarse.
 - Recorridos de cada entrega y pedidos realizados.
 
@@ -45,7 +46,7 @@ No tratamos datos sensibles (salud, religión, orientación sexual, datos biomé
 ## 3. Para qué los usamos
 
 - **Prestar el servicio:** crear y proteger tu cuenta, recibir y gestionar pedidos, calcular el costo de envío por distancia, asignar repartidores, mostrar al cliente y al negocio dónde va su pedido y avisarte de cada cambio.
-- **Seguridad:** verificar tu correo, prevenir fraudes y accesos indebidos, y resolver reclamos.
+- **Seguridad:** verificar tu correo y la identidad de los repartidores, prevenir fraudes y accesos indebidos, y resolver reclamos.
 - **Cobros:** calcular y registrar las comisiones semanales de los negocios y validar sus comprobantes de pago.
 - **Mejorar la plataforma:** estadísticas internas y agregadas (por ejemplo, ventas por día), que no te identifican.
 - **Cumplir la ley:** conservar la información que exigen las normas tributarias y atender requerimientos de autoridades competentes.
@@ -75,7 +76,7 @@ Tratamos tus datos porque son necesarios para **ejecutar el contrato** que acept
 ## 6. Cuánto tiempo los conservamos
 
 - Mientras tu cuenta esté activa.
-- Si eliminas tu cuenta, borramos de inmediato tus datos personales (nombre, cédula, correo, teléfono, foto, direcciones, vehículo y recorridos), también de nuestros historiales internos.
+- Si eliminas tu cuenta, borramos de inmediato tus datos personales (nombre, cédula, correo, teléfono, foto, direcciones, vehículo, recorridos y fotos de tus documentos), también de nuestros historiales internos.
 - Los pedidos, pagos y comisiones se conservan sin tus datos de contacto durante el plazo que exigen las normas tributarias (hasta 7 años), porque son registros contables.
 - Las copias de seguridad se renuevan automáticamente y los datos eliminados desaparecen de ellas en un máximo de 30 días.
 - Los registros de seguridad se conservan hasta 1 año.

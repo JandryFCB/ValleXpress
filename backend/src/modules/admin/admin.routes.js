@@ -24,6 +24,7 @@ router.use('/negocios/:negocioId/gestion', schema.negocioGestion, validar, rutas
 router.get('/repartidores', schema.listadoAprobacion, validar, controller.repartidores);
 router.patch('/repartidores/:usuario/aprobacion', schema.usuario, schema.aprobacion, validar, controller.aprobacionRepartidor);
 router.put('/repartidores/:usuario', schema.editarRepartidor, validar, controller.editarRepartidor);
+router.get('/repartidores/:usuario/documentos', schema.usuario, validar, controller.documentosRepartidor);
 
 router.get('/pedidos', schema.listadoPedidos, validar, controller.pedidos);
 router.get('/pedidos/:id', schema.idPedido, validar, controller.pedido);

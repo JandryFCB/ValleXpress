@@ -1,8 +1,8 @@
 ---
 titulo: Términos y condiciones para repartidores
-version: 2.0
-vigencia: 2026-10-17
-resumen: Cómo tomas pedidos, cuánto ganas, el cobro en efectivo, el uso de tu ubicación y tus responsabilidades.
+version: 2.1
+vigencia: 2026-10-18
+resumen: Ahora, para aprobar tu cuenta, subes fotos de tus documentos (cédula, selfie y, si aplica, licencia y matrícula).
 ---
 
 Estos términos regulan el uso de ValleXpress por parte de las personas que realizan entregas ("repartidor"). Al registrarte y marcar "Acepto", declaras haberlos leído y aceptado, junto con la **Política de privacidad**.
@@ -22,7 +22,8 @@ ValleXpress es una plataforma tecnológica operada por **Jandry Franklin Cayapa 
 - Ser mayor de 18 años y registrar datos verdaderos.
 - Si usa un vehículo motorizado: contar con licencia de conducir vigente del tipo que corresponda, matrícula y SPPAT/SOAT vigentes, y casco y demás elementos de seguridad que exija la ley.
 - Tener un celular con internet, GPS y los permisos de la app activos.
-- ValleXpress puede revisar la solicitud y aprobarla, pedir correcciones o rechazarla.
+- Subir en la app fotos claras y verdaderas de tu cédula (frente y reverso), una selfie sosteniendo tu cédula y, si tu vehículo lleva placa, tu licencia y la matrícula. Usar documentos ajenos o alterados es causa de rechazo o suspensión inmediata, sin perjuicio de las acciones legales que correspondan.
+- ValleXpress revisa la solicitud y los documentos, y puede aprobarla, pedir correcciones o rechazarla.
 
 ## 4. Cómo funciona
 

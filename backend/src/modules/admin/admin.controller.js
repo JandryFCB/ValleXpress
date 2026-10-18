@@ -49,6 +49,8 @@ const legal = asyncHandler(async (req, res) => res.json({ documentos: await Lega
 
 const detalleCifra = asyncHandler(async (req, res) => res.json(await service.detalleCifra(req.params.tipo, req.query.rango)));
 
-module.exports = { detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
+const documentosRepartidor = asyncHandler(async (req, res) => res.json(await require('../repartidores/documentos.service').documentos(req.params.usuario, req)));
+
+module.exports = { documentosRepartidor, detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
   liquidacionesPendientes, liquidacionesNegocio, registrarLiquidacion, configLiquidaciones, aprobarComprobante, rechazarComprobante,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

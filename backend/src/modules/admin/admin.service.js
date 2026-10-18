@@ -21,6 +21,7 @@ const PerfilesService = require('../../shared/services/perfiles.service');
 const TarifasService = require('../../shared/services/tarifas.service');
 const ZonaService = require('../../shared/services/zona.service');
 const LiquidacionService = require('../liquidaciones/liquidacion.service');
+const DocumentosService = require('../repartidores/documentos.service');
 const AppError = require('../../shared/errors/AppError');
 const withTransaction = require('../../shared/helpers/withTransaction');
 const { auditar } = require('../../shared/services/log.service');
@@ -388,7 +389,8 @@ async function repartidores(query) {
   if (APIAAPROBACION[query.aprobacion]) where.aprobacion = APIAAPROBACION[query.aprobacion];
   if (query.q) where[Op.or] = [{ usuarioId: { [Op.iLike]: textoBusqueda(query.q) } }, { placa: { [Op.iLike]: textoBusqueda(query.q) } }];
   const { count, rows } = await Repartidor.findAndCountAll({ where, include: INCLUIRREPARTIDOR, order: [['aprobacion', 'ASC'], ['usuarioId', 'ASC']], limit: pag.limit, offset: pag.offset });
-  return { repartidores: rows.map(repartidorApi), pagination: paginacion(pag, count) };
+  const docs = await DocumentosService.resumenDe(rows);
+  return { repartidores: rows.map((r) => ({ ...repartidorApi(r), documentos: docs[r.usuarioId] })), pagination: paginacion(pag, count) };
 }
 
 async function cambiarAprobacionRepartidor(admin, usuarioId, { estado, motivo }, req) {

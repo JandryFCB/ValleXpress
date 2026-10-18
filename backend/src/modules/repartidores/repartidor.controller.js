@@ -22,4 +22,8 @@ const aceptar = asyncHandler(async (req, res) => res.json({ pedido: await Pedido
 const recoger = asyncHandler(async (req, res) => res.json({ pedido: await PedidoService.recoger(req.usuario, id(req), req) }));
 const entregar = asyncHandler(async (req, res) => res.json({ pedido: await PedidoService.entregar(req.usuario, id(req), req) }));
 
-module.exports = { miPerfil, crear, actualizar, revision, disponibilidad, ubicacion, libres, misEntregas, aceptar, recoger, entregar };
+const DocumentosService = require('./documentos.service');
+const documentos = asyncHandler(async (req, res) => res.json(await DocumentosService.documentos(u(req), req)));
+const subirDocumento = asyncHandler(async (req, res) => res.json(await DocumentosService.subir(u(req), req.params.tipo, req.body.imagen, req)));
+
+module.exports = { documentos, subirDocumento, miPerfil, crear, actualizar, revision, disponibilidad, ubicacion, libres, misEntregas, aceptar, recoger, entregar };

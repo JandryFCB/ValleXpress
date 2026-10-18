@@ -13,6 +13,7 @@ const ArchivoService = require('../../shared/services/archivo.service');
 const NegocioService = require('../negocios/negocio.service');
 const RepartidorService = require('../repartidores/repartidor.service');
 const LegalService = require('../legal/legal.service');
+const DocumentosService = require('../repartidores/documentos.service');
 const LiquidacionService = require('../liquidaciones/liquidacion.service');
 const fs = require('fs/promises');
 const path = require('path');
@@ -362,11 +363,12 @@ async function eliminarCuenta(id, { password }, req) {
     }
     await sequelize.query('DELETE FROM tcodigosverificacion WHERE correo = :correo', { replacements: { correo: usuario.email }, transaction: t });
     await SesionService.cerrarTodas(id, 'DESACTIVADA', { transaction: t });
+    const documentos = await DocumentosService.quitarTodos(id, { transaction: t });
     const filas = await consulta('SELECT eliminardatospersonales AS id FROM ELIMINARDATOSPERSONALES(:p, :u)', { p: usuario.personaId, u: id }, { transaction: t });
-    return filas.map((f) => Number(f.id));
+    return [...new Set([...filas.map((f) => Number(f.id)), ...documentos])];
   }, { usuarioId: id });
 
-  // Las fotos de perfil que quedaron sin usar se borran del disco (fuera de la transacción: si falla no se revierte la baja)
+  // Las fotos de perfil y de los documentos se borran del disco (fuera de la transacción: si falla no se revierte la baja)
   if (fotos.length) {
     const archivos = await consulta('SELECT carchivo, ruta, rutamediana, rutaminiatura FROM tarchivos WHERE carchivo IN (:ids)', { ids: fotos });
     for (const a of archivos) {

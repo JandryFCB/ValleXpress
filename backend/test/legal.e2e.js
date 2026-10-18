@@ -144,8 +144,11 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     r = await api('POST', '/api/auth/eliminar-cuenta', { password: 'secreto1' }, luis.token);
     check('con comisión de la semana por pagar no se puede: 409', r.status === 409 && r.body.code === 'COMISIONESPENDIENTES', JSON.stringify(r.body));
     const ubic = await q('SELECT COUNT(*)::int AS n FROM trepartidorubicaciones WHERE cusuario = $1', [pedro.usuario.id]);
+    await api('PUT', '/api/repartidor/documentos/cedula_frente', { imagen: await t.imagen(600, 400, 'jpeg') }, pedro.token);
+    const docAntes = (await q('SELECT carchivo FROM trepartidordocumentos WHERE cusuario = $1', [pedro.usuario.id]))[0]?.carchivo;
     r = await api('POST', '/api/auth/eliminar-cuenta', { password: 'secreto1' }, pedro.token);
     check('el repartidor sin pedidos en curso sí puede', r.status === 200);
+    check('sus documentos (cédula, etc.) se borran: filas y archivos', !!docAntes && (await q('SELECT 1 FROM trepartidordocumentos WHERE cusuario = $1', [pedro.usuario.id])).length === 0 && (await q('SELECT 1 FROM tarchivos WHERE carchivo = $1', [docAntes])).length === 0);
     check('su placa y sus recorridos se borran', (await q('SELECT 1 FROM trepartidores WHERE cusuario = $1 AND placa IS NOT NULL', [pedro.usuario.id])).length === 0 && (await q('SELECT 1 FROM trepartidorubicaciones WHERE cusuario = $1', [pedro.usuario.id])).length === 0, `ubicaciones antes: ${ubic[0].n}`);
   } catch (e) {
     return t.finalizar(e);
