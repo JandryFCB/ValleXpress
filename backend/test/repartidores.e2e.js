@@ -180,6 +180,19 @@ const LOCAL = { lat: -0.18, lng: -78.48 };
     check('ya libre, puede aceptar el siguiente', r.status === 200 && r.body.pedido.estado === 'en_camino');
     r = await api('PATCH', '/api/repartidor/disponibilidad', { disponible: false }, ganador.token);
     check('desconectarse: 200', r.status === 200 && r.body.repartidor.disponible === false);
+
+    seccion('Vehículo y placa al registrarse');
+    const bici = await t.registrar('bici@test.com', 'Bea', 'Ruiz', 'repartidor', { vehiculo: 'bicicleta', placa: 'ABC1234' });
+    r = await api('GET', '/api/repartidor', null, bici.token);
+    check('en bicicleta la placa se ignora aunque venga', r.status === 200 && r.body.repartidor?.vehiculo === 'bicicleta' && !r.body.repartidor.placa, JSON.stringify(r.body));
+    const auto = await t.registrar('auto@test.com', 'Ana', 'Vela', 'repartidor', { vehiculo: 'auto', placa: 'PBC-1234' });
+    r = await api('GET', '/api/repartidor', null, auto.token);
+    check('placa de auto actual (ABC-1234) se acepta y se guarda sin guion', r.body.repartidor?.placa === 'PBC1234', JSON.stringify(r.body));
+    const moto = await t.registrar('moto@test.com', 'Mía', 'Paz', 'repartidor', { vehiculo: 'moto', placa: 'IB-123C' });
+    r = await api('GET', '/api/repartidor', null, moto.token);
+    check('placa de moto (AB-123C) se acepta', r.body.repartidor?.placa === 'IB123C', JSON.stringify(r.body));
+    const otro = await t.registrar('otro@test.com', 'Oto', 'Lima', 'repartidor', { vehiculo: 'Otro', placa: 'ABC1234' });
+    check('un vehículo que no existe ("Otro") no se registra', !otro.token);
   } catch (e) {
     return t.finalizar(e);
   }

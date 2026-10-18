@@ -53,6 +53,11 @@ Desde tu PC, sube la credencial de Firebase:
 ```bash
 scp backend/vallexpress-delivery-firebase-adminsdk-*.json root@TU_IP:~/ValleXpress/deploy/secretos/firebase.json
 ```
+Y en el servidor, que el backend (usuario 1000 dentro del contenedor) pueda leerla; si no, las push no salen
+(en los logs: `EACCES: permission denied, open '/run/secrets/firebase.json'`):
+```bash
+chown 1000:1000 ~/ValleXpress/deploy/secretos/firebase.json && chmod 600 ~/ValleXpress/deploy/secretos/firebase.json
+```
 
 Valores del `.env` que importan:
 | Variable | Qué poner |

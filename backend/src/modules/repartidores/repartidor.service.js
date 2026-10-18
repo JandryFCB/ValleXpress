@@ -79,6 +79,8 @@ function exigirAprobado(r) {
 // Lo usa el registro (dentro de su transacción) y POST /api/repartidor. Mientras no haya panel de administración,
 // nace aprobado si el perfil repartidor tiene la aprobación automática (igual que los negocios).
 async function crearPerfil(usuarioId, datos, opciones = {}) {
+  // Un vehículo que no existe (versiones viejas de la app ofrecían "Otro") se rechaza en vez de adivinarlo
+  if (datos.vehiculo && !vehiculoDe(datos.vehiculo)) throw AppError.badRequest('Elige tu vehículo: moto, auto, camioneta, bicicleta o a pie', 'VEHICULOINVALIDO');
   const vehiculo = vehiculoDe(datos.vehiculo) || (datos.placa ? TIPOVEHICULO.MOTOCICLETA : TIPOVEHICULO.APIE);
   const placa = placaPara(vehiculo, datos.placa);
   await exigirPlacaLibre(placa, usuarioId, opciones);
