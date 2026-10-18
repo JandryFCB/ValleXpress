@@ -3,12 +3,27 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../config/theme.dart';
 import '../models/pedido.dart';
+import '../services/rutas.dart';
+import '../utils/contacto.dart';
 
 /// Mapa de una entrega: el negocio, la dirección de entrega y el repartidor (que se desliza suave entre una
 /// posición y la siguiente, en vez de saltar). Se encuadra solo para que se vean todos los puntos.
-/// [haciaNegocio] dibuja la línea del repartidor al negocio (todavía no recoge) o a la entrega (ya lo lleva).
+/// [haciaNegocio]: el repartidor todavía va al negocio (la ruta pasa por el local) o ya lleva el pedido.
+/// Dibuja la ruta por las calles (si el ruteador no responde, una línea recta). Se amplía a pantalla completa, que
+/// sigue en vivo, y desde ahí se abre Google Maps con la mejor ruta. [soyRepartidor]: Google Maps sale desde donde
+/// está el celular.
 class MapaPedido extends StatefulWidget {
-  const MapaPedido({super.key, this.negocio, this.entrega, this.repartidor, this.haciaNegocio = false, this.alto = 260, this.iconoRepartidor = Icons.two_wheeler_rounded});
+  const MapaPedido({
+    super.key,
+    this.negocio,
+    this.entrega,
+    this.repartidor,
+    this.haciaNegocio = false,
+    this.alto = 260,
+    this.iconoRepartidor = Icons.two_wheeler_rounded,
+    this.soyRepartidor = false,
+    this.pantallaCompleta = false,
+  });
 
   final Punto? negocio;
   final Punto? entrega;
@@ -16,6 +31,8 @@ class MapaPedido extends StatefulWidget {
   final bool haciaNegocio;
   final double alto;
   final IconData iconoRepartidor;
+  final bool soyRepartidor;
+  final bool pantallaCompleta;
 
   @override
   State<MapaPedido> createState() => _MapaPedidoState();
@@ -40,18 +57,94 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
     return LatLng(_desde!.latitude + (_hasta!.latitude - _desde!.latitude) * t, _desde!.longitude + (_hasta!.longitude - _desde!.longitude) * t);
   }
 
+  // La posición en vivo para la pantalla completa (que se abre aparte y debe seguir moviéndose)
+  late final ValueNotifier<Punto?> _vivo = ValueNotifier(widget.repartidor);
+
+  // Ruta por las calles: se vuelve a pedir si el repartidor se movió más de 150 m desde la última o cambió el tramo
+  List<LatLng>? _ruta;
+  String? _tramoRuta;
+  LatLng? _origenRuta;
+  bool _pidiendoRuta = false;
+  static const _distancia = Distance();
+
+  List<LatLng> get _puntosRuta {
+    final rep = _hasta;
+    final negocio = _ll(widget.negocio);
+    final entrega = _ll(widget.entrega);
+    if (rep == null) return [negocio, entrega].whereType<LatLng>().toList();
+    return [rep, if (widget.haciaNegocio) negocio, entrega].whereType<LatLng>().toList();
+  }
+
+  Future<void> _actualizarRuta() async {
+    final puntos = _puntosRuta;
+    if (puntos.length < 2 || _pidiendoRuta) return;
+    final tramo = '${widget.haciaNegocio}|${puntos.skip(1).map((p) => '${p.latitude},${p.longitude}').join(';')}';
+    if (_ruta != null && tramo == _tramoRuta && _origenRuta != null && _distancia.as(LengthUnit.Meter, _origenRuta!, puntos.first) < 150) return;
+    _pidiendoRuta = true;
+    final ruta = await Rutas.calcular(puntos);
+    _pidiendoRuta = false;
+    if (!mounted) return;
+    setState(() {
+      _ruta = ruta;
+      _tramoRuta = tramo;
+      _origenRuta = puntos.first;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _hasta = _ll(widget.repartidor);
     _anim.addListener(() => setState(() {}));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _actualizarRuta());
+  }
+
+  // Pantalla completa: el mismo mapa, que sigue la posición en vivo, con el botón de Google Maps
+  void _ampliar() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Mapa del pedido')),
+          body: ValueListenableBuilder<Punto?>(
+            valueListenable: _vivo,
+            builder: (_, posicion, _) => MapaPedido(
+              negocio: widget.negocio,
+              entrega: widget.entrega,
+              repartidor: posicion,
+              haciaNegocio: widget.haciaNegocio,
+              iconoRepartidor: widget.iconoRepartidor,
+              soyRepartidor: widget.soyRepartidor,
+              pantallaCompleta: true,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Google Maps con la mejor ruta. El repartidor sale desde su celular; los demás ven el recorrido del repartidor
+  // (o del local, si todavía no hay repartidor) hasta la entrega.
+  void _abrirGoogleMaps() {
+    final destino = widget.entrega ?? widget.negocio;
+    if (destino == null) return;
+    final pasaPorLocal = widget.haciaNegocio && widget.negocio != null && widget.entrega != null;
+    abrirRutaEnMapas(
+      context,
+      origen: widget.soyRepartidor ? null : (widget.repartidor ?? (pasaPorLocal ? null : widget.negocio)),
+      parada: pasaPorLocal && (widget.soyRepartidor || widget.repartidor != null) ? widget.negocio : null,
+      destino: destino,
+    );
   }
 
   @override
   void didUpdateWidget(covariant MapaPedido viejo) {
     super.didUpdateWidget(viejo);
+    if (viejo.haciaNegocio != widget.haciaNegocio) WidgetsBinding.instance.addPostFrameCallback((_) => _actualizarRuta());
+    _vivo.value = widget.repartidor;
     final nuevo = _ll(widget.repartidor);
     if (nuevo == null || nuevo == _hasta) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _actualizarRuta());
     final primeraVez = _hasta == null;
     _desde = _repartidor ?? nuevo;
     _hasta = nuevo;
@@ -68,6 +161,7 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
   @override
   void dispose() {
     _anim.dispose();
+    _vivo.dispose();
     super.dispose();
   }
 
@@ -99,11 +193,7 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
     final destino = widget.haciaNegocio ? negocio : entrega;
     final puntos = _puntos;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: SizedBox(
-        height: widget.alto,
-        child: Stack(
+    final mapa = Stack(
           children: [
             FlutterMap(
               mapController: _mapa,
@@ -120,7 +210,13 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
                   userAgentPackageName: 'ec.vallexpress.app',
                   tileBuilder: oscuro ? darkModeTileBuilder : null,
                 ),
-                if (repartidor != null && destino != null)
+                // Ruta por las calles; sin ella, la línea recta del repartidor a donde va
+                if (_ruta != null)
+                  PolylineLayer(polylines: [
+                    Polyline(points: _ruta!, color: Colors.white.withValues(alpha: 0.85), strokeWidth: 8),
+                    Polyline(points: _ruta!, color: repartidor == null ? AppTheme.accentColor : AppTheme.infoColor, strokeWidth: 5),
+                  ])
+                else if (repartidor != null && destino != null)
                   PolylineLayer(polylines: [Polyline(points: [repartidor, destino], color: AppTheme.infoColor.withValues(alpha: 0.7), strokeWidth: 4)]),
                 MarkerLayer(
                   markers: [
@@ -135,18 +231,49 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
             Positioned(
               right: 10,
               top: 10,
-              child: Material(
-                color: c.tarjeta,
-                shape: const CircleBorder(),
-                elevation: 3,
-                child: IconButton(tooltip: 'Ver todo', icon: Icon(Icons.center_focus_strong_rounded, color: c.primario), onPressed: _encuadrar),
-              ),
+              child: Column(children: [
+                _BotonMapa(tooltip: 'Ver todo', icono: Icons.center_focus_strong_rounded, onPressed: _encuadrar),
+                if (!widget.pantallaCompleta) ...[
+                  const SizedBox(height: 8),
+                  _BotonMapa(tooltip: 'Ampliar', icono: Icons.open_in_full_rounded, onPressed: _ampliar),
+                ],
+              ]),
             ),
+            if (widget.pantallaCompleta && (widget.entrega ?? widget.negocio) != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 24,
+                child: SafeArea(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: c.primario),
+                    onPressed: _abrirGoogleMaps,
+                    icon: const Icon(Icons.navigation_rounded),
+                    label: Text(widget.soyRepartidor ? 'Navegar con Google Maps' : 'Ver la ruta en Google Maps'),
+                  ),
+                ),
+              ),
           ],
-        ),
-      ),
-    );
+        );
+    if (widget.pantallaCompleta) return mapa;
+    return ClipRRect(borderRadius: BorderRadius.circular(20), child: SizedBox(height: widget.alto, child: mapa));
   }
+}
+
+class _BotonMapa extends StatelessWidget {
+  const _BotonMapa({required this.tooltip, required this.icono, required this.onPressed});
+
+  final String tooltip;
+  final IconData icono;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: context.colores.tarjeta,
+        shape: const CircleBorder(),
+        elevation: 3,
+        child: IconButton(tooltip: tooltip, icon: Icon(icono, color: context.colores.primario), onPressed: onPressed),
+      );
 }
 
 class _Pin extends StatelessWidget {

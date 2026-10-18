@@ -37,6 +37,21 @@ Future<void> abrirEnMapas(BuildContext context, Punto destino) async {
   if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) mostrarError(context, 'No se pudo abrir el mapa');
 }
 
+/// Abre Google Maps con la mejor ruta: desde [origen] (sin origen = donde está el celular), pasando por [parada]
+/// (el local, si el repartidor aún no recoge) hasta [destino]
+Future<void> abrirRutaEnMapas(BuildContext context, {Punto? origen, Punto? parada, required Punto destino}) async {
+  String p(Punto x) => '${x.latitud},${x.longitud}';
+  final q = {
+    'api': '1',
+    if (origen != null) 'origin': p(origen),
+    'destination': p(destino),
+    if (parada != null) 'waypoints': p(parada),
+    'travelmode': 'driving',
+  };
+  final uri = Uri.https('www.google.com', '/maps/dir/', q);
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) mostrarError(context, 'No se pudo abrir el mapa');
+}
+
 /// Distancia en km entre dos puntos, en línea recta (fórmula del haversine)
 double distanciaKm(Punto a, Punto b) {
   double rad(double g) => g * pi / 180;

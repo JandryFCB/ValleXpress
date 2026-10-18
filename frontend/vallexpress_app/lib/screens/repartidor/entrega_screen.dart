@@ -148,7 +148,7 @@ class _EntregaScreenState extends State<EntregaScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
-        MapaPedido(negocio: p.negocioLocal, entrega: p.entregaPunto, repartidor: _yo, haciaNegocio: recogiendo, alto: 300),
+        MapaPedido(negocio: p.negocioLocal, entrega: p.entregaPunto, repartidor: _yo, haciaNegocio: recogiendo, alto: 300, soyRepartidor: true),
         const SizedBox(height: 12),
 
         // A dónde ir ahora
