@@ -26,6 +26,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `018_version_app.sql` | Versión de la app (última, mínima, URL de descarga y novedades) |
 | `019_documentos_repartidor.sql` | Fotos de los documentos del repartidor (`TREPARTIDORDOCUMENTOS`) |
 | `020_multiperfil_suscripciones.sql` | Una cuenta por perfil y persona, `RENOMBRARUSUARIO()`, suscripción mensual (`TSUSCRIPCIONPAGOS`, la comisión pasa a 0), el negocio califica al repartidor y advertencias (`TREPARTIDORADVERTENCIAS`) |
+| `021_dispositivos_multicuenta.sql` | El mismo celular registrado para varias cuentas de la misma persona (sigue recibiendo los avisos de todas) |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

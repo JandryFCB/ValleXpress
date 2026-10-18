@@ -111,6 +111,16 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     await api('PUT', '/api/auth/profile', { nombre: 'Carlitos', apellido: 'Ruiz', telefono: dc.telefono }, C2);
     r = await api('GET', '/api/auth/profile', null, CR2);
     check('los datos de la persona son los mismos en sus cuentas (cambió el nombre desde la de cliente)', r.body.usuario?.nombre === 'Carlitos', JSON.stringify(r.body));
+    r = await api('GET', '/api/auth/cuentas', null, C2);
+    check('ve sus dos cuentas para cambiar entre ellas (la actual marcada)', r.status === 200 && r.body.cuentas.length === 2 && r.body.cuentas.find((x) => x.actual)?.tipoUsuario === 'cliente' && r.body.cuentas.some((x) => x.tipoUsuario === 'repartidor' && !x.actual), JSON.stringify(r.body));
+    r = await api('GET', '/api/auth/cuentas', null, L);
+    check('quien tiene una sola cuenta ve solo la suya', r.body.cuentas?.length === 1);
+    await api('POST', '/api/notificaciones/dispositivo', { token: 'celu-carlos' }, C2);
+    await api('POST', '/api/notificaciones/dispositivo', { token: 'celu-carlos' }, CR2);
+    check('su celular queda registrado para sus dos cuentas (recibe los avisos de ambas)', (await q("SELECT cusuario FROM tdispositivos WHERE tokenfcm='celu-carlos' ORDER BY cusuario")).length === 2);
+    await api('POST', '/api/notificaciones/dispositivo', { token: 'celu-carlos' }, L);
+    check('si el celular pasa a otra persona, Carlos deja de recibir avisos en él', (await q("SELECT cusuario FROM tdispositivos WHERE tokenfcm='celu-carlos'")).map((x) => x.cusuario).join() === luis.usuario.id);
+    await q("DELETE FROM tdispositivos WHERE tokenfcm='celu-carlos'");
 
     seccion('4. Nadie se atiende a sí mismo');
     const propio = await listo(C2);

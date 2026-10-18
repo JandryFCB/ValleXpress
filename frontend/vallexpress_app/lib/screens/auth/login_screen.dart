@@ -7,6 +7,7 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../../utils/contacto.dart';
+import '../../widgets/cambiar_cuenta.dart';
 import '../../widgets/ui/ui.dart';
 import 'forgot_password_screen.dart';
 
@@ -90,13 +91,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  static const _perfiles = {
-    'cliente': (Icons.shopping_bag_rounded, 'Cliente', 'Pedir a los negocios'),
-    'vendedor': (Icons.storefront_rounded, 'Negocio', 'Atender los pedidos de tu negocio'),
-    'repartidor': (Icons.delivery_dining_rounded, 'Repartidor', 'Llevar pedidos'),
-    'administrador': (Icons.admin_panel_settings_rounded, 'Administrador', 'Panel de ValleXpress'),
-  };
-
   Future<String?> _elegirCuenta(List<Map<String, String>> cuentas) => showModalBottomSheet<String>(
         context: context,
         showDragHandle: true,
@@ -119,12 +113,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: TarjetaValle(
                         onTap: () => Navigator.pop(ctx, c['tipoUsuario']),
                         child: Row(children: [
-                          Icon(_perfiles[c['tipoUsuario']]?.$1 ?? Icons.person_rounded, color: ctx.colores.primario, size: 30),
+                          Icon(perfilesCuenta[c['tipoUsuario']]?.$1 ?? Icons.person_rounded, color: ctx.colores.primario, size: 30),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(_perfiles[c['tipoUsuario']]?.$2 ?? '${c['tipoUsuario']}', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                              Text('${_perfiles[c['tipoUsuario']]?.$3 ?? ''} · usuario ${c['usuario']}', style: tema.bodySmall),
+                              Text(perfilesCuenta[c['tipoUsuario']]?.$2 ?? '${c['tipoUsuario']}', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                              Text('${perfilesCuenta[c['tipoUsuario']]?.$3 ?? ''} · usuario ${c['usuario']}', style: tema.bodySmall),
                             ]),
                           ),
                           const Icon(Icons.chevron_right_rounded),
@@ -198,6 +192,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 32),
+
+                        // Cuentas que siguen abiertas en este celular (cerró sesión en una y tiene otras)
+                        CuentasEnEsteCelular(
+                          alNecesitarClave: (cuenta) {
+                            _usuarioController.text = cuenta.usuario;
+                            _claveFocus.requestFocus();
+                            mostrarMensaje(context, 'Tu sesión de ${cuenta.usuario} terminó: escribe tu contraseña');
+                          },
+                        ),
 
                         // Usuario o correo
                         TextFormField(

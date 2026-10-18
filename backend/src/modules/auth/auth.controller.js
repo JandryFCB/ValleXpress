@@ -32,6 +32,9 @@ const logoutAll = asyncHandler(async (req, res) => {
   res.json({ message: 'Sesiones cerradas en todos tus dispositivos', ...resultado });
 });
 
+// Las cuentas de la misma persona (cliente, vendedor, repartidor) para cambiar entre ellas
+const cuentas = asyncHandler(async (req, res) => res.json({ cuentas: await authService.misCuentas(req.usuario.id) }));
+
 const getProfile = asyncHandler(async (req, res) => {
   res.json({ usuario: await authService.obtenerPerfil(req.usuario.id, req) });
 });
@@ -90,7 +93,7 @@ const deleteAccount = asyncHandler(async (req, res) => res.json(await authServic
 
 module.exports = {
   deleteAccount,
-  register, perfilesRegistro, login, refresh, logout, logoutAll, getProfile, updateProfile, changePassword,
+  register, perfilesRegistro, login, cuentas, refresh, logout, logoutAll, getProfile, updateProfile, changePassword,
   forgotPassword, verifyResetCode, resetPassword,
   sendEmailVerification, verifyEmailCode,
   checkCedula, checkEmail,

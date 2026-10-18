@@ -38,10 +38,19 @@ async function marcarTodas(usuarioId) {
   return { marcadas: cambiadas };
 }
 
-// Registra (o reasigna) el token de Firebase del celular. Un token pertenece a un solo usuario a la vez.
+// Registra el token de Firebase del celular para esta cuenta. El mismo celular puede tener varias cuentas de la
+// MISMA persona (negocio y cliente, por ejemplo): todas siguen recibiendo sus avisos. Si el celular era de otra
+// persona, sus registros se borran (no debe recibir avisos ajenos).
 async function registrarDispositivo(usuarioId, { token, plataforma, modelo, appVer }) {
+  const { sequelize } = require('../../config/database');
+  await sequelize.query(
+    `DELETE FROM tdispositivos d WHERE d.tokenfcm = :token AND d.cusuario <> :u
+        AND NOT EXISTS (SELECT 1 FROM tusuarios a JOIN tusuarios b ON b.cpersona = a.cpersona AND b.fhasta = '2999-12-31 00:00:00-05'
+                         WHERE a.cusuario = :u AND a.fhasta = '2999-12-31 00:00:00-05' AND b.cusuario = d.cusuario)`,
+    { replacements: { token, u: usuarioId } },
+  );
   const datos = { usuarioId, plataforma: String(plataforma || 'android').toUpperCase(), modelo: modelo || null, versionApp: appVer || null, activo: true, ultimoUso: new Date() };
-  const existente = await Dispositivo.findOne({ where: { tokenFcm: token } });
+  const existente = await Dispositivo.findOne({ where: { tokenFcm: token, usuarioId } });
   if (existente) await existente.update(datos);
   else await Dispositivo.create({ ...datos, tokenFcm: token });
 }
@@ -57,7 +66,7 @@ const textoPlano = (datos) => Object.fromEntries(Object.entries(datos).filter(([
 async function enviarAlCelular(usuarioId, titulo, mensaje, datos) {
   const dispositivos = await Dispositivo.findAll({ where: { usuarioId, activo: true } });
   for (const d of dispositivos) {
-    const r = await enviarPush(d.tokenFcm, titulo, mensaje, textoPlano(datos));
+    const r = await enviarPush(d.tokenFcm, titulo, mensaje, textoPlano({ ...datos, cuenta: usuarioId }));
     if (r.invalido) await d.update({ activo: false });
     else if (!r.ok && !r.omitido) {
       logMensaje({ nivel: 'ADVERTENCIA', modulo: 'FCM', accion: 'PUSHFALLIDO', mensaje: 'No se pudo enviar la notificación push', detalle: { error: r.error }, usuarioId });

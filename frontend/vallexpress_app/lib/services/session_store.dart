@@ -103,3 +103,49 @@ class SessionStore {
     }
   }
 }
+
+/// Una cuenta con sesión abierta en este celular que no es la que se está usando (una persona puede tener cuenta de
+/// cliente, de negocio y de repartidor). Se guarda su refresh token para volver a ella sin escribir la contraseña.
+class CuentaGuardada {
+  const CuentaGuardada({required this.usuario, required this.tipoUsuario, required this.nombre, required this.email, required this.refresh});
+
+  final String usuario;
+  final String tipoUsuario;
+  final String nombre;
+  final String email;
+  final String refresh;
+
+  Map<String, String> aJson() => {'usuario': usuario, 'tipoUsuario': tipoUsuario, 'nombre': nombre, 'email': email, 'refresh': refresh};
+
+  factory CuentaGuardada.desdeJson(Map<String, dynamic> j) => CuentaGuardada(
+        usuario: '${j['usuario']}',
+        tipoUsuario: '${j['tipoUsuario'] ?? 'cliente'}',
+        nombre: '${j['nombre'] ?? ''}',
+        email: '${j['email'] ?? ''}',
+        refresh: '${j['refresh']}',
+      );
+}
+
+/// Las otras cuentas abiertas en este celular (almacenamiento cifrado, como la sesión)
+class CuentasGuardadas {
+  static const String _clave = 'cuentas_guardadas';
+
+  static Future<List<CuentaGuardada>> todas() async {
+    try {
+      final texto = await SessionStore.almacen.leer(_clave);
+      if (texto == null || texto.isEmpty) return [];
+      return [for (final c in jsonDecode(texto) as List) CuentaGuardada.desdeJson(Map<String, dynamic>.from(c as Map))];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> _escribir(List<CuentaGuardada> lista) =>
+      lista.isEmpty ? SessionStore.almacen.borrar(_clave) : SessionStore.almacen.escribir(_clave, jsonEncode([for (final c in lista) c.aJson()]));
+
+  static Future<CuentaGuardada?> de(String usuario) async => (await todas()).where((c) => c.usuario == usuario).firstOrNull;
+
+  static Future<void> guardar(CuentaGuardada cuenta) async => _escribir([cuenta, ...(await todas()).where((c) => c.usuario != cuenta.usuario)]);
+
+  static Future<void> quitar(String usuario) async => _escribir((await todas()).where((c) => c.usuario != usuario).toList());
+}

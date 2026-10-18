@@ -167,6 +167,8 @@ class AuthProvider with ChangeNotifier {
     await SessionManager.instance.guardarSesion(acceso: acceso, refresh: refresh);
     _token = acceso;
     _usuario = respuesta['usuario'] as Map<String, dynamic>?;
+    // Si estaba entre las cuentas guardadas, ahora es la que se usa
+    if (_usuario?['id'] != null) await CuentasGuardadas.quitar('${_usuario!['id']}');
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('usuario', jsonEncode(_usuario));
@@ -175,14 +177,97 @@ class AuthProvider with ChangeNotifier {
   // ---------------------------------------------------------------------------------------------
   // Cerrar sesión
   // ---------------------------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------------------------
+  // Varias cuentas en el celular (una persona: cliente, negocio y repartidor)
+  // ---------------------------------------------------------------------------------------------
+  /// Las otras cuentas con sesión abierta en este celular
+  Future<List<CuentaGuardada>> cuentasGuardadas() => CuentasGuardadas.todas();
+
+  /// Las cuentas de la persona según el servidor ([{usuario, tipoUsuario, actual}])
+  Future<List<Map<String, dynamic>>> misCuentas() => _authService.misCuentas();
+
+  // El repartidor no deja la cuenta (cerrar sesión o cambiar) con una entrega aceptada o recogida
+  Future<void> _exigirSinEntregaEnCurso() async {
+    if (_usuario?['tipoUsuario'] != 'repartidor') return;
+    final activos = await PedidosService.misEntregas(estado: 'activos').then((r) => r.pedidos).catchError((_) => <Pedido>[]);
+    final enCurso = activos.where((p) => p.enReparto).firstOrNull;
+    if (enCurso != null) throw Exception('Tienes la entrega del pedido #${enCurso.id} en curso. Termínala antes de salir de esta cuenta');
+  }
+
+  /// Cambia a otra cuenta de la persona sin cerrar la actual (queda guardada para volver). Si la otra cuenta ya
+  /// tiene sesión en el celular entra directo; si no, hace falta su contraseña ([clave]): devuelve false si falta.
+  Future<bool> cambiarACuenta(String usuario, {String? clave, String? tipoUsuario}) async {
+    if (usuario == _usuario?['id']) return true;
+    await _exigirSinEntregaEnCurso();
+
+    // 1) Se consigue la sesión de la otra cuenta ANTES de tocar la actual (si falla, todo sigue igual)
+    Map<String, dynamic>? respuesta;
+    final guardada = await CuentasGuardadas.de(usuario);
+    if (guardada != null) {
+      respuesta = await _authService.sesionGuardada(guardada.refresh);
+      if (respuesta == null) await CuentasGuardadas.quitar(usuario); // esa sesión ya no sirve: pide la contraseña
+    }
+    if (respuesta == null) {
+      if (clave == null) return false;
+      respuesta = await _authService.login(usuario, clave, tipoUsuario: tipoUsuario);
+    }
+
+    // 2) La cuenta actual queda guardada (el repartidor sale de línea: ya no llevará el GPS)
+    if (_usuario?['tipoUsuario'] == 'repartidor') await PedidosService.cambiarDisponibilidad(false).then((_) {}).catchError((_) {});
+    final refreshActual = await SessionStore.refreshToken();
+    if (_usuario != null && refreshActual != null) {
+      await CuentasGuardadas.guardar(CuentaGuardada(
+        usuario: '${_usuario!['id']}',
+        tipoUsuario: '${_usuario!['tipoUsuario'] ?? 'cliente'}',
+        nombre: '${_usuario!['nombre'] ?? ''}',
+        email: '${_usuario!['email'] ?? ''}',
+        refresh: refreshActual,
+      ));
+    }
+
+    // 3) Se entra a la otra: lo de la cuenta anterior (avisos en vivo, GPS, carrito) no pasa a esta
+    _detenerLoDeLaCuenta();
+    await _iniciarSesion(respuesta);
+    FcmService.registrarDispositivo();
+    notifyListeners();
+    return true;
+  }
+
+  /// Desde el login: entra a una cuenta que quedó abierta en el celular. false = hay que escribir la contraseña.
+  Future<bool> entrarConGuardada(String usuario) async {
+    final guardada = await CuentasGuardadas.de(usuario);
+    if (guardada == null) return false;
+    final respuesta = await _authService.sesionGuardada(guardada.refresh);
+    if (respuesta == null) {
+      await CuentasGuardadas.quitar(usuario);
+      return false;
+    }
+    await _iniciarSesion(respuesta);
+    FcmService.registrarDispositivo();
+    notifyListeners();
+    return true;
+  }
+
+  /// Quita una cuenta guardada del celular: cierra su sesión en el servidor y deja de recibir sus avisos
+  Future<void> olvidarCuenta(String usuario) async {
+    final guardada = await CuentasGuardadas.de(usuario);
+    await CuentasGuardadas.quitar(usuario);
+    if (guardada == null) return;
+    try {
+      final r = await _authService.sesionGuardada(guardada.refresh);
+      if (r == null) return;
+      await FcmService.quitarDispositivo(r['token'] as String);
+      await _authService.logout(r['refreshToken'] as String?);
+    } catch (_) {
+      // sin internet: la sesión vence sola en el servidor
+    }
+    notifyListeners();
+  }
+
   /// Cierra la sesión. El repartidor con una entrega en curso (aceptada o recogida) NO puede: lanza el motivo para
   /// mostrarlo (el cliente y el negocio lo están esperando). El servidor también lo verifica.
   Future<void> logout() async {
-    if (_usuario?['tipoUsuario'] == 'repartidor') {
-      final activos = await PedidosService.misEntregas(estado: 'activos').then((r) => r.pedidos).catchError((_) => <Pedido>[]);
-      final enCurso = activos.where((p) => p.enReparto).firstOrNull;
-      if (enCurso != null) throw Exception('Tienes la entrega del pedido #${enCurso.id} en curso. Termínala antes de cerrar sesión');
-    }
+    await _exigirSinEntregaEnCurso();
     // Se avisa al servidor para que este refresh token deje de servir (y al repartidor lo saca de línea)
     await _authService.logout(await SessionStore.refreshToken());
     if (_token != null) await FcmService.quitarDispositivo(_token!);
@@ -203,12 +288,16 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _limpiarLocal() async {
-    // Lo de esta cuenta no debe pasar a la siguiente: avisos en vivo, GPS del repartidor y carrito
+  // Lo de esta cuenta no debe pasar a la siguiente: avisos en vivo, GPS del repartidor y carrito
+  void _detenerLoDeLaCuenta() {
     TiempoReal.instancia.detener();
     GpsRepartidor.instancia.detener();
     final ctx = navigatorKey.currentContext;
     if (ctx != null && ctx.mounted) Provider.of<CarritoProvider>(ctx, listen: false).vaciar();
+  }
+
+  Future<void> _limpiarLocal() async {
+    _detenerLoDeLaCuenta();
     await SessionStore.limpiar();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('usuario');

@@ -21,6 +21,7 @@ import '../../services/pedidos_service.dart';
 import '../repartidor/reputacion_screen.dart';
 import '../repartidor/vehiculo_screen.dart';
 import '../suscripcion/mi_suscripcion_screen.dart';
+import '../../widgets/cambiar_cuenta.dart';
 import '../../widgets/documentos_repartidor.dart';
 import '../vendedor/mi_negocio_screen.dart';
 
@@ -363,6 +364,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
               ),
             ),
           ],
+
+          // Otras cuentas de la persona (cliente, negocio, repartidor): cambiar sin cerrar sesión
+          const TusCuentas(),
 
           // ------------------------------ Cuenta ------------------------------
           const SizedBox(height: 12),

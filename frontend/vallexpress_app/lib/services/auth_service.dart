@@ -142,6 +142,26 @@ class AuthService {
     if (res.statusCode == 409) throw Exception(mensajeDeError(res, 'Termina tu entrega antes de cerrar sesión'));
   }
 
+  /// Abre la sesión de una cuenta guardada en el celular canjeando su refresh token. null = esa sesión ya no sirve
+  /// (venció, cambió la clave...) y hay que escribir la contraseña. Sin internet lanza error.
+  Future<Map<String, dynamic>?> sesionGuardada(String refreshToken) async {
+    final res = await http
+        .post(Uri.parse('${AppConstants.baseUrl}/auth/refresh'), headers: {'Content-Type': 'application/json'}, body: json.encode({'refreshToken': refreshToken}))
+        .timeout(const Duration(seconds: 15));
+    if (res.statusCode == 200) return Map<String, dynamic>.from(json.decode(res.body) as Map);
+    if (res.statusCode == 401 || res.statusCode == 403) return null;
+    throw Exception(mensajeDeError(res, 'No pudimos abrir esa cuenta. Intenta de nuevo'));
+  }
+
+  /// Las cuentas de la persona (cliente, vendedor, repartidor) para cambiar entre ellas: [{usuario, tipoUsuario, actual}]
+  Future<List<Map<String, dynamic>>> misCuentas() async {
+    final token = await SessionStore.accessToken();
+    if (token == null) return [];
+    final res = await http.get(Uri.parse('${AppConstants.baseUrl}/auth/cuentas'), headers: {'Authorization': 'Bearer $token'});
+    if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudieron cargar tus cuentas'));
+    return [for (final c in (json.decode(res.body)['cuentas'] as List)) Map<String, dynamic>.from(c as Map)];
+  }
+
   // Cierra la sesión en TODOS los equipos del usuario (incluido este). Necesita el token de acceso.
   Future<void> cerrarTodas() async {
     final token = await SessionStore.accessToken();

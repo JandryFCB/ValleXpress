@@ -33,6 +33,7 @@ router.get('/check-email/:email', limite.consultas(), schema.consultaEmail, vali
 // --- Protegidas ---
 router.post('/logout-all', verificarToken, controller.logoutAll);
 router.get('/profile', verificarToken, controller.getProfile);
+router.get('/cuentas', verificarToken, controller.cuentas);
 router.put('/profile', verificarToken, schema.actualizarPerfil, validar, controller.updateProfile);
 router.put('/change-password', verificarToken, schema.cambiarClave, validar, controller.changePassword);
 router.post('/eliminar-cuenta', verificarToken, limite.login(), schema.eliminarCuenta, validar, controller.deleteAccount);

@@ -6,6 +6,8 @@ import 'session_store.dart';
 import '../config/constants.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar, Text;
+import 'api_error.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:provider/provider.dart';
 import '../config/navegacion.dart';
@@ -40,9 +42,26 @@ void _abrirDesdeNotificacion(Map<String, dynamic> data) {
   final id = int.tryParse('${data['pedidoId'] ?? ''}');
   final tipo = data['tipo']?.toString();
   if (id == null && !const {'comprobante_nuevo', 'suscripcion_pagada', 'comprobante_rechazado', 'advertencia_repartidor'}.contains(tipo)) return;
-  void intentar(int vez) {
+  final cuenta = data['cuenta']?.toString();
+  Future<void> intentar(int vez) async {
     final ctx = navigatorKey.currentContext;
     if (ctx != null && ctx.read<AuthProvider>().isAuthenticated) {
+      final auth = ctx.read<AuthProvider>();
+      // El aviso es de otra cuenta de la persona (negocio, repartidor...): se cambia a ella antes de abrirlo
+      if (cuenta != null && cuenta != auth.usuario?['id']?.toString()) {
+        try {
+          if (!await auth.cambiarACuenta(cuenta)) return;
+        } catch (e) {
+          final c = navigatorKey.currentContext;
+          if (c != null && c.mounted) ScaffoldMessenger.maybeOf(c)?.showSnackBar(SnackBar(content: Text(textoDeError(e))));
+          return;
+        }
+        navigatorKey.currentState?.pushNamedAndRemoveUntil(AppConstants.homeRoute, (_) => false);
+        await Future.delayed(const Duration(milliseconds: 400));
+        final c = navigatorKey.currentContext;
+        if (c != null && c.mounted) abrirAviso(c, tipo: tipo, pedidoId: id);
+        return;
+      }
       abrirAviso(ctx, tipo: tipo, pedidoId: id);
     } else if (vez < 20) {
       // Al abrir la app desde cero, la sesión tarda un instante en restaurarse

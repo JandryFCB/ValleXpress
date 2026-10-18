@@ -283,6 +283,13 @@ async function entrar(usuario, req) {
   return { usuario: usuarioPublico(usuario), ...(await abrirSesion(usuario, req)) };
 }
 
+// Las cuentas de la persona (una por perfil), para cambiar de cuenta sin salir de la app. La actual va marcada.
+async function misCuentas(usuarioId) {
+  const yo = await cargarUsuario(usuarioId);
+  const cuentas = await Usuario.findAll({ where: { personaId: yo.personaId }, attributes: ['id', 'rol', 'estatus', 'activo'], order: [['rol', 'ASC']] });
+  return cuentas.filter((c) => c.activo || c.id === usuarioId).map((c) => ({ usuario: c.id, tipoUsuario: c.tipoUsuario, actual: c.id === usuarioId }));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Sesión persistente: renovar y cerrar
 // ---------------------------------------------------------------------------------------------
@@ -566,7 +573,7 @@ const existeEmail = (email, tipo) => consultarUnico({ correo: normalizarEmail(em
 
 module.exports = {
   ROLES,
-  registrar, perfilesRegistro, crearCuenta, usuarioPerfil, login, refrescar, cerrarSesion, cerrarTodasLasSesiones,
+  registrar, perfilesRegistro, crearCuenta, usuarioPerfil, login, misCuentas, refrescar, cerrarSesion, cerrarTodasLasSesiones,
   obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave, eliminarCuenta,
   solicitarCodigoReset, verificarCodigoReset, restablecerClave,
   enviarCodigoEmail, verificarCodigoEmail,
