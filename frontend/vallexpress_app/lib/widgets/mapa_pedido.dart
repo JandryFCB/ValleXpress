@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -60,12 +61,24 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
   // La posición en vivo para la pantalla completa (que se abre aparte y debe seguir moviéndose)
   late final ValueNotifier<Punto?> _vivo = ValueNotifier(widget.repartidor);
 
-  // Ruta por las calles: se vuelve a pedir si el repartidor se movió más de 150 m desde la última o cambió el tramo
+  // Ruta por las calles. Se vuelve a pedir ("recalculando", como Google Maps) cuando el repartidor se sale de ella
+  // más de 40 m, cuando cambia el tramo (recogió el pedido) o, por si acaso, cada 600 m. Nunca más de una cada 8 s.
   List<LatLng>? _ruta;
   String? _tramoRuta;
   LatLng? _origenRuta;
+  DateTime? _ultimaRuta;
   bool _pidiendoRuta = false;
   static const _distancia = Distance();
+  static const _fueraDeRutaM = 40.0;
+
+  /// La ruta que falta: desde el repartidor (lo ya recorrido no se dibuja)
+  List<LatLng>? _rutaRestante(LatLng? repartidor) {
+    final ruta = _ruta;
+    if (ruta == null || repartidor == null || ruta.length < 2) return ruta;
+    final c = cercaniaARuta(ruta, repartidor);
+    if (c.metros > _fueraDeRutaM) return ruta;      // se salió: se ve la ruta completa hasta que se recalcule
+    return [repartidor, ...ruta.sublist(c.tramo + 1)];
+  }
 
   List<LatLng> get _puntosRuta {
     final rep = _hasta;
@@ -79,8 +92,14 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
     final puntos = _puntosRuta;
     if (puntos.length < 2 || _pidiendoRuta) return;
     final tramo = '${widget.haciaNegocio}|${puntos.skip(1).map((p) => '${p.latitude},${p.longitude}').join(';')}';
-    if (_ruta != null && tramo == _tramoRuta && _origenRuta != null && _distancia.as(LengthUnit.Meter, _origenRuta!, puntos.first) < 150) return;
+    if (_ruta != null && tramo == _tramoRuta && _origenRuta != null) {
+      final fuera = _hasta != null && cercaniaARuta(_ruta!, puntos.first).metros > _fueraDeRutaM;
+      final lejos = _distancia.as(LengthUnit.Meter, _origenRuta!, puntos.first) > 600;
+      if (!fuera && !lejos) return;
+      if (_ultimaRuta != null && DateTime.now().difference(_ultimaRuta!).inSeconds < 8) return;
+    }
     _pidiendoRuta = true;
+    _ultimaRuta = DateTime.now();
     final ruta = await Rutas.calcular(puntos);
     _pidiendoRuta = false;
     if (!mounted) return;
@@ -192,6 +211,7 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
     final repartidor = _repartidor;
     final destino = widget.haciaNegocio ? negocio : entrega;
     final puntos = _puntos;
+    final restante = _rutaRestante(repartidor);
 
     final mapa = Stack(
           children: [
@@ -211,10 +231,10 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
                   tileBuilder: oscuro ? darkModeTileBuilder : null,
                 ),
                 // Ruta por las calles; sin ella, la línea recta del repartidor a donde va
-                if (_ruta != null)
+                if (restante != null)
                   PolylineLayer(polylines: [
-                    Polyline(points: _ruta!, color: Colors.white.withValues(alpha: 0.85), strokeWidth: 8),
-                    Polyline(points: _ruta!, color: repartidor == null ? AppTheme.accentColor : AppTheme.infoColor, strokeWidth: 5),
+                    Polyline(points: restante, color: Colors.white.withValues(alpha: 0.85), strokeWidth: 8),
+                    Polyline(points: restante, color: repartidor == null ? AppTheme.accentColor : AppTheme.infoColor, strokeWidth: 5),
                   ])
                 else if (repartidor != null && destino != null)
                   PolylineLayer(polylines: [Polyline(points: [repartidor, destino], color: AppTheme.infoColor.withValues(alpha: 0.7), strokeWidth: 4)]),
@@ -275,6 +295,31 @@ class _BotonMapa extends StatelessWidget {
         child: IconButton(tooltip: tooltip, icon: Icon(icono, color: context.colores.primario), onPressed: onPressed),
       );
 }
+
+/// Lo más cerca que pasa la ruta de un punto: distancia en metros y el tramo (índice) más cercano.
+/// Proyección plana local: sobra para distancias de una ciudad.
+@visibleForTesting
+({double metros, int tramo}) cercaniaARuta(List<LatLng> ruta, LatLng p) {
+  const mPorGrado = 111320.0;
+  final kx = mPorGrado * cos(p.latitude * pi / 180);
+  var mejor = double.infinity;
+  var indice = 0;
+  for (var i = 0; i < ruta.length - 1; i++) {
+    final ax = (ruta[i].longitude - p.longitude) * kx, ay = (ruta[i].latitude - p.latitude) * mPorGrado;
+    final bx = (ruta[i + 1].longitude - p.longitude) * kx, by = (ruta[i + 1].latitude - p.latitude) * mPorGrado;
+    final dx = bx - ax, dy = by - ay;
+    final largo = dx * dx + dy * dy;
+    final t = largo == 0 ? 0.0 : (-(ax * dx + ay * dy) / largo).clamp(0.0, 1.0);
+    final cx = ax + t * dx, cy = ay + t * dy;
+    final d = sqrt(cx * cx + cy * cy);
+    if (d < mejor) {
+      mejor = d;
+      indice = i;
+    }
+  }
+  return (metros: mejor, tramo: indice);
+}
+
 
 class _Pin extends StatelessWidget {
   const _Pin({required this.icono, required this.color});
