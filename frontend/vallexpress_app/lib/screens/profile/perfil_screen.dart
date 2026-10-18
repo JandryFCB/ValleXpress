@@ -102,6 +102,72 @@ class _PerfilScreenState extends State<PerfilScreen> {
     await _cargar();
   }
 
+  // Tocar la foto: verla en grande, cambiarla o eliminarla (sin foto, directo a elegir una)
+  Future<void> _opcionesFoto() async {
+    final foto = _usuario?['fotoPerfil']?.toString();
+    if (foto == null || foto.isEmpty) return _cambiarFoto();
+    final opcion = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.zoom_in_rounded), title: const Text('Ver foto'), onTap: () => Navigator.pop(ctx, 'ver')),
+          ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('Cambiar foto'), onTap: () => Navigator.pop(ctx, 'cambiar')),
+          ListTile(
+            leading: const Icon(Icons.delete_outline_rounded, color: AppTheme.errorColor),
+            title: const Text('Eliminar foto', style: TextStyle(color: AppTheme.errorColor)),
+            onTap: () => Navigator.pop(ctx, 'eliminar'),
+          ),
+        ]),
+      ),
+    );
+    if (!mounted) return;
+    switch (opcion) {
+      case 'ver':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              backgroundColor: Colors.black,
+              appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, title: const Text('Foto de perfil')),
+              body: InteractiveViewer(maxScale: 5, child: Center(child: Image.network(foto, fit: BoxFit.contain))),
+            ),
+          ),
+        );
+      case 'cambiar':
+        await _cambiarFoto();
+      case 'eliminar':
+        await _eliminarFoto();
+    }
+  }
+
+  Future<void> _eliminarFoto() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar tu foto?'),
+        content: const Text('En su lugar se mostrarán tus iniciales.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor), child: const Text('Eliminar')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _subiendoFoto = true);
+    try {
+      await ProfileService.eliminarFoto();
+      if (!mounted) return;
+      setState(() => _usuario = {...?_usuario, 'fotoPerfil': null});
+      await context.read<AuthProvider>().actualizarUsuario({'fotoPerfil': null}); // el inicio vuelve a las iniciales
+      if (mounted) mostrarMensaje(context, 'Foto eliminada');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _subiendoFoto = false);
+    }
+  }
+
   Future<void> _cambiarFoto() async {
     final base64 = await elegirImagenBase64(
       context,
@@ -229,7 +295,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
               iconoRol: iconoRol,
               verificado: u['verificado'] == true,
               subiendo: _subiendoFoto,
-              onFoto: _cambiarFoto,
+              onFoto: _opcionesFoto,
             ),
           ),
 

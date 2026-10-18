@@ -185,6 +185,14 @@ const SEMANA = (apertura, cierre) => Array.from({ length: 7 }, (_, i) => ({ dia:
     check('la foto queda en TPERSONAS con historial', (await q('SELECT count(*)::int n FROM tpersonas WHERE cpersona=(SELECT cpersona FROM vusuarios WHERE usuario=$1)', [cli.usuario.id]))[0].n === 2);
     r = await api('POST', '/api/usuarios/foto-perfil', { foto: 'basura' }, C);
     check('foto inválida: 400', r.status === 400);
+    const fotoVieja = (await q(`SELECT carchivo_foto AS f FROM vusuarios v JOIN tpersonas p ON p.cpersona = v.cpersona AND p.fhasta = '2999-12-31 00:00:00-05' WHERE v.usuario=$1`, [cli.usuario.id]))[0].f;
+    r = await api('DELETE', '/api/usuarios/foto-perfil', null, C);
+    check('eliminar la foto de perfil: 200', r.status === 200 && r.body.data.eliminada === true);
+    r = await api('GET', '/api/auth/profile', null, C);
+    check('el perfil queda sin foto (la app muestra las iniciales)', r.body.usuario.fotoPerfil === null);
+    check('la foto se borra también del historial y del disco', (await q('SELECT 1 FROM tpersonas WHERE carchivo_foto=$1', [fotoVieja])).length === 0 && (await q('SELECT 1 FROM tarchivos WHERE carchivo=$1', [fotoVieja])).length === 0);
+    r = await api('DELETE', '/api/usuarios/foto-perfil', null, C);
+    check('sin foto, eliminar no falla', r.status === 200 && r.body.data.eliminada === false);
 
     await t.finalizar();
   } catch (e) {

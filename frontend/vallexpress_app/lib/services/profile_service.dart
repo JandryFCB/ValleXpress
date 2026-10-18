@@ -132,4 +132,14 @@ class ProfileService {
     }
     return (jsonDecode(response.body)['data']?['fotoPerfil'])?.toString();
   }
+
+  /// Quita la foto de perfil (vuelven las iniciales)
+  static Future<void> eliminarFoto() async {
+    final token = await _getToken();
+    final response = await http.delete(Uri.parse('${AppConstants.baseUrl}/usuarios/foto-perfil'), headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode != 200) {
+      final body = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+      throw Exception(body?['error'] ?? 'No se pudo eliminar la foto');
+    }
+  }
 }

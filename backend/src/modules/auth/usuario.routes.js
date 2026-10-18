@@ -18,5 +18,6 @@ router.get('/perfil', controller.obtenerPerfil);
 router.put('/actualizar', schema.actualizarPerfil, validar, controller.actualizarPerfil);
 router.post('/cambiar-contrasena', schema.cambiarClave, confirmarClave, validar, controller.cambiarContrasena);
 router.post('/foto-perfil', controller.subirFotoPerfil);   // la foto llega en base64 (JSON) y se valida con sharp
+router.delete('/foto-perfil', controller.eliminarFotoPerfil);   // vuelven las iniciales
 
 module.exports = router;

@@ -30,4 +30,6 @@ const subirFotoPerfil = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Foto de perfil actualizada correctamente', data: { fotoPerfil } });
 });
 
-module.exports = { obtenerPerfil, actualizarPerfil, cambiarContrasena, subirFotoPerfil };
+const eliminarFotoPerfil = asyncHandler(async (req, res) => res.json({ success: true, data: await authService.eliminarFoto(req.usuario.id, req) }));
+
+module.exports = { obtenerPerfil, actualizarPerfil, cambiarContrasena, subirFotoPerfil, eliminarFotoPerfil };

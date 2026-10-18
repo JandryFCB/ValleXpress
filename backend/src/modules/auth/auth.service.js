@@ -361,6 +361,33 @@ async function subirFoto(id, base64, req, { actor = id } = {}) {
   return (await ArchivoService.urlDe(req, archivo.id))?.url || null;
 }
 
+// Quita la foto de perfil: vuelven las iniciales. Es un dato personal, así que se borra también del historial y
+// del disco (si ninguna otra persona la usa). Vale para todas las cuentas de la persona.
+async function eliminarFoto(id, req) {
+  const usuario = await cargarUsuario(id);
+  const [persona] = await consulta(`SELECT carchivo_foto AS foto FROM tpersonas WHERE cpersona = :p AND fhasta = '2999-12-31 00:00:00-05'`, { p: usuario.personaId });
+  if (!persona?.foto) return { eliminada: false };
+  await withTransaction(async (t) => {
+    await sequelize.query("SELECT set_config('vallexpress.borrado', 'si', true)", { transaction: t });
+    await sequelize.query('UPDATE tpersonas SET carchivo_foto = NULL WHERE cpersona = :p', { replacements: { p: usuario.personaId }, transaction: t });
+    await sequelize.query("SELECT set_config('vallexpress.borrado', '', true)", { transaction: t });
+  }, { usuarioId: id });
+  const [enUso] = await consulta('SELECT 1 FROM tpersonas WHERE carchivo_foto = :f LIMIT 1', { f: persona.foto });
+  if (!enUso) await borrarArchivos([Number(persona.foto)]);
+  auditar({ usuarioId: id, accion: 'FOTOELIMINADA', entidad: 'USUARIOS', entidadId: id, req });
+  return { eliminada: true };
+}
+
+// Borra archivos (fila y las 3 versiones del disco). Fuera de transacciones: si el disco falla, no se revierte nada.
+async function borrarArchivos(ids) {
+  if (!ids.length) return;
+  const archivos = await consulta('SELECT carchivo, ruta, rutamediana, rutaminiatura FROM tarchivos WHERE carchivo IN (:ids)', { ids });
+  for (const a of archivos) {
+    await Promise.all([a.ruta, a.rutamediana, a.rutaminiatura].filter(Boolean).map((r) => fs.rm(path.join(RAIZUPLOADS, String(r).replace(/^uploads\//, '')), { force: true }).catch(() => {})));
+  }
+  await sequelize.query('DELETE FROM tarchivos WHERE carchivo IN (:ids)', { replacements: { ids } });
+}
+
 async function actualizarPerfil(id, { nombre, apellido, telefono }, req) {
   const usuario = await cargarUsuario(id);
 
@@ -454,13 +481,7 @@ async function eliminarCuenta(id, { password }, req) {
   }, { usuarioId: id });
 
   // Las fotos de perfil y de los documentos se borran del disco (fuera de la transacción: si falla no se revierte la baja)
-  if (fotos.length) {
-    const archivos = await consulta('SELECT carchivo, ruta, rutamediana, rutaminiatura FROM tarchivos WHERE carchivo IN (:ids)', { ids: fotos });
-    for (const a of archivos) {
-      await Promise.all([a.ruta, a.rutamediana, a.rutaminiatura].map((r) => fs.rm(path.join(RAIZUPLOADS, String(r).replace(/^uploads\//, '')), { force: true }).catch(() => {})));
-    }
-    await sequelize.query('DELETE FROM tarchivos WHERE carchivo IN (:ids)', { replacements: { ids: fotos } });
-  }
+  await borrarArchivos(fotos);
 
   auditar({ usuarioId: id, accion: 'CUENTAELIMINADA', entidad: 'USUARIOS', entidadId: id, detalle: { tipoUsuario: usuario.tipoUsuario, negocios }, req });
   return { eliminada: true };
@@ -581,7 +602,7 @@ async function existeEmail(email, tipo, cedula) {
 module.exports = {
   ROLES,
   registrar, perfilesRegistro, crearCuenta, usuarioPerfil, login, misCuentas, refrescar, cerrarSesion, cerrarTodasLasSesiones,
-  obtenerPerfil, actualizarPerfil, subirFoto, cambiarClave, eliminarCuenta,
+  obtenerPerfil, actualizarPerfil, subirFoto, eliminarFoto, cambiarClave, eliminarCuenta,
   solicitarCodigoReset, verificarCodigoReset, restablecerClave,
   enviarCodigoEmail, verificarCodigoEmail,
   existeCedula, existeEmail,

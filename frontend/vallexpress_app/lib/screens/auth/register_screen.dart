@@ -43,8 +43,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
   }
 
+  final _desplazamiento = ScrollController();
+
   @override
   void dispose() {
+    _desplazamiento.dispose();
     _c
       ..removeListener(_alCambiar)
       ..dispose();
@@ -66,14 +69,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
       return;
     }
+    final antes = _c.paso;
     final error = _c.siguiente();
     setState(() => _error = error);
+    if (_c.paso != antes) _arriba();
+  }
+
+  // Cada paso empieza desde arriba (si había bajado en el anterior, no se queda a la mitad)
+  void _arriba() {
+    if (_desplazamiento.hasClients && _desplazamiento.offset > 0) {
+      _desplazamiento.animateTo(0, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+    }
   }
 
   void _atras() {
     FocusScope.of(context).unfocus();
-    if (!_c.atras()) Navigator.of(context).pop();
+    if (!_c.atras()) {
+      Navigator.of(context).pop();
+      return;
+    }
     setState(() => _error = null);
+    _arriba();
   }
 
   @override
@@ -94,6 +110,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             _Cabecera(paso: _c.paso, total: RegistroController.totalPasos, onAtras: _atras),
             Expanded(
               child: SingleChildScrollView(
+                controller: _desplazamiento,
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                 child: Center(
@@ -108,6 +125,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         const SizedBox(height: 24),
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 260),
+                          // Los pasos se apilan arriba (no centrados): si no, al volver de un paso más largo (vendedor o
+                          // repartidor) el anterior aparecía a media altura y saltaba al terminar la animación
+                          layoutBuilder: (actual, anteriores) => Stack(
+                            alignment: Alignment.topLeft,
+                            children: [...anteriores, ?actual],
+                          ),
                           transitionBuilder: (hijo, animacion) => FadeTransition(
                             opacity: animacion,
                             child: SlideTransition(
