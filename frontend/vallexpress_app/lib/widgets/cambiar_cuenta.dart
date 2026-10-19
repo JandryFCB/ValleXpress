@@ -177,10 +177,17 @@ class TusCuentas extends StatefulWidget {
 }
 
 class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
-  // Lo último que se cargó (de esta sesión): al volver al perfil se muestra enseguida, sin saltar
+  // Lo último que se cargó: las cuentas son las mismas en todos los perfiles de la persona, así que al volver al perfil
+  // o al cambiar de cuenta se muestran enseguida (solo cambia cuál es la actual) y no aparecen de golpe
   static List<Map<String, dynamic>>? _ultimas;
-  static String? _deUsuario;
-  late List<Map<String, dynamic>>? _cuentas = _deUsuario == context.read<AuthProvider>().usuario?['id']?.toString() ? _ultimas : null;
+  late List<Map<String, dynamic>>? _cuentas = _deEstaPersona();
+
+  List<Map<String, dynamic>>? _deEstaPersona() {
+    final yo = context.read<AuthProvider>().usuario?['id']?.toString();
+    final previas = _ultimas;
+    if (yo == null || previas == null || !previas.any((c) => c['usuario'] == yo)) return null;
+    return [for (final c in previas) {...c, 'actual': c['usuario'] == yo}];
+  }
   String? _cambiando; // la cuenta a la que se está cambiando (solo ella muestra la carga)
 
   // El estado de las cuentas cambia solo (un bloqueo temporal vence, el admin desbloquea): se refresca cada 30 s, al
@@ -213,7 +220,6 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
     context.read<AuthProvider>().misCuentas().then((c) {
       if (!mounted) return;
       _ultimas = c;
-      _deUsuario = context.read<AuthProvider>().usuario?['id']?.toString();
       setState(() => _cuentas = c);
       // Vuelve a consultar en el segundo en que vence el bloqueo temporal más próximo
       _alVencer?.cancel();
@@ -229,15 +235,19 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final otras = (_cuentas ?? []).where((c) => c['actual'] != true).toList();
-    // Aparece deslizándose (sin empujar de golpe lo que está debajo)
+    // Si tiene que aparecer (primera carga), crece y se desvanece hacia dentro, sin superponerse a lo de abajo
     return AnimatedSize(
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
       alignment: Alignment.topCenter,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 320),
-        child: otras.isEmpty ? const SizedBox(key: ValueKey('vacio'), width: double.infinity) : KeyedSubtree(key: const ValueKey('lista'), child: _lista(context, otras)),
-      ),
+      child: otras.isEmpty
+          ? const SizedBox(width: double.infinity)
+          : TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 280),
+              builder: (_, t, hijo) => Opacity(opacity: t, child: hijo),
+              child: _lista(context, otras),
+            ),
     );
   }
 
