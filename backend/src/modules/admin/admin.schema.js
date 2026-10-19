@@ -42,6 +42,7 @@ const listadoUsuarios = [
   ...pagina,
   query('rol').optional().isIn(ROLES).withMessage(`rol debe ser: ${ROLES.join(', ')}`),
   query('activo').optional().isIn(['true', 'false']).withMessage('activo debe ser true o false'),
+  query('estado').optional().isIn(['activo', 'temporal', 'bloqueado', 'inactivo']).withMessage('estado debe ser activo, temporal, bloqueado o inactivo'),
 ];
 
 const estadoUsuario = [...usuario, body('activo').isBoolean().withMessage('activo debe ser true o false').toBoolean(), motivo];

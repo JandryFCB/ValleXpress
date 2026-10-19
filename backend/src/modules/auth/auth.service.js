@@ -287,10 +287,17 @@ async function entrar(usuario, req) {
 }
 
 // Las cuentas de la persona (una por perfil), para cambiar de cuenta sin salir de la app. La actual va marcada.
+// estado: activo | temporal (bloqueada unos minutos por contraseñas incorrectas, con "hasta") | bloqueado (por el
+// administrador) | inactivo (dada de baja). Así la app explica qué pasa en vez de pedir una contraseña que no sirve.
 async function misCuentas(usuarioId) {
   const yo = await cargarUsuario(usuarioId);
-  const cuentas = await Usuario.findAll({ where: { personaId: yo.personaId }, attributes: ['id', 'rol', 'estatus', 'activo'], order: [['rol', 'ASC']] });
-  return cuentas.filter((c) => c.activo || c.id === usuarioId).map((c) => ({ usuario: c.id, tipoUsuario: c.tipoUsuario, actual: c.id === usuarioId }));
+  const cuentas = await Usuario.findAll({ where: { personaId: yo.personaId }, attributes: ['id', 'rol', 'estatus', 'activo', 'bloqueadoHasta'], order: [['rol', 'ASC']] });
+  const ahora = new Date();
+  return cuentas.map((c) => {
+    const temporal = c.activo && c.bloqueadoHasta && new Date(c.bloqueadoHasta) > ahora;
+    const estado = !c.activo ? (c.estatus === '002' ? 'inactivo' : 'bloqueado') : temporal ? 'temporal' : 'activo';
+    return { usuario: c.id, tipoUsuario: c.tipoUsuario, actual: c.id === usuarioId, estado, ...(temporal && { hasta: c.bloqueadoHasta }) };
+  });
 }
 
 // ---------------------------------------------------------------------------------------------

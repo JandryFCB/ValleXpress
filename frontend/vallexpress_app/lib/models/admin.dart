@@ -221,6 +221,9 @@ class UsuarioAdmin {
     this.foto,
     this.ultimaConexion,
     this.creadoEn,
+    this.bloqueadoHasta,
+    this.intentosFallidos = 0,
+    this.eliminada = false,
   });
 
   final String usuario;
@@ -237,6 +240,11 @@ class UsuarioAdmin {
   final String? foto;
   final DateTime? ultimaConexion;
   final DateTime? creadoEn;
+  final DateTime? bloqueadoHasta; // bloqueo temporal por contraseñas incorrectas (sigue "activo")
+  final int intentosFallidos;
+  final bool eliminada; // la persona eliminó su cuenta: ya no tiene datos y no se reactiva
+
+  bool get bloqueoTemporal => estatus == 'activo' && bloqueadoHasta != null && bloqueadoHasta!.isAfter(DateTime.now());
 
   String get nombreCompleto => [nombre, apellido].whereType<String>().where((s) => s.isNotEmpty).join(' ');
   bool get esAdmin => rol == 'administrador';
@@ -262,13 +270,19 @@ class UsuarioAdmin {
         foto: j['foto']?.toString(),
         ultimaConexion: _fecha(j['ultimaConexion']),
         creadoEn: _fecha(j['creadoEn']),
+        bloqueadoHasta: _fecha((j['bloqueoTemporal'] as Map?)?['hasta'])?.toLocal(),
+        intentosFallidos: (j['intentosFallidos'] as num?)?.toInt() ?? 0,
+        eliminada: j['eliminada'] == true,
       );
 
-  (String, Color, IconData) get estadoVisible => switch (estatus) {
-        'bloqueado' => ('Bloqueada', AppTheme.errorColor, Icons.block_rounded),
-        'inactivo' => ('Dada de baja', AppTheme.warningColor, Icons.person_off_rounded),
-        _ => ('Activa', AppTheme.successColor, Icons.check_circle_rounded),
-      };
+  (String, Color, IconData) get estadoVisible => eliminada
+      ? ('Eliminada', Colors.grey, Icons.delete_forever_rounded)
+      : switch (estatus) {
+          'bloqueado' => ('Bloqueada', AppTheme.errorColor, Icons.block_rounded),
+          'inactivo' => ('Dada de baja', AppTheme.warningColor, Icons.person_off_rounded),
+          _ when bloqueoTemporal => ('Bloqueo temporal', AppTheme.warningColor, Icons.lock_clock_rounded),
+          _ => ('Activa', AppTheme.successColor, Icons.check_circle_rounded),
+        };
 
   static const coloresRol = {
     'cliente': AppTheme.clienteColor,

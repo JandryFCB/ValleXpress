@@ -5,7 +5,10 @@ import '../config/constants.dart';
 import '../config/theme.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_error.dart';
+import '../services/auth_service.dart';
+import '../screens/auth/forgot_password_screen.dart';
 import '../services/session_store.dart';
+import '../utils/contacto.dart';
 import 'ui/ui.dart';
 
 /// Cómo se muestra cada perfil
@@ -62,6 +65,70 @@ Future<void> cambiarDeCuenta(BuildContext context, {required String usuario, req
   }
 }
 
+/// La otra cuenta no puede entrar: se explica por qué y qué hacer, en vez de pedir una contraseña que no sirve.
+///   temporal  → se bloqueó sola por contraseñas incorrectas: esperar o recuperar la contraseña (la desbloquea)
+///   bloqueado → la bloqueó el administrador: escribir a soporte
+///   inactivo  → está dada de baja: escribir a soporte para reactivarla
+Future<void> _avisarCuentaBloqueada(BuildContext context, {required String perfil, required String estado, DateTime? hasta}) {
+  final auth = context.read<AuthProvider>();
+  final correo = auth.usuario?['email']?.toString();
+  final nombre = perfilesCuenta[perfil]?.$2.toLowerCase() ?? perfil;
+  final hora = hasta == null ? null : '${hasta.hour.toString().padLeft(2, '0')}:${hasta.minute.toString().padLeft(2, '0')}';
+  final (icono, titulo, texto) = switch (estado) {
+    'temporal' => (
+        Icons.lock_clock_rounded,
+        'Tu cuenta de $nombre está bloqueada por unos minutos',
+        'Se escribió mal la contraseña varias veces. Podrás entrar${hora != null ? ' a las $hora' : ' en unos minutos'}, o recupera tu contraseña ahora: al cambiarla se desbloquea al instante.',
+      ),
+    'inactivo' => (Icons.person_off_rounded, 'Tu cuenta de $nombre está dada de baja', 'Si quieres volver a usarla, escríbenos y la reactivamos.'),
+    _ => (Icons.block_rounded, 'Tu cuenta de $nombre está bloqueada', 'El equipo de ValleXpress la bloqueó. Escríbenos para revisar tu caso.'),
+  };
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Icon(icono, size: 44, color: estado == 'temporal' ? AppTheme.warningColor : AppTheme.errorColor),
+          const SizedBox(height: 10),
+          Text(titulo, textAlign: TextAlign.center, style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Text(texto, textAlign: TextAlign.center, style: Theme.of(ctx).textTheme.bodyMedium),
+          const SizedBox(height: 20),
+          if (estado == 'temporal')
+            BotonValle(
+              texto: 'Recuperar mi contraseña',
+              icono: Icons.lock_reset_rounded,
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => ForgotPasswordScreen(correo: correo)));
+              },
+            ),
+          if (estado == 'temporal') const SizedBox(height: 10),
+          BotonValle(
+            texto: 'Escribir a soporte',
+            icono: Icons.support_agent_rounded,
+            tipo: estado == 'temporal' ? TipoBoton.secundario : TipoBoton.principal,
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final soporte = await AuthService().soporteContacto();
+              if (!context.mounted) return;
+              if (soporte.whatsapp != null) {
+                await abrirWhatsapp(context, soporte.whatsapp!, mensaje: 'Hola, mi cuenta de $nombre de ValleXpress (${auth.usuario?['email'] ?? ''}) está bloqueada. ¿Me ayudan?');
+              } else if (soporte.correo != null) {
+                await escribirASoporte(context, soporte.correo!, asunto: 'Mi cuenta de $nombre está bloqueada');
+              } else {
+                mostrarMensaje(context, 'Escríbenos desde la página de ValleXpress');
+              }
+            },
+          ),
+        ]),
+      ),
+    ),
+  );
+}
+
 /// "Tus cuentas" en el perfil: las otras cuentas de la persona (cliente, negocio, repartidor) para cambiar con un
 /// toque. Si tiene una sola, invita a crear otro perfil con su misma cédula y correo.
 class TusCuentas extends StatefulWidget {
@@ -102,13 +169,29 @@ class _TusCuentasState extends State<TusCuentas> {
                 if (i > 0) Divider(height: 1, color: c.borde),
                 ListTile(
                   enabled: !_cambiando,
-                  leading: Icon(perfilesCuenta[cuenta['tipoUsuario']]?.$1 ?? Icons.person_rounded, color: c.primario),
+                  leading: Icon(perfilesCuenta[cuenta['tipoUsuario']]?.$1 ?? Icons.person_rounded, color: (cuenta['estado'] ?? 'activo') == 'activo' ? c.primario : c.textoSuave),
                   title: Text('Entrar como ${perfilesCuenta[cuenta['tipoUsuario']]?.$2 ?? cuenta['tipoUsuario']}', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${perfilesCuenta[cuenta['tipoUsuario']]?.$3 ?? ''} · ${cuenta['usuario']}'),
-                  trailing: _cambiando ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.swap_horiz_rounded),
+                  subtitle: Text(switch (cuenta['estado']) {
+                    'temporal' => 'Bloqueada unos minutos por contraseñas incorrectas',
+                    'bloqueado' => 'Bloqueada por ValleXpress',
+                    'inactivo' => 'Dada de baja',
+                    _ => '${perfilesCuenta[cuenta['tipoUsuario']]?.$3 ?? ''} · ${cuenta['usuario']}',
+                  }, style: (cuenta['estado'] ?? 'activo') == 'activo' ? null : const TextStyle(color: AppTheme.errorColor)),
+                  trailing: _cambiando
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon((cuenta['estado'] ?? 'activo') == 'activo' ? Icons.swap_horiz_rounded : Icons.lock_rounded),
                   onTap: () async {
+                    final estado = '${cuenta['estado'] ?? 'activo'}';
+                    final usuario = '${cuenta['usuario']}';
+                    // Bloqueada: se explica qué hacer. Con el bloqueo temporal, si ya tenía la sesión abierta en este
+                    // celular sí puede entrar (el bloqueo es solo para escribir la contraseña).
+                    if (estado != 'activo' && !(estado == 'temporal' && await CuentasGuardadas.de(usuario) != null)) {
+                      if (!context.mounted) return;
+                      return _avisarCuentaBloqueada(context, perfil: '${cuenta['tipoUsuario']}', estado: estado, hasta: DateTime.tryParse('${cuenta['hasta'] ?? ''}')?.toLocal());
+                    }
+                    if (!context.mounted) return;
                     setState(() => _cambiando = true);
-                    await cambiarDeCuenta(context, usuario: '${cuenta['usuario']}', tipoUsuario: '${cuenta['tipoUsuario']}');
+                    await cambiarDeCuenta(context, usuario: usuario, tipoUsuario: '${cuenta['tipoUsuario']}');
                     if (mounted) setState(() => _cambiando = false);
                   },
                 ),

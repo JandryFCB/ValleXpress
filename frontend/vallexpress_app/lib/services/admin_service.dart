@@ -79,10 +79,19 @@ class AdminService {
   }
 
   // --- Usuarios ---
-  static Future<Pagina<UsuarioAdmin>> usuarios({String? rol, String? busqueda, int pagina = 1}) async {
-    final res = await http.get(_url('/usuarios', {'rol': rol, 'q': busqueda?.trim(), 'page': '$pagina'}), headers: await _cabeceras());
-    return _pagina(_json(res, 'No se pudieron cargar los usuarios'), 'usuarios', UsuarioAdmin.desdeJson);
+  /// estado: activo | temporal | bloqueado | inactivo. "conteos": cuántas hay en cada estado (para los filtros)
+  static Future<({Pagina<UsuarioAdmin> pagina, Map<String, int> conteos})> usuarios({String? rol, String? estado, String? busqueda, int pagina = 1}) async {
+    final res = await http.get(_url('/usuarios', {'rol': rol, 'estado': estado, 'q': busqueda?.trim(), 'page': '$pagina'}), headers: await _cabeceras());
+    final datos = _json(res, 'No se pudieron cargar los usuarios');
+    return (
+      pagina: _pagina(datos, 'usuarios', UsuarioAdmin.desdeJson),
+      conteos: {for (final e in Map<String, dynamic>.from(datos['conteos'] ?? {}).entries) e.key: (e.value as num).toInt()},
+    );
   }
+
+  /// Quita el bloqueo temporal por contraseñas incorrectas (sin cambiar su contraseña)
+  static Future<UsuarioAdmin> quitarBloqueoTemporal(String usuario) async =>
+      _usuario(await http.post(_url('/usuarios/$usuario/desbloquear'), headers: await _cabeceras()), 'No se pudo quitar el bloqueo');
 
   /// Bloquear (activo = false) exige el motivo; se cierran todas sus sesiones.
   static Future<UsuarioAdmin> cambiarEstadoUsuario(String usuario, {required bool activo, String? motivo}) async {

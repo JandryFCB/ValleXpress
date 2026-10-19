@@ -7,14 +7,17 @@ import 'verify_code_screen.dart';
 
 /// Recuperar contraseña, paso 1 de 3: pedir el código al correo.
 class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({super.key});
+  const ForgotPasswordScreen({super.key, this.correo});
+
+  /// Correo ya escrito (cuando se llega desde una cuenta bloqueada)
+  final String? correo;
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final _correo = TextEditingController();
+  late final _correo = TextEditingController(text: widget.correo ?? '');
   bool _cargando = false;
 
   @override

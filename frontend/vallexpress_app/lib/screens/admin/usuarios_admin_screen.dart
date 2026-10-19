@@ -26,7 +26,11 @@ class UsuariosAdminScreen extends StatefulWidget {
 class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
   static const _roles = [(null, 'Todos'), ('cliente', 'Clientes'), ('vendedor', 'Vendedores'), ('repartidor', 'Repartidores'), ('administrador', 'Admins')];
 
+  static const _estados = [(null, 'Todos', 'todos'), ('activo', 'Activas', 'activo'), ('temporal', 'Bloqueo temporal', 'temporal'), ('bloqueado', 'Bloqueadas', 'bloqueado'), ('inactivo', 'Dadas de baja', 'inactivo')];
+
   String? _rol;
+  String? _estado;
+  Map<String, int> _conteos = {};
   final _busqueda = TextEditingController();
   Timer? _espera;
   List<UsuarioAdmin> _usuarios = [];
@@ -58,8 +62,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
   Future<void> _cargar() async {
     setState(() => (_cargando = _usuarios.isEmpty, _error = null, _pagina = 1));
     try {
-      final r = await AdminService.usuarios(rol: _rol, busqueda: _busqueda.text);
-      if (mounted) setState(() => (_usuarios = r.items, _hayMas = r.hayMas, _total = r.total, _cargando = false));
+      final r = await AdminService.usuarios(rol: _rol, estado: _estado, busqueda: _busqueda.text);
+      if (mounted) setState(() => (_usuarios = r.pagina.items, _hayMas = r.pagina.hayMas, _total = r.pagina.total, _conteos = r.conteos, _cargando = false));
     } catch (e) {
       if (mounted) setState(() => (_error = textoDeError(e), _cargando = false));
     }
@@ -69,8 +73,8 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
     if (!_hayMas || _cargandoMas || _cargando) return;
     setState(() => _cargandoMas = true);
     try {
-      final r = await AdminService.usuarios(rol: _rol, busqueda: _busqueda.text, pagina: _pagina + 1);
-      if (mounted) setState(() => (_usuarios = [..._usuarios, ...r.items], _hayMas = r.hayMas, _pagina = _pagina + 1));
+      final r = await AdminService.usuarios(rol: _rol, estado: _estado, busqueda: _busqueda.text, pagina: _pagina + 1);
+      if (mounted) setState(() => (_usuarios = [..._usuarios, ...r.pagina.items], _hayMas = r.pagina.hayMas, _pagina = _pagina + 1));
     } catch (_) {
       // se reintenta al volver a llegar al final
     } finally {
@@ -144,6 +148,29 @@ class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
               ],
             ),
           ),
+          // Estado de la cuenta, con cuántas hay en cada uno
+          SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              children: [
+                for (final (valor, texto, clave) in _estados)
+                  if (valor == null || (_conteos[clave] ?? 0) > 0 || _estado == valor)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(_conteos[clave] == null ? texto : '$texto · ${_conteos[clave]}'),
+                        selected: _estado == valor,
+                        onSelected: (_) {
+                          setState(() => (_estado = valor, _usuarios = []));
+                          _cargar();
+                        },
+                      ),
+                    ),
+              ],
+            ),
+          ),
           Expanded(child: _contenido()),
         ],
       ),
@@ -192,7 +219,7 @@ class _TarjetaUsuario extends StatelessWidget {
         children: [
           Hero(
             tag: 'avatar-${u.usuario}',
-            child: Opacity(opacity: u.activo ? 1 : 0.5, child: AvatarValle(nombre: u.nombre, apellido: u.apellido, fotoUrl: u.foto, tamano: 50, color: u.colorRol)),
+            child: Opacity(opacity: u.activo && !u.bloqueoTemporal ? 1 : 0.5, child: AvatarValle(nombre: u.nombre, apellido: u.apellido, fotoUrl: u.foto, tamano: 50, color: u.colorRol)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -204,7 +231,7 @@ class _TarjetaUsuario extends StatelessWidget {
                 const SizedBox(height: 6),
                 Wrap(spacing: 6, runSpacing: 4, children: [
                   InsigniaValle(UsuarioAdmin.etiquetasRol[u.rol] ?? u.rol, color: u.colorRol, icono: UsuarioAdmin.iconosRol[u.rol]),
-                  if (!u.activo) InsigniaValle(estado, color: colorEstado, icono: iconoEstado),
+                  InsigniaValle(estado, color: colorEstado, icono: iconoEstado),
                 ]),
               ],
             ),
@@ -310,7 +337,8 @@ class _UsuarioAdminScreenState extends State<UsuarioAdminScreen> {
     if (motivo != null) await _hacer(() => AdminService.darDeBaja(widget.usuario, motivo), 'Cuenta dada de baja');
   }
 
-  Future<void> _reactivar() => _hacer(() => AdminService.cambiarEstadoUsuario(widget.usuario, activo: true), '¡Cuenta reactivada!');
+  Future<void> _reactivar() => _hacer(() => AdminService.cambiarEstadoUsuario(widget.usuario, activo: true), _u?.estatus == 'bloqueado' ? '¡Cuenta desbloqueada!' : '¡Cuenta reactivada!');
+  Future<void> _quitarBloqueoTemporal() => _hacer(() => AdminService.quitarBloqueoTemporal(widget.usuario), 'Listo: ya puede entrar');
 
   @override
   Widget build(BuildContext context) {
@@ -401,19 +429,49 @@ class _UsuarioAdminScreenState extends State<UsuarioAdminScreen> {
             ],
           ),
         ),
-        if (!protegido) ...[
-          const EncabezadoSeccion('Estado de la cuenta'),
+        const EncabezadoSeccion('Estado de la cuenta'),
+        // Qué le pasa a la cuenta, con la acción que corresponde
+        if (u.eliminada || u.estatus != 'activo' || u.bloqueoTemporal || u.intentosFallidos > 0) ...[
+          TarjetaValle(
+            color: colorEstado.withValues(alpha: 0.10),
+            colorBorde: colorEstado.withValues(alpha: 0.5),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(iconoEstado, color: colorEstado),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  u.eliminada
+                      ? 'La persona eliminó esta cuenta: sus datos personales ya se borraron y no se puede reactivar.'
+                      : switch (u.estatus) {
+                          'bloqueado' => 'Esta cuenta está bloqueada: no puede entrar a la app hasta que la desbloquees.',
+                          'inactivo' => 'Esta cuenta está dada de baja: no puede entrar, pero su historial se conserva.',
+                          _ when u.bloqueoTemporal =>
+                            'Se bloqueó sola por escribir mal la contraseña ${u.intentosFallidos > 0 ? '${u.intentosFallidos} veces' : '5 veces'}. Podrá entrar a las ${Formato.hora(u.bloqueadoHasta!)}, o desbloquéala ahora.',
+                          _ => 'Lleva ${u.intentosFallidos} ${u.intentosFallidos == 1 ? 'intento fallido' : 'intentos fallidos'} de contraseña. A los 5 se bloquea 15 minutos.',
+                        },
+                  style: tema.bodyMedium,
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (!u.eliminada)
           TarjetaValle(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Column(
               children: [
-                if (u.estatus != 'activo') _Accion(Icons.check_circle_rounded, 'Reactivar cuenta', 'Vuelve a poder entrar', color: AppTheme.successColor, onTap: _ocupado ? null : _reactivar),
-                if (u.estatus == 'activo') _Accion(Icons.block_rounded, 'Bloquear', 'No podrá entrar hasta que la desbloquees', color: AppTheme.errorColor, onTap: _ocupado ? null : _bloquear),
-                if (u.estatus != 'inactivo') _Accion(Icons.person_off_rounded, 'Dar de baja', 'Queda inactiva sin borrar su historial', color: AppTheme.warningColor, onTap: _ocupado ? null : _darDeBaja),
+                if (u.bloqueoTemporal || (u.estatus == 'activo' && u.intentosFallidos > 0))
+                  _Accion(Icons.lock_open_rounded, u.bloqueoTemporal ? 'Desbloquear ahora' : 'Reiniciar intentos', 'Sin cambiar su contraseña', color: AppTheme.successColor, onTap: _ocupado ? null : _quitarBloqueoTemporal),
+                if (!protegido && u.estatus == 'bloqueado') _Accion(Icons.lock_open_rounded, 'Desbloquear cuenta', 'Vuelve a poder entrar', color: AppTheme.successColor, onTap: _ocupado ? null : _reactivar),
+                if (!protegido && u.estatus == 'inactivo') _Accion(Icons.check_circle_rounded, 'Reactivar cuenta', 'Vuelve a poder entrar', color: AppTheme.successColor, onTap: _ocupado ? null : _reactivar),
+                if (!protegido && u.estatus == 'activo') _Accion(Icons.block_rounded, 'Bloquear', 'No podrá entrar hasta que la desbloquees', color: AppTheme.errorColor, onTap: _ocupado ? null : _bloquear),
+                if (!protegido && u.estatus != 'inactivo') _Accion(Icons.person_off_rounded, 'Dar de baja', 'Queda inactiva sin borrar su historial', color: AppTheme.warningColor, onTap: _ocupado ? null : _darDeBaja),
+                if (protegido && !u.bloqueoTemporal && u.intentosFallidos == 0)
+                  const ListTile(leading: Icon(Icons.shield_rounded), title: Text('Cuenta principal'), subtitle: Text('No se puede bloquear ni dar de baja')),
               ],
             ),
           ),
-        ],
       ],
     );
   }

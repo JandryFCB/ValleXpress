@@ -45,6 +45,7 @@ const cambiarZona = asyncHandler(async (req, res) => res.json({ zona: await serv
 const perfiles = asyncHandler(async (req, res) => res.json({ perfiles: await service.perfiles() }));
 const cambiarPerfil = asyncHandler(async (req, res) => res.json(await service.cambiarPerfil(req.usuario, req.params.rol, req.body, req)));
 
+const quitarBloqueoTemporal = asyncHandler(async (req, res) => res.json({ usuario: await service.quitarBloqueoTemporal(req.usuario, req.params.usuario, req) }));
 const soporte = asyncHandler(async (req, res) => res.json({ soporte: await require('../../shared/services/perfiles.service').soporte() }));
 const cambiarSoporte = asyncHandler(async (req, res) => res.json({ soporte: await service.cambiarSoporte(req.usuario, req.body, req) }));
 
@@ -57,6 +58,6 @@ const advertirRepartidor = asyncHandler(async (req, res) => res.status(201).json
 
 const documentosRepartidor = asyncHandler(async (req, res) => res.json(await require('../repartidores/documentos.service').documentos(req.params.usuario, req)));
 
-module.exports = { soporte, cambiarSoporte, reputacionRepartidor, advertirRepartidor, documentosRepartidor, detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
+module.exports = { quitarBloqueoTemporal, soporte, cambiarSoporte, reputacionRepartidor, advertirRepartidor, documentosRepartidor, detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
   suscripciones, suscripcionDe, registrarSuscripcion, configSuscripciones, aprobarComprobante, rechazarComprobante,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

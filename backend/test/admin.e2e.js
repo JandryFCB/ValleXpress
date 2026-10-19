@@ -177,6 +177,16 @@ const CLAVEADMIN = 'admin-secreta-1';
     check('desbloquear: 200', r.status === 200 && r.body.usuario.activo === true);
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });
     check('ya puede entrar de nuevo', r.status === 200);
+    // Bloqueo temporal por contraseñas incorrectas: el admin lo ve y lo quita
+    for (let i = 0; i < 5; i++) await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'clave-mala' });
+    r = await api('GET', `/api/admin/usuarios/${cliente.usuario.id}`, null, A);
+    check('el admin ve el bloqueo temporal (sigue "activo" pero con hasta cuándo)', r.body.usuario.estatus === 'activo' && !!r.body.usuario.bloqueoTemporal?.hasta, JSON.stringify(r.body.usuario));
+    r = await api('GET', '/api/admin/usuarios?estado=temporal', null, A);
+    check('filtrar por bloqueo temporal, con los conteos por estado', r.body.usuarios.length === 1 && r.body.conteos.temporal === 1 && r.body.conteos.todos >= r.body.conteos.activo, JSON.stringify(r.body.conteos));
+    r = await api('POST', `/api/admin/usuarios/${cliente.usuario.id}/desbloquear`, null, A);
+    check('el admin quita el bloqueo temporal', r.status === 200 && r.body.usuario.bloqueoTemporal === null && r.body.usuario.intentosFallidos === 0);
+    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });
+    check('y ya puede entrar sin esperar', r.status === 200);
     r = await api('PATCH', '/api/admin/usuarios/admin/estado', { activo: false, motivo: 'Prueba' }, A);
     check('al administrador no se le bloquea: 403', r.status === 403 && r.body.code === 'ADMINPROTEGIDO');
 

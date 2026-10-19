@@ -39,6 +39,7 @@ router.put('/usuarios/:usuario', schema.editarUsuario, validar, controller.edita
 router.put('/usuarios/:usuario/clave', schema.claveUsuario, validar, controller.claveUsuario);
 router.put('/usuarios/:usuario/foto', schema.fotoUsuario, validar, controller.fotoUsuario);
 router.patch('/usuarios/:usuario/estado', schema.estadoUsuario, validar, controller.estadoUsuario);
+router.post('/usuarios/:usuario/desbloquear', schema.usuario, validar, controller.quitarBloqueoTemporal);
 router.delete('/usuarios/:usuario', schema.bajaUsuario, validar, controller.bajaUsuario);
 
 router.get('/tarifas', controller.tarifas);

@@ -311,6 +311,12 @@ class AuthService {
 
   /// Perfiles con el registro abierto ({cliente: true, vendedor: true, repartidor: false}). El administrador puede
   /// cerrar uno desde "Perfiles y permisos". Sin conexión devuelve null (el servidor vuelve a validar al registrar).
+  /// WhatsApp y correo de soporte (los que configura el administrador)
+  Future<({String? whatsapp, String? correo})> soporteContacto() async {
+    if (cupos == null) await perfilesRegistro();
+    return (whatsapp: cupos?.whatsapp, correo: cupos?.correo);
+  }
+
   /// Lo que dijo el servidor la última vez sobre los cupos (se lee después de [perfilesRegistro])
   ({bool repartidorSinCupos, String? whatsapp, String? correo})? cupos;
 

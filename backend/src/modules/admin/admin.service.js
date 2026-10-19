@@ -442,11 +442,17 @@ const ESTATUS = Object.freeze({ activo: '001', inactivo: '002', bloqueado: '003'
 const ESTATUSAAPI = Object.freeze(Object.fromEntries(Object.entries(ESTATUS).map(([k, v]) => [v, k])));
 const TIPODOCCEDULA = '001';
 
+// Además del estatus que pone el administrador (activo, bloqueado, dado de baja), la cuenta puede estar bloqueada
+// SOLA unos minutos por contraseñas incorrectas: "bloqueoTemporal" trae hasta cuándo.
 async function usuariosApi(filas, req) {
   const urls = await ArchivoService.mapaUrls(req, filas.map((u) => u.fotoId));
+  const ahora = new Date();
   return filas.map((u) => ({
     usuario: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, telefono: u.telefono, cedula: u.cedula,
     rol: u.tipoUsuario, activo: u.activo, estatus: ESTATUSAAPI[u.estatus] || 'activo', verificado: u.verificado,
+    bloqueoTemporal: u.bloqueadoHasta && new Date(u.bloqueadoHasta) > ahora ? { hasta: u.bloqueadoHasta } : null,
+    intentosFallidos: u.intentosFallidos || 0,
+    eliminada: String(u.email || '').endsWith('@vallexpress.invalid'),     // la eliminó la persona: ya no tiene datos
     foto: urls[String(u.fotoId)]?.miniatura || urls[String(u.fotoId)]?.url || null,
     ultimaConexion: u.ultimaConexion, creadoEn: u.creadoEn,
   }));
@@ -475,8 +481,19 @@ async function usuarios(query, req) {
     const t = textoBusqueda(query.q);
     where[Op.or] = [{ id: { [Op.iLike]: t } }, { nombre: { [Op.iLike]: t } }, { apellido: { [Op.iLike]: t } }, { email: { [Op.iLike]: t } }, { cedula: { [Op.iLike]: t } }];
   }
+  // Cuántas hay en cada estado (con el rol y la búsqueda de ahora), para los filtros de la pantalla
+  const temporal = { estatus: ESTATUS.activo, bloqueadoHasta: { [Op.gt]: new Date() } };
+  const conteos = {
+    todos: await Usuario.count({ where }),
+    activo: await Usuario.count({ where: { ...where, estatus: ESTATUS.activo } }),
+    temporal: await Usuario.count({ where: { ...where, ...temporal } }),
+    bloqueado: await Usuario.count({ where: { ...where, estatus: ESTATUS.bloqueado } }),
+    inactivo: await Usuario.count({ where: { ...where, estatus: ESTATUS.inactivo } }),
+  };
+  if (query.estado === 'temporal') Object.assign(where, temporal);
+  else if (ESTATUS[query.estado]) where.estatus = ESTATUS[query.estado];
   const { count, rows } = await Usuario.findAndCountAll({ where, order: [['creadoEn', 'DESC']], limit: pag.limit, offset: pag.offset });
-  return { usuarios: await usuariosApi(rows, req), pagination: paginacion(pag, count) };
+  return { usuarios: await usuariosApi(rows, req), conteos, pagination: paginacion(pag, count) };
 }
 
 const obtenerUsuario = async (usuarioId, req) => usuarioApi(await exigirUsuario(usuarioId), req);
@@ -582,6 +599,14 @@ async function cambiarEstatus(admin, usuarioId, estatus, motivo, req) {
     inactivo: ['Tu cuenta de ValleXpress fue dada de baja', 'Tu cuenta quedó inactiva', ['Dimos de baja tu cuenta; tu historial no se borró.', motivoHtml, 'Si quieres volver, respóndenos y la reactivamos.']],
   }[estatus];
   Correo.avisoCuenta({ para: u.email, nombre: u.nombre, asunto: correo[0], titulo: correo[1], parrafos: correo[2].filter(Boolean) });
+  return usuarioApi(await exigirUsuario(usuarioId), req);
+}
+
+// Quita el bloqueo temporal por contraseñas incorrectas (y pone en cero los intentos), sin tocar su contraseña
+async function quitarBloqueoTemporal(admin, usuarioId, req) {
+  await exigirUsuario(usuarioId);
+  await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null }, { where: { id: usuarioId } });
+  auditar({ usuarioId: admin.id, accion: 'BLOQUEOTEMPORALQUITADO', entidad: 'USUARIOS', entidadId: usuarioId, req });
   return usuarioApi(await exigirUsuario(usuarioId), req);
 }
 
@@ -716,7 +741,7 @@ async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica
 module.exports = {
   detalleCifra,
   resumen, negocios, cambiarAprobacionNegocio, repartidores, cambiarAprobacionRepartidor,
-  usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja,
+  usuarios, obtenerUsuario, crearUsuario, editarUsuario, ponerClave, fotoUsuario, cambiarEstadoUsuario, darDeBaja, quitarBloqueoTemporal,
   resolverDueno, editarRepartidor, perfiles, cambiarPerfil, cambiarTarifas,
   tarifas: () => TarifasService.tarifas(),
   zona: () => ZonaService.zona(), cambiarZona, cambiarConfigSuscripciones, cambiarSoporte,
