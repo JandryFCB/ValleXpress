@@ -242,7 +242,6 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
   }
 
   Widget _lista(BuildContext context, List<Map<String, dynamic>> otras) {
-    final tema = Theme.of(context).textTheme;
     final c = context.colores;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -254,20 +253,11 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
           child: Column(
             children: [
               for (final (i, cuenta) in otras.indexed) ...[
-                if (i > 0) Divider(height: 1, color: c.borde),
-                ListTile(
-                  enabled: _cambiando == null,
-                  leading: Icon(perfilesCuenta[cuenta['tipoUsuario']]?.$1 ?? Icons.person_rounded, color: (cuenta['estado'] ?? 'activo') == 'activo' ? c.primario : c.textoSuave),
-                  title: Text('Entrar como ${perfilesCuenta[cuenta['tipoUsuario']]?.$2 ?? cuenta['tipoUsuario']}', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                  subtitle: Text(switch (cuenta['estado']) {
-                    'temporal' => 'Bloqueada unos minutos por contraseñas incorrectas',
-                    'bloqueado' => 'Bloqueada por ValleXpress',
-                    'inactivo' => 'Dada de baja',
-                    _ => '${perfilesCuenta[cuenta['tipoUsuario']]?.$3 ?? ''} · ${cuenta['usuario']}',
-                  }, style: (cuenta['estado'] ?? 'activo') == 'activo' ? null : const TextStyle(color: AppTheme.errorColor)),
-                  trailing: _cambiando == '${cuenta['usuario']}'
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Icon((cuenta['estado'] ?? 'activo') == 'activo' ? Icons.swap_horiz_rounded : Icons.lock_rounded),
+                if (i > 0) Divider(height: 1, indent: 70, color: c.borde),
+                _FilaCuenta(
+                  cuenta: cuenta,
+                  cambiando: _cambiando == '${cuenta['usuario']}',
+                  habilitada: _cambiando == null,
                   onTap: () async {
                     setState(() => _cambiando = '${cuenta['usuario']}');
                     await cambiarDeCuenta(context, usuario: '${cuenta['usuario']}', tipoUsuario: '${cuenta['tipoUsuario']}');
@@ -281,6 +271,61 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Una cuenta en "Tus otras cuentas", con el mismo estilo que las filas del perfil
+class _FilaCuenta extends StatelessWidget {
+  const _FilaCuenta({required this.cuenta, required this.cambiando, required this.habilitada, required this.onTap});
+
+  final Map<String, dynamic> cuenta;
+  final bool cambiando;
+  final bool habilitada;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    final perfil = perfilesCuenta[cuenta['tipoUsuario']];
+    final estado = '${cuenta['estado'] ?? 'activo'}';
+    final activa = estado == 'activo';
+    final color = activa ? c.primario : AppTheme.errorColor;
+    return InkWell(
+      onTap: habilitada ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+            child: Icon(activa ? (perfil?.$1 ?? Icons.person_rounded) : Icons.lock_rounded, size: 20, color: color),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Entrar como ${(perfil?.$2 ?? '${cuenta['tipoUsuario']}').toLowerCase()}', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(
+                switch (estado) {
+                  'temporal' => 'Bloqueada unos minutos · ${cuenta['usuario']}',
+                  'bloqueado' => 'Bloqueada por ValleXpress · ${cuenta['usuario']}',
+                  'inactivo' => 'Dada de baja · ${cuenta['usuario']}',
+                  _ => '@${cuenta['usuario']}',
+                },
+                style: tema.bodySmall?.copyWith(color: activa ? c.textoSuave : AppTheme.errorColor),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ]),
+          ),
+          cambiando
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(activa ? Icons.swap_horiz_rounded : Icons.chevron_right_rounded, color: c.textoSuave),
+        ]),
+      ),
     );
   }
 }

@@ -25,6 +25,7 @@ import '../suscripcion/mi_suscripcion_screen.dart';
 import '../../widgets/cambiar_cuenta.dart';
 import '../../widgets/documentos_repartidor.dart';
 import '../vendedor/mi_negocio_screen.dart';
+import '../vendedor/mis_productos_screen.dart';
 
 /// Mi perfil: el mismo para cliente, vendedor y repartidor. Datos de la cuenta, teléfonos, direcciones, configuración
 /// y cierre de sesión. (Lo propio de cada rol —negocio, vehículo— se agrega en sus módulos.)
@@ -388,15 +389,15 @@ class _PerfilScreenState extends State<PerfilScreen> {
                       if (mounted) _abrir(VehiculoScreen(actual: perfil));
                     },
                   ),
-                  Divider(height: 1, color: context.colores.borde),
+                  const _Separador(),
                   _Fila(
                     icono: Icons.verified_user_rounded,
                     titulo: 'Mis documentos',
-                    valor: 'Cédula, selfie, licencia y matrícula',
+                    valor: 'Para verificar tu identidad y tu vehículo',
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _abrir(const MisDocumentosScreen()),
                   ),
-                  Divider(height: 1, color: context.colores.borde),
+                  const _Separador(),
                   _Fila(
                     icono: Icons.star_rounded,
                     titulo: 'Mi reputación',
@@ -404,7 +405,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _abrir(const MiReputacionScreen()),
                   ),
-                  Divider(height: 1, color: context.colores.borde),
+                  const _Separador(),
                   _Fila(
                     icono: Icons.account_balance_wallet_outlined,
                     titulo: 'Mi suscripción',
@@ -422,12 +423,32 @@ class _PerfilScreenState extends State<PerfilScreen> {
             const EncabezadoSeccion('Mi negocio'),
             TarjetaValle(
               padding: EdgeInsets.zero,
-              child: _Fila(
-                icono: Icons.storefront_rounded,
-                titulo: 'Mi negocio',
-                valor: 'Datos, horario, ubicación y productos',
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _abrir(const MiNegocioScreen()),
+              child: Column(
+                children: [
+                  _Fila(
+                    icono: Icons.storefront_rounded,
+                    titulo: 'Mi negocio',
+                    valor: 'Datos, horario, ubicación, logo y portada',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(const MiNegocioScreen()),
+                  ),
+                  const _Separador(),
+                  _Fila(
+                    icono: Icons.restaurant_menu_rounded,
+                    titulo: 'Mis productos',
+                    valor: 'Menú, precios, stock e imágenes',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(const MisProductosScreen()),
+                  ),
+                  const _Separador(),
+                  _Fila(
+                    icono: Icons.account_balance_wallet_outlined,
+                    titulo: 'Mi suscripción',
+                    valor: 'Cuota mensual y comprobantes',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(const MiSuscripcionScreen()),
+                  ),
+                ],
               ),
             ),
           ],
