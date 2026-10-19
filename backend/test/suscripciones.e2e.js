@@ -85,6 +85,9 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     await verificar('otro@test.com', 'cliente');
     r = await api('POST', '/api/auth/register', { nombre: 'Otro', apellido: 'Más', email: 'otro@test.com', telefono: '0997777777', cedula: dc.cedula, password: 'secreto1', tipoUsuario: 'cliente', aceptaTerminos: true });
     check('su cédula con otro correo: 409 CEDULADUPLICADA', r.status === 409 && r.body.code === 'CEDULADUPLICADA', JSON.stringify(r.body));
+    await verificar('otro2@test.com', 'repartidor');
+    r = await api('POST', '/api/auth/register', { nombre: 'Pedro', apellido: 'Vera', email: 'otro2@test.com', telefono: '0997777778', cedula: (await datosDe('pedro@test.com')).cedula, password: 'secreto1', tipoUsuario: 'repartidor', vehiculo: 'bicicleta', aceptaTerminos: true });
+    check('un segundo repartidor con la misma cédula y otro correo: 409 CEDULADUPLICADA', r.status === 409 && r.body.code === 'CEDULADUPLICADA', JSON.stringify(r.body));
 
     seccion('3. Iniciar sesión con varias cuentas');
     r = await api('POST', '/api/auth/login', { email: 'carlos@test.com', password: 'secreto1' });
@@ -316,6 +319,14 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     await verificar('carlos@test.com', 'repartidor');
     r = await registro({ password: 'otra-clave-9', vehiculo: 'a_pie' });
     check('puede volver a crear su perfil de repartidor', r.status === 201 && r.body.usuario.tipoUsuario === 'repartidor', JSON.stringify(r.body).slice(0, 200));
+    const nuevoRep = r.body.usuario.id;
+    // Su primera aprobación como repartidor fue hace 40 días (la cuenta que eliminó): ya usó el mes gratis
+    check('su primera aprobación quedó anotada (aunque la cuenta se eliminó)', (await q("SELECT 1 FROM tbeneficios WHERE crol='003' AND huella = encode(sha256(convert_to('001' || $1, 'UTF8')), 'hex')", [dc.cedula])).length === 1);
+    await q("UPDATE tbeneficios SET fprimera = now() - interval '40 days' WHERE crol='003' AND huella = encode(sha256(convert_to('001' || $1, 'UTF8')), 'hex')", [dc.cedula]);
+    await q(`UPDATE trepartidores SET cestatusaprobacion = '002', faprobacion = now() WHERE cusuario = $1 AND fhasta = ${VIGENTE}`, [nuevoRep]);
+    r = await api('GET', `/api/admin/suscripciones/${nuevoRep}`, null, A);
+    const [{ esteMes }] = await q("SELECT to_char(date_trunc('month', now() AT TIME ZONE 'America/Guayaquil'), 'YYYY-MM-DD') AS \"esteMes\"");
+    check('su cuenta eliminada ya tuvo el mes gratis: la nueva paga desde el mes en que la aprueban', r.body.meses?.some((m) => m.mes === esteMes && m.estado !== 'proximo'), JSON.stringify(r.body.meses));
 
     seccion('14. Renombrar un usuario (RENOMBRARUSUARIO)');
     let error = null;

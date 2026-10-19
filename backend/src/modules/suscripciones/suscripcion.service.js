@@ -41,17 +41,41 @@ const mesDe = (dia) => `${dia.slice(0, 7)}-01`;
 
 // Quiénes pagan: repartidores aprobados y dueños de al menos un negocio aprobado, con la cuenta activa.
 // "faprobado" = desde cuándo (si lo suspendieron y lo volvieron a aprobar, cuenta la última aprobación).
-const SUSCRIPTORES = `
-  SELECT r.cusuario, 'repartidor' AS tipo, COALESCE(r.faprobacion, r.fdesde) AS faprobado
+// "huella" = SHA-256 del documento de la persona (para el mes gratis, que es uno solo por cédula y perfil).
+const HUELLA = "encode(sha256(convert_to(p.ctipodocumento || p.numerodocumento, 'UTF8')), 'hex')";
+const BASESUSCRIPTORES = `
+  SELECT r.cusuario, 'repartidor' AS tipo, '003' AS crol, COALESCE(r.faprobacion, r.fdesde) AS faprobado, ${HUELLA} AS huella
     FROM trepartidores r
     JOIN tusuarios u ON u.cusuario = r.cusuario AND u.fhasta = ${VIGENTE} AND u.cestatususuario = '001'
+    JOIN tpersonas p ON p.cpersona = u.cpersona AND p.fhasta = ${VIGENTE}
    WHERE r.fhasta = ${VIGENTE} AND r.cestatusaprobacion = '${APROBACION.APROBADO}'
   UNION ALL
-  SELECT n.cusuario, 'vendedor', MIN(COALESCE(n.faprobacion, n.fdesde))
+  SELECT n.cusuario, 'vendedor', '002', MIN(COALESCE(n.faprobacion, n.fdesde)), ${HUELLA}
     FROM tnegocios n
     JOIN tusuarios u ON u.cusuario = n.cusuario AND u.fhasta = ${VIGENTE} AND u.cestatususuario = '001'
+    JOIN tpersonas p ON p.cpersona = u.cpersona AND p.fhasta = ${VIGENTE}
    WHERE n.fhasta = ${VIGENTE} AND n.cestatusaprobacion = '${APROBACION.APROBADO}'
-   GROUP BY n.cusuario`;
+   GROUP BY n.cusuario, p.ctipodocumento, p.numerodocumento`;
+// "mesgratis": el mes de su aprobación es gratis solo si es la PRIMERA vez que esa persona (su documento) es aprobada
+// con ese perfil. Si eliminó su cuenta y creó otra, paga desde el mes en que la aprueban.
+const SUSCRIPTORES = `
+  SELECT s0.*, (b.fprimera IS NULL OR date_trunc('month', b.fprimera AT TIME ZONE '${ZONA}') >= date_trunc('month', s0.faprobado AT TIME ZONE '${ZONA}')) AS mesgratis
+    FROM (${BASESUSCRIPTORES}) s0
+    LEFT JOIN tbeneficios b ON b.huella = s0.huella AND b.crol = s0.crol`;
+// Primer mes que paga, en SQL (con :inicio)
+const DESDE = (x) => `GREATEST(CAST(:inicio AS date), (date_trunc('month', ${x}.faprobado AT TIME ZONE '${ZONA}')
+  + CASE WHEN ${x}.mesgratis THEN interval '1 month' ELSE interval '0' END)::date)`;
+
+// Anota la primera aprobación de cada persona y perfil (se llama antes de calcular; también al eliminar una cuenta,
+// antes de que se borre su cédula)
+async function registrarBeneficios({ usuarios, transaction } = {}) {
+  await sequelize.query(
+    `INSERT INTO tbeneficios (huella, crol, fprimera)
+     SELECT huella, crol, MIN(faprobado) FROM (${BASESUSCRIPTORES}) s ${usuarios ? 'WHERE s.cusuario IN (:usuarios)' : ''} GROUP BY huella, crol
+     ON CONFLICT (huella, crol) DO UPDATE SET fprimera = LEAST(tbeneficios.fprimera, EXCLUDED.fprimera)`,
+    { replacements: usuarios ? { usuarios } : {}, transaction },
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // Configuración: cuotas, días para pagar, desde cuándo se cobra y la cuenta donde transferir
@@ -122,14 +146,16 @@ async function fijarConfig(cambios, { transaction } = {}) {
 // Estado de cuenta de un vendedor o repartidor
 // ---------------------------------------------------------------------------------------------
 async function suscriptor(usuarioId) {
+  await registrarBeneficios({ usuarios: [usuarioId] });
   const filas = await consulta(`SELECT * FROM (${SUSCRIPTORES}) s WHERE s.cusuario = :u`, { u: usuarioId });
-  return filas[0] ? { tipo: filas[0].tipo, aprobadoEn: filas[0].faprobado } : null;
+  return filas[0] ? { tipo: filas[0].tipo, aprobadoEn: filas[0].faprobado, mesGratis: filas[0].mesgratis } : null;
 }
 
-// Primer mes que paga: el siguiente al de su aprobación, nunca antes del inicio del cobro
-function primerMes(cfg, aprobadoEn) {
+// Primer mes que paga: el siguiente al de su aprobación (el de la aprobación es gratis, solo la primera vez que esa
+// persona tiene ese perfil) y nunca antes del inicio del cobro
+function primerMes(cfg, aprobadoEn, mesGratis = true) {
   const aprobado = mesDe(new Date(new Date(aprobadoEn).getTime() - 5 * 3600 * 1000).toISOString().slice(0, 10));
-  const siguiente = sumarMeses(aprobado, 1);
+  const siguiente = mesGratis ? sumarMeses(aprobado, 1) : aprobado;
   return siguiente > cfg.inicio ? siguiente : cfg.inicio;
 }
 
@@ -159,7 +185,7 @@ async function estado(usuarioId, req) {
   const cuota = cuotaDe(cfg, s.tipo);
   const hoy = hoyEcuador();
   const actual = mesDe(hoy);
-  const desde = primerMes(cfg, s.aprobadoEn);
+  const desde = primerMes(cfg, s.aprobadoEn, s.mesGratis);
   const meses = [];
   for (let m = desde; m <= actual; m = sumarMeses(m, 1)) meses.push(m);
   const cubierto = (m) => pagos.some((p) => p.mes === m && (p.estado === 'aprobado' || p.estado === 'enviado'));
@@ -204,11 +230,10 @@ async function estado(usuarioId, req) {
 async function bloqueados(usuarios) {
   if (usuarios && !usuarios.length) return new Set();
   const cfg = await config();
+  await registrarBeneficios(usuarios ? { usuarios } : {});
   const filas = await consulta(`
     WITH s AS (
-      SELECT x.cusuario,
-             GREATEST(CAST(:inicio AS date),
-                      (date_trunc('month', x.faprobado AT TIME ZONE '${ZONA}') + interval '1 month')::date) AS desde
+      SELECT x.cusuario, ${DESDE('x')} AS desde
         FROM (${SUSCRIPTORES}) x
        ${usuarios ? 'WHERE x.cusuario IN (:usuarios)' : ''})
     SELECT DISTINCT s.cusuario
@@ -418,12 +443,13 @@ async function recordar({ io, ahora = new Date() } = {}) {
   const vence = sumarDias(mes, cfg.diasGracia - 1);
   const manana = sumarDias(vence, -1);
   const etapa = hoy > vence ? 'bloqueado' : hoy === manana ? 'manana' : 'inicio';
+  await registrarBeneficios();
 
   // Suscriptores que pagan este mes (su primer mes ya empezó) y no lo tienen pagado ni en revisión
   const filas = await consulta(`
     SELECT s.cusuario, s.tipo
       FROM (${SUSCRIPTORES}) s
-     WHERE GREATEST(CAST(:inicio AS date), (date_trunc('month', s.faprobado AT TIME ZONE '${ZONA}') + interval '1 month')::date) <= CAST(:mes AS date)
+     WHERE ${DESDE('s')} <= CAST(:mes AS date)
        AND NOT EXISTS (SELECT 1 FROM tsuscripcionpagos p WHERE p.cusuario = s.cusuario AND p.mes = CAST(:mes AS date) AND p.estado IN ('ENVIADO', 'APROBADO'))
        AND NOT EXISTS (SELECT 1 FROM tnotificaciones n WHERE n.cusuario = s.cusuario AND n.tipo = :tipo AND n.datos->>'clave' = :clave)`,
   { inicio: cfg.inicio, mes, tipo: TIPORECORDATORIO, clave: `${mes}:${etapa}` });
@@ -452,7 +478,7 @@ function iniciarRecordatorios(io) {
 }
 
 module.exports = {
-  recordar, iniciarRecordatorios,
+  recordar, iniciarRecordatorios, registrarBeneficios,
   TIPOS, TIPOSCUENTA, config, fijarConfig, estado, bloqueados, negociosBloqueados, exigirAlDia,
   subirComprobante, resumen, porRevisar, contarPorRevisar, aprobar, rechazar, registrarPago, cobrado, nombreMes,
 };

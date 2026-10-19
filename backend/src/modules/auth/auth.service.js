@@ -474,6 +474,7 @@ async function eliminarCuenta(id, { password }, req) {
     if (debe > 0) throw AppError.conflict(`Tienes $${debe.toFixed(2)} de tu suscripción por pagar. Págala en "Mi suscripción" antes de eliminar tu cuenta`, 'SUSCRIPCIONPENDIENTE');
   }
 
+  if (['vendedor', 'repartidor'].includes(usuario.tipoUsuario)) await SuscripcionService.registrarBeneficios({ usuarios: [id] });
   const fotos = await withTransaction(async (t) => {
     await UsuarioCuenta.update({ estatus: '002', claveHash: await hashClave(crypto.randomBytes(24).toString('hex')) }, { where: { id }, transaction: t });
     if (negocios.length) {

@@ -29,6 +29,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `021_dispositivos_multicuenta.sql` | El mismo celular registrado para varias cuentas de la misma persona (sigue recibiendo los avisos de todas) |
 | `022_cupo_repartidores.sql` | Cupo de repartidores aprobados (0 = sin límite) y WhatsApp de soporte |
 | `023_sugerencias.sql` | "Ayúdanos a mejorar ValleXpress": sugerencias, problemas y felicitaciones (`TSUGERENCIAS`), con respuesta del administrador |
+| `024_mes_gratis_por_cedula.sql` | `TBENEFICIOS`: el mes gratis de la suscripción es uno solo por cédula y perfil (aunque elimine la cuenta y cree otra) |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 
