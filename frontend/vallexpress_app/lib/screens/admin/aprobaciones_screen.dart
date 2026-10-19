@@ -18,34 +18,76 @@ import 'usuarios_admin_screen.dart';
 
 /// Gestión de negocios y repartidores: revisar los nuevos (aprobar o rechazar), suspender o reactivar, editar un
 /// negocio completo (datos, horario, local, imágenes y productos) y el vehículo de un repartidor.
-class AprobacionesScreen extends StatelessWidget {
-  const AprobacionesScreen({super.key, this.alCambiar, this.pestanaInicial = 0, this.conAtras = false});
+class AprobacionesScreen extends StatefulWidget {
+  const AprobacionesScreen({super.key, this.alCambiar, this.pestanaInicial, this.conAtras = false});
 
   /// Avisa al inicio del admin que cambió algo (para refrescar el contador de pendientes)
   final VoidCallback? alCambiar;
 
-  /// 0 = negocios, 1 = repartidores (desde "Perfiles y permisos" se abre en la del perfil elegido)
-  final int pestanaInicial;
+  /// 0 = negocios, 1 = repartidores (desde "Perfiles y permisos" se abre en la del perfil elegido). Sin indicar,
+  /// abre la que tiene solicitudes pendientes.
+  final int? pestanaInicial;
 
   /// Abierta como página aparte (con flecha para volver), no como pestaña del inicio
   final bool conAtras;
 
   @override
+  State<AprobacionesScreen> createState() => _AprobacionesScreenState();
+}
+
+class _AprobacionesScreenState extends State<AprobacionesScreen> with SingleTickerProviderStateMixin {
+  late final TabController _pestanas = TabController(length: 2, vsync: this, initialIndex: widget.pestanaInicial ?? 0);
+  int _negocios = 0;
+  int _repartidores = 0;
+  bool _elegida = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _contar();
+  }
+
+  @override
+  void dispose() {
+    _pestanas.dispose();
+    super.dispose();
+  }
+
+  // Cuántas solicitudes esperan en cada pestaña; la primera vez abre la que tiene pendientes
+  Future<void> _contar() async {
+    try {
+      final r = await AdminService.resumen();
+      if (!mounted) return;
+      setState(() => (_negocios = r.negociosPendientes, _repartidores = r.repartidoresPendientes));
+      if (!_elegida && widget.pestanaInicial == null && r.negociosPendientes == 0 && r.repartidoresPendientes > 0) _pestanas.animateTo(1);
+      _elegida = true;
+    } catch (_) {
+      // sin conexión: las pestañas quedan sin número
+    }
+  }
+
+  void _alCambiar() {
+    widget.alCambiar?.call();
+    _contar();
+  }
+
+  Widget _pestana(IconData icono, String texto, int pendientes) => Tab(
+        icon: Badge(isLabelVisible: pendientes > 0, label: Text('$pendientes'), child: Icon(icono)),
+        text: texto,
+      );
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      initialIndex: pestanaInicial,
-      child: FondoValle(
-        appBar: AppBar(
-          title: Text(conAtras ? 'Solicitudes' : 'Gestión'),
-          automaticallyImplyLeading: conAtras,
-          bottom: const TabBar(tabs: [
-            Tab(icon: Icon(Icons.storefront_rounded), text: 'Negocios'),
-            Tab(icon: Icon(Icons.two_wheeler_rounded), text: 'Repartidores'),
-          ]),
-        ),
-        child: TabBarView(children: [_Lista(negocios: true, alCambiar: alCambiar), _Lista(negocios: false, alCambiar: alCambiar)]),
+    return FondoValle(
+      appBar: AppBar(
+        title: Text(widget.conAtras ? 'Solicitudes' : 'Gestión'),
+        automaticallyImplyLeading: widget.conAtras,
+        bottom: TabBar(controller: _pestanas, tabs: [
+          _pestana(Icons.storefront_rounded, 'Negocios', _negocios),
+          _pestana(Icons.two_wheeler_rounded, 'Repartidores', _repartidores),
+        ]),
       ),
+      child: TabBarView(controller: _pestanas, children: [_Lista(negocios: true, alCambiar: _alCambiar), _Lista(negocios: false, alCambiar: _alCambiar)]),
     );
   }
 }

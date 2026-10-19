@@ -177,7 +177,7 @@ class TusCuentas extends StatefulWidget {
 
 class _TusCuentasState extends State<TusCuentas> {
   List<Map<String, dynamic>>? _cuentas;
-  bool _cambiando = false;
+  String? _cambiando; // la cuenta a la que se está cambiando (solo ella muestra la carga)
 
   @override
   void initState() {
@@ -209,7 +209,7 @@ class _TusCuentasState extends State<TusCuentas> {
               for (final (i, cuenta) in otras.indexed) ...[
                 if (i > 0) Divider(height: 1, color: c.borde),
                 ListTile(
-                  enabled: !_cambiando,
+                  enabled: _cambiando == null,
                   leading: Icon(perfilesCuenta[cuenta['tipoUsuario']]?.$1 ?? Icons.person_rounded, color: (cuenta['estado'] ?? 'activo') == 'activo' ? c.primario : c.textoSuave),
                   title: Text('Entrar como ${perfilesCuenta[cuenta['tipoUsuario']]?.$2 ?? cuenta['tipoUsuario']}', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                   subtitle: Text(switch (cuenta['estado']) {
@@ -218,14 +218,14 @@ class _TusCuentasState extends State<TusCuentas> {
                     'inactivo' => 'Dada de baja',
                     _ => '${perfilesCuenta[cuenta['tipoUsuario']]?.$3 ?? ''} · ${cuenta['usuario']}',
                   }, style: (cuenta['estado'] ?? 'activo') == 'activo' ? null : const TextStyle(color: AppTheme.errorColor)),
-                  trailing: _cambiando
+                  trailing: _cambiando == '${cuenta['usuario']}'
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                       : Icon((cuenta['estado'] ?? 'activo') == 'activo' ? Icons.swap_horiz_rounded : Icons.lock_rounded),
                   onTap: () async {
-                    setState(() => _cambiando = true);
+                    setState(() => _cambiando = '${cuenta['usuario']}');
                     await cambiarDeCuenta(context, usuario: '${cuenta['usuario']}', tipoUsuario: '${cuenta['tipoUsuario']}');
                     if (!mounted) return;
-                    setState(() => _cambiando = false);
+                    setState(() => _cambiando = null);
                     _recargar(); // por si cambió su estado (se bloqueó por intentos, etc.)
                   },
                 ),

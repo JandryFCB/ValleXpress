@@ -40,6 +40,8 @@ class ResumenAdmin {
     required this.repartidores,
     required this.repartidoresEnLinea,
     required this.pendientes,
+    this.negociosPendientes = 0,
+    this.repartidoresPendientes = 0,
     this.comprobantesPorRevisar = 0,
     this.cobradoHoy = 0,
     this.cobradoSemana = 0,
@@ -62,6 +64,8 @@ class ResumenAdmin {
   final Map<String, int> repartidores;
   final int repartidoresEnLinea;
   final int pendientes;
+  final int negociosPendientes;
+  final int repartidoresPendientes;
   final int comprobantesPorRevisar; // comprobantes de suscripción que esperan tu revisión
   final double cobradoHoy; // suscripciones cobradas hoy (pagos aprobados: plata que entró)
   final double cobradoSemana;
@@ -98,6 +102,8 @@ class ResumenAdmin {
       repartidores: _conteo(Map.of(rep)..remove('enLinea')),
       repartidoresEnLinea: (rep['enLinea'] as num?)?.toInt() ?? 0,
       pendientes: (j['pendientes'] as num?)?.toInt() ?? 0,
+      negociosPendientes: ((j['negocios'] as Map?)?['pendiente'] as num?)?.toInt() ?? 0,
+      repartidoresPendientes: ((j['repartidores'] as Map?)?['pendiente'] as num?)?.toInt() ?? 0,
       comprobantesPorRevisar: (j['comprobantesPorRevisar'] as num?)?.toInt() ?? 0,
       cobradoHoy: _num((j['cobrado'] as Map?)?['hoy']),
       cobradoSemana: _num((j['cobrado'] as Map?)?['semana']),
