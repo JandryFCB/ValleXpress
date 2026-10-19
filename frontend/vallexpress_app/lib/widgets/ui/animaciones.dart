@@ -286,6 +286,7 @@ class PestanasAnimadas extends StatefulWidget {
 class _PestanasAnimadasState extends State<PestanasAnimadas> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 260), value: 1);
   late final Animation<double> _t = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+  List<GlobalKey> _llaves = [];
 
   @override
   void didUpdateWidget(covariant PestanasAnimadas vieja) {
@@ -293,7 +294,24 @@ class _PestanasAnimadasState extends State<PestanasAnimadas> with SingleTickerPr
     if (vieja.indice != widget.indice) {
       HapticFeedback.selectionClick();
       _c.forward(from: 0);
+      // La pestaña que se abre empieza desde arriba (no donde se dejó la última vez)
+      final llave = widget.indice < _llaves.length ? _llaves[widget.indice] : null;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _alInicio(llave?.currentContext));
     }
+  }
+
+  // Lleva al inicio todas las listas verticales de la pestaña (también las que tienen su propio controlador)
+  static void _alInicio(BuildContext? contexto) {
+    if (contexto is! Element) return;
+    void visitar(Element e) {
+      if (e is StatefulElement && e.state is ScrollableState) {
+        final s = e.state as ScrollableState;
+        final p = s.position;
+        if (axisDirectionToAxis(s.axisDirection) == Axis.vertical && p.hasPixels && p.pixels != p.minScrollExtent) p.jumpTo(p.minScrollExtent);
+      }
+      e.visitChildren(visitar);
+    }
+    contexto.visitChildren(visitar);
   }
 
   @override
@@ -309,8 +327,15 @@ class _PestanasAnimadasState extends State<PestanasAnimadas> with SingleTickerPr
           opacity: 0.3 + 0.7 * _t.value,
           child: Transform.translate(offset: Offset(0, 10 * (1 - _t.value)), child: hijo),
         ),
-        child: IndexedStack(index: widget.indice, children: widget.children),
+        child: IndexedStack(index: widget.indice, children: [
+          for (final (i, hijo) in widget.children.indexed) KeyedSubtree(key: _llave(i), child: hijo),
+        ]),
       );
+
+  GlobalKey _llave(int i) {
+    if (_llaves.length != widget.children.length) _llaves = List.generate(widget.children.length, (j) => j < _llaves.length ? _llaves[j] : GlobalKey());
+    return _llaves[i];
+  }
 }
 
 /// Lluvia de confeti sobre toda la pantalla para celebrar (pedido hecho, pedido entregado). Se quita sola.

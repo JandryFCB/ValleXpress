@@ -177,7 +177,10 @@ class TusCuentas extends StatefulWidget {
 }
 
 class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
-  List<Map<String, dynamic>>? _cuentas;
+  // Lo último que se cargó (de esta sesión): al volver al perfil se muestra enseguida, sin saltar
+  static List<Map<String, dynamic>>? _ultimas;
+  static String? _deUsuario;
+  late List<Map<String, dynamic>>? _cuentas = _deUsuario == context.read<AuthProvider>().usuario?['id']?.toString() ? _ultimas : null;
   String? _cambiando; // la cuenta a la que se está cambiando (solo ella muestra la carga)
 
   // El estado de las cuentas cambia solo (un bloqueo temporal vence, el admin desbloquea): se refresca cada 30 s, al
@@ -209,6 +212,8 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
   void _recargar() {
     context.read<AuthProvider>().misCuentas().then((c) {
       if (!mounted) return;
+      _ultimas = c;
+      _deUsuario = context.read<AuthProvider>().usuario?['id']?.toString();
       setState(() => _cuentas = c);
       // Vuelve a consultar en el segundo en que vence el bloqueo temporal más próximo
       _alVencer?.cancel();
@@ -224,7 +229,19 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final otras = (_cuentas ?? []).where((c) => c['actual'] != true).toList();
-    if (_cuentas == null || otras.isEmpty) return const SizedBox.shrink();
+    // Aparece deslizándose (sin empujar de golpe lo que está debajo)
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 320),
+        child: otras.isEmpty ? const SizedBox(key: ValueKey('vacio'), width: double.infinity) : KeyedSubtree(key: const ValueKey('lista'), child: _lista(context, otras)),
+      ),
+    );
+  }
+
+  Widget _lista(BuildContext context, List<Map<String, dynamic>> otras) {
     final tema = Theme.of(context).textTheme;
     final c = context.colores;
     return Column(
