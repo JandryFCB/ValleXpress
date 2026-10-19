@@ -502,50 +502,80 @@ async function eliminarCuenta(id, { password }, req) {
 // ---------------------------------------------------------------------------------------------
 const MENSAJERESET = 'Si el correo existe, te enviamos un código de verificación.';
 
+// Recuperar la contraseña es POR CUENTA (usuario + rol): con el mismo correo la persona puede tener cuenta de cliente,
+// de negocio y de repartidor, y solo cambia la que elige. Las cuentas de ADMINISTRADOR no se recuperan por correo
+// (quien entrara al correo tomaría el panel): las cambia otro administrador o él mismo desde Configuración.
+const recuperables = (cuentas) => cuentas.filter((c) => c.tipoUsuario !== 'administrador' && !String(c.email || '').endsWith('@vallexpress.invalid'));
+const NOMBREROL = { cliente: 'cliente', vendedor: 'negocio', repartidor: 'repartidor', administrador: 'administrador' };
+
 async function solicitarCodigoReset(emailEntrada, req) {
   const email = normalizarEmail(emailEntrada);
-  const usuario = await Usuario.findOne({ where: { email } });
+  const cuentas = await Usuario.findAll({ where: { email } });
+  const validas = recuperables(cuentas);
 
   // Se genera igual exista o no la cuenta (así la respuesta no revela si el correo está registrado)
   const { codigo } = await CodigoService.generar({
-    proposito: PROPOSITOCODIGO.RESETCLAVE, email, usuarioId: usuario?.id ?? null, ip: ipDe(req), minutosExpira: 10,
+    proposito: PROPOSITOCODIGO.RESETCLAVE, email, usuarioId: validas[0]?.id ?? null, ip: ipDe(req), minutosExpira: 10,
   });
 
   // El correo solo se envía a cuentas reales y sin esperar la respuesta del proveedor
   // (esperarla haría la petición más lenta cuando el correo existe, y delataría la cuenta).
-  if (usuario) enviarCorreoCodigo('reset', { email, codigo }, req);
+  if (validas.length) enviarCorreoCodigo('reset', { email, codigo }, req);
+  else if (cuentas.length) {
+    // Solo tiene cuenta de administrador: se le explica por correo (la respuesta sigue siendo la misma)
+    Correo.avisoCuenta({
+      para: email, nombre: cuentas[0].nombre, asunto: 'Recuperar la contraseña de ValleXpress', titulo: 'Tu cuenta es de administrador',
+      parrafos: ['Las cuentas de administrador no se recuperan con un código por correo, para proteger el panel.',
+        'Pídele a otro administrador que te ponga una contraseña nueva desde Usuarios, o cámbiala desde Configuración si aún tienes la sesión abierta.'],
+    });
+  }
   return { message: MENSAJERESET };
 }
 
+// Con el código correcto: si tiene una sola cuenta recuperable entrega su resetToken; si tiene varias, la lista para
+// que elija cuál (cada una con su propio resetToken).
 async function verificarCodigoReset({ email: emailEntrada, code }) {
   const email = normalizarEmail(emailEntrada);
   const registro = await CodigoService.verificar({ proposito: PROPOSITOCODIGO.RESETCLAVE, email, codigo: code });
-  const usuario = registro.usuarioId ? await Usuario.findByPk(registro.usuarioId) : null;
-  if (!usuario) throw AppError.badRequest('Código inválido o expirado', 'CODIGOINVALIDO');
+  const validas = recuperables(await Usuario.findAll({ where: { email }, order: [['rol', 'ASC']] }));
+  if (!validas.length) throw AppError.badRequest('Código inválido o expirado', 'CODIGOINVALIDO');
 
   await CodigoService.consumir(registro);
-  return { resetToken: TokenService.crearReset(usuario) };
+  const ahora = new Date();
+  const cuentas = validas.map((c) => ({
+    usuario: c.id, tipoUsuario: c.tipoUsuario, resetToken: TokenService.crearReset(c),
+    estado: !c.activo ? (c.estatus === '002' ? 'inactivo' : 'bloqueado') : c.bloqueadoHasta && new Date(c.bloqueadoHasta) > ahora ? 'temporal' : 'activo',
+  }));
+  return cuentas.length === 1 ? { resetToken: cuentas[0].resetToken, usuario: cuentas[0].usuario, tipoUsuario: cuentas[0].tipoUsuario } : { cuentas };
 }
 
+// Fija la contraseña nueva SOLO de esa cuenta: la desbloquea si estaba bloqueada por intentos (no si la bloqueó el
+// administrador), cierra sus sesiones y le avisa por correo qué usuario cambió.
 async function restablecerClave({ resetToken, newPassword }, req) {
   const payload = TokenService.verificarReset(resetToken);
   const usuario = await Usuario.findOne({ where: { id: payload.userId, email: payload.email } });
-  if (!usuario) throw AppError.unauthorized('Token inválido', 'TOKENRESETINVALIDO');
+  if (!usuario || usuario.tipoUsuario === 'administrador') throw AppError.unauthorized('Token inválido', 'TOKENRESETINVALIDO');
 
   // Token de un solo uso: si la clave ya cambió desde que se emitió, deja de servir
   const cambioActual = usuario.claveCambiadaEn ? new Date(usuario.claveCambiadaEn).getTime() : 0;
   if (cambioActual !== (payload.cc || 0)) throw AppError.unauthorized('Este enlace ya fue utilizado', 'TOKENRESETUSADO');
 
-  // El correo es de la persona: la clave nueva queda en TODAS sus cuentas (cliente, vendedor, repartidor)
   const claveHash = await hashClave(newPassword);
-  const cuentas = (await Usuario.findAll({ where: { personaId: usuario.personaId }, attributes: ['id'] })).map((c) => c.id);
   await withTransaction(async (t) => {
-    await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id: cuentas }, transaction: t });
-    await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null }, { where: { id: cuentas }, transaction: t });
-    for (const c of cuentas) await SesionService.cerrarTodas(c, 'CLAVE', { transaction: t });     // las sesiones viejas dejan de servir
+    await UsuarioCuenta.update({ claveHash, claveCambiadaEn: new Date() }, { where: { id: usuario.id }, transaction: t });
+    await UsuarioAcceso.update({ intentos: 0, bloqueadoHasta: null }, { where: { id: usuario.id }, transaction: t });
+    await SesionService.cerrarTodas(usuario.id, 'CLAVE', { transaction: t });     // las sesiones viejas dejan de servir
   }, { usuarioId: usuario.id });
 
   auditar({ usuarioId: usuario.id, accion: 'RESETCLAVE', entidad: 'USUARIOS', entidadId: usuario.id, req });
+  Correo.avisoCuenta({
+    para: usuario.email, nombre: usuario.nombre, asunto: 'Cambiaste tu contraseña de ValleXpress', titulo: 'Tu contraseña se actualizó',
+    parrafos: [`Se actualizó la contraseña de tu usuario <strong>${usuario.id}</strong> (cuenta de ${NOMBREROL[usuario.tipoUsuario] || usuario.tipoUsuario}).`,
+      ...(usuario.activo ? [] : ['Esta cuenta sigue bloqueada por el equipo de ValleXpress: escríbenos para revisar tu caso.']),
+      'Tus otras cuentas con este correo no cambiaron.'],
+    avisoFinal: 'Si no fuiste tú, escríbenos de inmediato.',
+  });
+  return { usuario: usuario.id, tipoUsuario: usuario.tipoUsuario, bloqueada: !usuario.activo };
 }
 
 // ---------------------------------------------------------------------------------------------

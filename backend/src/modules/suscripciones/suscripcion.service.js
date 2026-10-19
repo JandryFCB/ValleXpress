@@ -59,6 +59,14 @@ const SUSCRIPTORES = `
 const CAMPOSCUENTA = ['banco', 'tipo', 'numero', 'titular', 'identificacion', 'notas'];
 const TIPOSCUENTA = ['ahorros', 'corriente'];
 
+// LIQUIDACIONCUENTA guarda una LISTA de cuentas (vendedores y repartidores pueden tener bancos distintos y transfieren a
+// la que les quede mejor). Las versiones anteriores guardaban una sola cuenta (objeto): se lee como lista de una.
+function cuentasDe(valor) {
+  const lista = Array.isArray(valor) ? valor : valor && typeof valor === 'object' ? [valor] : [];
+  return lista.map(cuentaDe).filter((c) => c.banco || c.numero || c.titular);
+}
+const MAXCUENTAS = 10;
+
 function cuentaDe(valor) {
   const v = valor && typeof valor === 'object' ? valor : { notas: valor ? String(valor) : '' };
   const c = Object.fromEntries(CAMPOSCUENTA.map((k) => [k, String(v[k] ?? '').trim()]));
@@ -69,13 +77,15 @@ function cuentaDe(valor) {
 async function config() {
   const c = (clave, porDefecto) => ConfiguracionService.obtener(clave, porDefecto);
   const inicio = String(await c('SUSCRIPCIONINICIO', '2026-11-01')).slice(0, 10);
-  return {
+  const cfg = {
     cuotaVendedor: num(await c('SUSCRIPCIONVENDEDOR', 10)),
     cuotaRepartidor: num(await c('SUSCRIPCIONREPARTIDOR', 10)),
     diasGracia: Math.min(28, Math.max(1, Number(await c('SUSCRIPCIONDIASGRACIA', 5)) || 5)),
     inicio: mesDe(inicio),
-    cuenta: cuentaDe(await c('LIQUIDACIONCUENTA', {})),
+    cuentas: cuentasDe(await c('LIQUIDACIONCUENTA', [])),
   };
+  // La primera cuenta también como "cuenta": la leen las versiones anteriores de la app
+  return { ...cfg, cuenta: cfg.cuentas[0] || cuentaDe({}) };
 }
 const cuotaDe = (cfg, tipo) => (tipo === 'vendedor' ? cfg.cuotaVendedor : cfg.cuotaRepartidor);
 
@@ -91,13 +101,18 @@ async function fijarConfig(cambios, { transaction } = {}) {
     await ConfiguracionService.fijar(clave, valor, { transaction });
     hechos[campo] = valor;
   }
-  if (cambios.cuenta && typeof cambios.cuenta === 'object') {
-    const { completa, ...previa } = actual.cuenta;
-    const nueva = { ...previa };
-    for (const k of CAMPOSCUENTA) if (cambios.cuenta[k] !== undefined) nueva[k] = String(cambios.cuenta[k]).trim();
-    if (JSON.stringify(nueva) !== JSON.stringify(previa)) {
-      await ConfiguracionService.fijar('LIQUIDACIONCUENTA', nueva, { transaction });
-      hechos.cuenta = nueva;
+  // "cuentas" reemplaza la lista completa; "cuenta" (versiones viejas de la app) cambia la primera
+  let lista = null;
+  if (Array.isArray(cambios.cuentas)) lista = cambios.cuentas;
+  else if (cambios.cuenta && typeof cambios.cuenta === 'object') lista = [{ ...(actual.cuentas[0] || {}), ...cambios.cuenta }, ...actual.cuentas.slice(1)];
+  if (lista) {
+    if (lista.length > MAXCUENTAS) throw AppError.badRequest(`Hasta ${MAXCUENTAS} cuentas`, 'DEMASIADASCUENTAS');
+    const nuevas = lista.map((x) => Object.fromEntries(CAMPOSCUENTA.map((k) => [k, String(x?.[k] ?? '').trim()]))).map((x) => ({ ...x, tipo: TIPOSCUENTA.includes(x.tipo) ? x.tipo : 'ahorros' }))
+      .filter((x) => x.banco || x.numero || x.titular);
+    const sinCompleta = (l) => JSON.stringify(l.map(({ completa, ...r }) => r));
+    if (sinCompleta(nuevas) !== sinCompleta(actual.cuentas)) {
+      await ConfiguracionService.fijar('LIQUIDACIONCUENTA', nuevas, { transaction });
+      hechos.cuentas = nuevas;
     }
   }
   return hechos;
@@ -137,7 +152,7 @@ async function estado(usuarioId, req) {
   const cfg = await config();
   const s = await suscriptor(usuarioId);
   const pagos = await pagosDe(usuarioId, req);
-  const base = { cuenta: cfg.cuenta, diasGracia: cfg.diasGracia, inicio: cfg.inicio };
+  const base = { cuenta: cfg.cuenta, cuentas: cfg.cuentas, diasGracia: cfg.diasGracia, inicio: cfg.inicio };
   if (!s) {
     return { ...base, aplica: false, tipo: null, cuota: null, meses: [], saldoPendiente: 0, bloqueado: false, pagos: pagos.slice(0, 12) };
   }

@@ -20,7 +20,8 @@ class PasswordResetService {
     }
   }
 
-  static Future<String> verifyCode(String email, String code) async {
+  /// Con varias cuentas con el mismo correo devuelve todas (cada una con su resetToken) para elegir cuál recuperar
+  static Future<List<({String usuario, String tipoUsuario, String estado, String resetToken})>> verifyCode(String email, String code) async {
     final uri = Uri.parse('$baseUrl/auth/verify-reset-code');
     final res = await http.post(
       uri,
@@ -32,10 +33,17 @@ class PasswordResetService {
     if (res.statusCode != 200) {
       throw Exception(data['error'] ?? 'Código inválido');
     }
-    return (data['resetToken'] ?? '').toString();
+    if (data['cuentas'] is List) {
+      return [
+        for (final c in data['cuentas'] as List)
+          (usuario: '${c['usuario']}', tipoUsuario: '${c['tipoUsuario']}', estado: '${c['estado'] ?? 'activo'}', resetToken: '${c['resetToken']}'),
+      ];
+    }
+    return [(usuario: '${data['usuario'] ?? ''}', tipoUsuario: '${data['tipoUsuario'] ?? ''}', estado: 'activo', resetToken: '${data['resetToken'] ?? ''}')];
   }
 
-  static Future<void> resetPassword(
+  /// Devuelve el usuario al que se le cambió la contraseña
+  static Future<String> resetPassword(
     String resetToken,
     String newPassword,
   ) async {
@@ -50,5 +58,6 @@ class PasswordResetService {
     if (res.statusCode != 200) {
       throw Exception(data['error'] ?? 'Error reseteando contraseña');
     }
+    return (data['message'] ?? 'Contraseña actualizada').toString();
   }
 }

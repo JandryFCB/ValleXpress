@@ -444,14 +444,22 @@ const TIPODOCCEDULA = '001';
 
 // Además del estatus que pone el administrador (activo, bloqueado, dado de baja), la cuenta puede estar bloqueada
 // SOLA unos minutos por contraseñas incorrectas: "bloqueoTemporal" trae hasta cuándo.
+// Inactiva = no abre la app hace DIASINACTIVIDAD días (15 por defecto). Es solo informativo: no bloquea nada y vuelve
+// a "activa" apenas entra (cada vez que abre la app se renueva su sesión y su última conexión).
+const diasInactividad = async () => Math.max(1, Number(await ConfiguracionService.obtener('DIASINACTIVIDAD', 15)) || 15);
+const desdeInactividad = (dias) => new Date(Date.now() - dias * 86400000);
+
 async function usuariosApi(filas, req) {
   const urls = await ArchivoService.mapaUrls(req, filas.map((u) => u.fotoId));
   const ahora = new Date();
+  const limite = desdeInactividad(await diasInactividad());
   return filas.map((u) => ({
     usuario: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, telefono: u.telefono, cedula: u.cedula,
     rol: u.tipoUsuario, activo: u.activo, estatus: ESTATUSAAPI[u.estatus] || 'activo', verificado: u.verificado,
     bloqueoTemporal: u.bloqueadoHasta && new Date(u.bloqueadoHasta) > ahora ? { hasta: u.bloqueadoHasta } : null,
     intentosFallidos: u.intentosFallidos || 0,
+    sinActividadDias: u.activo && new Date(u.ultimaConexion || u.creadoEn || ahora) < limite
+      ? Math.floor((ahora - new Date(u.ultimaConexion || u.creadoEn)) / 86400000) : null,
     eliminada: String(u.email || '').endsWith('@vallexpress.invalid'),     // la eliminó la persona: ya no tiene datos
     foto: urls[String(u.fotoId)]?.miniatura || urls[String(u.fotoId)]?.url || null,
     ultimaConexion: u.ultimaConexion, creadoEn: u.creadoEn,
@@ -483,14 +491,21 @@ async function usuarios(query, req) {
   }
   // Cuántas hay en cada estado (con el rol y la búsqueda de ahora), para los filtros de la pantalla
   const temporal = { estatus: ESTATUS.activo, bloqueadoHasta: { [Op.gt]: new Date() } };
+  const limite = desdeInactividad(await diasInactividad());
+  const sinActividad = {
+    estatus: ESTATUS.activo,
+    [Op.and]: [{ [Op.or]: [{ ultimaConexion: { [Op.lt]: limite } }, { ultimaConexion: null, creadoEn: { [Op.lt]: limite } }] }],
+  };
   const conteos = {
     todos: await Usuario.count({ where }),
     activo: await Usuario.count({ where: { ...where, estatus: ESTATUS.activo } }),
     temporal: await Usuario.count({ where: { ...where, ...temporal } }),
     bloqueado: await Usuario.count({ where: { ...where, estatus: ESTATUS.bloqueado } }),
     inactivo: await Usuario.count({ where: { ...where, estatus: ESTATUS.inactivo } }),
+    sinactividad: await Usuario.count({ where: { ...where, ...sinActividad, [Op.and]: [...(where[Op.and] || []), ...sinActividad[Op.and]] } }),
   };
   if (query.estado === 'temporal') Object.assign(where, temporal);
+  else if (query.estado === 'sinactividad') Object.assign(where, { ...sinActividad, [Op.and]: [...(where[Op.and] || []), ...sinActividad[Op.and]] });
   else if (ESTATUS[query.estado]) where.estatus = ESTATUS[query.estado];
   const { count, rows } = await Usuario.findAndCountAll({ where, order: [['creadoEn', 'DESC']], limit: pag.limit, offset: pag.offset });
   return { usuarios: await usuariosApi(rows, req), conteos, pagination: paginacion(pag, count) };

@@ -46,6 +46,54 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     });
   }
 
+  Future<({String usuario, String tipoUsuario, String estado, String resetToken})?> _elegirCuenta(
+      List<({String usuario, String tipoUsuario, String estado, String resetToken})> cuentas) {
+    const nombres = {'cliente': ('Cliente', Icons.shopping_bag_rounded), 'vendedor': ('Negocio', Icons.storefront_rounded), 'repartidor': ('Repartidor', Icons.delivery_dining_rounded)};
+    return showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isDismissible: false,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('¿De qué cuenta quieres cambiar la contraseña?', style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text('Tienes varias cuentas con este correo. Solo cambia la que elijas.', style: Theme.of(ctx).textTheme.bodySmall),
+            const SizedBox(height: 12),
+            for (final c in cuentas)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TarjetaValle(
+                  onTap: () => Navigator.pop(ctx, c),
+                  child: Row(children: [
+                    Icon(nombres[c.tipoUsuario]?.$2 ?? Icons.person_rounded, color: ctx.colores.primario, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(nombres[c.tipoUsuario]?.$1 ?? c.tipoUsuario, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                        Text(
+                          switch (c.estado) {
+                            'temporal' => 'Usuario ${c.usuario} · bloqueada por intentos: se desbloquea al cambiarla',
+                            'bloqueado' => 'Usuario ${c.usuario} · bloqueada por ValleXpress',
+                            'inactivo' => 'Usuario ${c.usuario} · dada de baja',
+                            _ => 'Usuario ${c.usuario}',
+                          },
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                      ]),
+                    ),
+                    const Icon(Icons.chevron_right_rounded),
+                  ]),
+                ),
+              ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Future<void> _verificar() async {
     FocusScope.of(context).unfocus();
     final codigo = _codigo.text.trim();
@@ -56,9 +104,12 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
 
     setState(() => _cargando = true);
     try {
-      final token = await PasswordResetService.verifyCode(widget.email, codigo);
+      final cuentas = await PasswordResetService.verifyCode(widget.email, codigo);
       if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => NewPasswordScreen(resetToken: token)));
+      // Varias cuentas con este correo (cliente, negocio, repartidor): se recupera solo la que elija
+      final elegida = cuentas.length == 1 ? cuentas.first : await _elegirCuenta(cuentas);
+      if (elegida == null || !mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => NewPasswordScreen(resetToken: elegida.resetToken, usuario: elegida.usuario)));
     } catch (e) {
       if (mounted) {
         _codigo.clear();

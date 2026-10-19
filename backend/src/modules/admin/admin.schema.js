@@ -42,7 +42,7 @@ const listadoUsuarios = [
   ...pagina,
   query('rol').optional().isIn(ROLES).withMessage(`rol debe ser: ${ROLES.join(', ')}`),
   query('activo').optional().isIn(['true', 'false']).withMessage('activo debe ser true o false'),
-  query('estado').optional().isIn(['activo', 'temporal', 'bloqueado', 'inactivo']).withMessage('estado debe ser activo, temporal, bloqueado o inactivo'),
+  query('estado').optional().isIn(['activo', 'temporal', 'bloqueado', 'inactivo', 'sinactividad']).withMessage('estado debe ser activo, temporal, bloqueado, inactivo o sinactividad'),
 ];
 
 const estadoUsuario = [...usuario, body('activo').isBoolean().withMessage('activo debe ser true o false').toBoolean(), motivo];
@@ -115,7 +115,14 @@ const configSuscripciones = [
   body('cuenta.titular').optional().isString().trim().isLength({ max: 100 }).withMessage('El titular es muy largo'),
   body('cuenta.identificacion').optional().isString().trim().matches(/^(\d{10}|\d{13})?$/).withMessage('La cédula (10 dígitos) o el RUC (13) no son válidos'),
   body('cuenta.notas').optional().isString().trim().isLength({ max: 200 }).withMessage('Las notas son muy largas'),
-  body().custom((b) => ['cuotaVendedor', 'cuotaRepartidor', 'diasGracia', 'inicio', 'cuenta'].some((c) => b[c] !== undefined)).withMessage('Indica qué cambiar'),
+  body('cuentas').optional().isArray({ max: 10 }).withMessage('Hasta 10 cuentas'),
+  body('cuentas.*.banco').optional().isString().trim().isLength({ max: 60 }).withMessage('El nombre del banco es muy largo'),
+  body('cuentas.*.tipo').optional().isIn(TIPOSCUENTA).withMessage(`El tipo de cuenta es ${TIPOSCUENTA.join(' o ')}`),
+  body('cuentas.*.numero').optional().isString().trim().matches(/^[0-9-]{0,30}$/).withMessage('El número de cuenta lleva solo números'),
+  body('cuentas.*.titular').optional().isString().trim().isLength({ max: 100 }).withMessage('El titular es muy largo'),
+  body('cuentas.*.identificacion').optional().isString().trim().matches(/^(\d{10}|\d{13})?$/).withMessage('La cédula (10 dígitos) o el RUC (13) no son válidos'),
+  body('cuentas.*.notas').optional().isString().trim().isLength({ max: 200 }).withMessage('Las notas son muy largas'),
+  body().custom((b) => ['cuotaVendedor', 'cuotaRepartidor', 'diasGracia', 'inicio', 'cuenta', 'cuentas'].some((c) => b[c] !== undefined)).withMessage('Indica qué cambiar'),
 ];
 const idComprobante = [param('id').isInt({ min: 1 }).withMessage('Comprobante inválido').toInt()];
 const soporte = [body('whatsapp').isString().trim().matches(/^(09\d{8})?$/).withMessage('El WhatsApp es un celular de 10 dígitos que empieza con 09 (o vacío)')];

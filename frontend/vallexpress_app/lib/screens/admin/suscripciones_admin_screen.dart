@@ -27,11 +27,7 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
   final _cuotaRepartidor = TextEditingController();
   final _dia = TextEditingController();
   final _inicio = TextEditingController();
-  final _banco = TextEditingController();
-  final _numero = TextEditingController();
-  final _titular = TextEditingController();
-  final _identificacion = TextEditingController();
-  String _tipo = 'ahorros';
+  List<CuentaCobro> _cuentas = []; // a dónde transfieren vendedores y repartidores (pueden ser varias)
   String? _error;
   bool _guardando = false;
   int? _revisando;
@@ -44,7 +40,7 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
 
   @override
   void dispose() {
-    for (final c in [_cuotaVendedor, _cuotaRepartidor, _dia, _inicio, _banco, _numero, _titular, _identificacion]) {
+    for (final c in [_cuotaVendedor, _cuotaRepartidor, _dia, _inicio]) {
       c.dispose();
     }
     super.dispose();
@@ -56,15 +52,11 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
     try {
       final r = await AdminService.suscripciones();
       if (!mounted) return;
-      setState(() => (_comprobantes = r.comprobantes, _suscriptores = r.suscriptores, _error = null, _tipo = r.config.cuenta.tipo));
+      setState(() => (_comprobantes = r.comprobantes, _suscriptores = r.suscriptores, _error = null, _cuentas = r.config.cuentas));
       _cuotaVendedor.text = _dinero(r.config.cuotaVendedor);
       _cuotaRepartidor.text = _dinero(r.config.cuotaRepartidor);
       _dia.text = '${r.config.diasGracia}';
       _inicio.text = r.config.inicio.length >= 7 ? r.config.inicio.substring(0, 7) : r.config.inicio;
-      _banco.text = r.config.cuenta.banco;
-      _numero.text = r.config.cuenta.numero;
-      _titular.text = r.config.cuenta.titular;
-      _identificacion.text = r.config.cuenta.identificacion;
     } catch (e) {
       if (mounted) setState(() => _error = textoDeError(e));
     }
@@ -78,8 +70,6 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
     if (cv == null || cv < 0 || cv > 500 || cr == null || cr < 0 || cr > 500) return mostrarError(context, 'Las cuotas van de \$0 a \$500');
     if (dia == null || dia < 1 || dia > 28) return mostrarError(context, 'El día límite para pagar va del 1 al 28');
     if (!RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(inicio)) return mostrarError(context, 'Escribe desde qué mes se cobra así: 2026-11');
-    final id = _identificacion.text.trim();
-    if (id.isNotEmpty && id.length != 10 && id.length != 13) return mostrarError(context, 'La cédula tiene 10 dígitos y el RUC 13');
     setState(() => _guardando = true);
     try {
       await AdminService.guardarConfigSuscripcion({
@@ -87,7 +77,7 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
         'cuotaRepartidor': cr,
         'diasGracia': dia,
         'inicio': inicio,
-        'cuenta': {'banco': _banco.text.trim(), 'tipo': _tipo, 'numero': _numero.text.trim(), 'titular': _titular.text.trim(), 'identificacion': id},
+        'cuentas': [for (final c in _cuentas) c.aJson()],
       });
       if (mounted) mostrarExito(context, 'Guardado');
       await _cargar();
@@ -96,6 +86,63 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  // Agregar (indice null) o editar una cuenta bancaria. Se guarda con el botón "Guardar" de abajo.
+  Future<void> _editarCuenta(int? indice) async {
+    final actual = indice == null ? const CuentaCobro() : _cuentas[indice];
+    final banco = TextEditingController(text: actual.banco);
+    final numero = TextEditingController(text: actual.numero);
+    final titular = TextEditingController(text: actual.titular);
+    final identificacion = TextEditingController(text: actual.identificacion);
+    var tipo = actual.tipo;
+    final lista = await showModalBottomSheet<CuentaCobro>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setHoja) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(indice == null ? 'Nueva cuenta' : 'Editar cuenta', style: Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              CampoValle(controller: banco, etiqueta: 'Banco o cooperativa', icono: Icons.account_balance_rounded, maxLongitud: 60, mayusculas: TextCapitalization.words),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [ButtonSegment(value: 'ahorros', label: Text('Ahorros')), ButtonSegment(value: 'corriente', label: Text('Corriente'))],
+                  selected: {tipo},
+                  onSelectionChanged: (v) => setHoja(() => tipo = v.first),
+                ),
+              ),
+              const SizedBox(height: 12),
+              CampoValle(controller: numero, etiqueta: 'Número de cuenta', icono: Icons.numbers_rounded, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))], maxLongitud: 30),
+              const SizedBox(height: 12),
+              CampoValle(controller: titular, etiqueta: 'Titular', icono: Icons.person_outline_rounded, maxLongitud: 100, mayusculas: TextCapitalization.words),
+              const SizedBox(height: 12),
+              CampoValle(controller: identificacion, etiqueta: 'Cédula o RUC del titular', icono: Icons.badge_outlined, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 13),
+              const SizedBox(height: 16),
+              BotonValle(
+                texto: 'Listo',
+                icono: Icons.check_rounded,
+                onPressed: () {
+                  final id = identificacion.text.trim();
+                  if (banco.text.trim().isEmpty || numero.text.trim().isEmpty || titular.text.trim().isEmpty) return mostrarError(ctx, 'Escribe el banco, el número y el titular');
+                  if (id.isNotEmpty && id.length != 10 && id.length != 13) return mostrarError(ctx, 'La cédula tiene 10 dígitos y el RUC 13');
+                  Navigator.pop(ctx, CuentaCobro(banco: banco.text.trim(), tipo: tipo, numero: numero.text.trim(), titular: titular.text.trim(), identificacion: id, notas: actual.notas, completa: true));
+                },
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (lista == null || !mounted) return;
+    setState(() => _cuentas = indice == null ? [..._cuentas, lista] : [for (final (i, c) in _cuentas.indexed) i == indice ? lista : c]);
+    mostrarMensaje(context, 'Toca "Guardar" para publicarla');
   }
 
   Future<void> _aprobar(ComprobantePorRevisar c) async {
@@ -259,23 +306,26 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
                       const SizedBox(height: 6),
                       Text('El mes en que se aprueba a alguien es gratis. Pasado el día límite sin pagar, el negocio deja de recibir pedidos y el repartidor no puede conectarse.', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
                       const SizedBox(height: 16),
-                      CampoValle(controller: _banco, etiqueta: 'Banco', icono: Icons.account_balance_rounded, maxLongitud: 60, mayusculas: TextCapitalization.words),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: SegmentedButton<String>(
-                          showSelectedIcon: false,
-                          segments: const [ButtonSegment(value: 'ahorros', label: Text('Ahorros')), ButtonSegment(value: 'corriente', label: Text('Corriente'))],
-                          selected: {_tipo},
-                          onSelectionChanged: (v) => setState(() => _tipo = v.first),
-                        ),
+                      Align(alignment: Alignment.centerLeft, child: Text('Cuentas para transferir', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
+                      const SizedBox(height: 4),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('Pon varias si quieres (otro banco o cooperativa): cada uno transfiere a la que le quede mejor.', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
                       ),
-                      const SizedBox(height: 12),
-                      CampoValle(controller: _numero, etiqueta: 'Número de cuenta', icono: Icons.numbers_rounded, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))], maxLongitud: 30),
-                      const SizedBox(height: 12),
-                      CampoValle(controller: _titular, etiqueta: 'Titular', icono: Icons.person_outline_rounded, maxLongitud: 100, mayusculas: TextCapitalization.words),
-                      const SizedBox(height: 12),
-                      CampoValle(controller: _identificacion, etiqueta: 'Cédula o RUC del titular', icono: Icons.badge_outlined, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 13),
+                      const SizedBox(height: 8),
+                      for (final (i, cuenta) in _cuentas.indexed)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.account_balance_rounded),
+                          title: Text(cuenta.banco.isEmpty ? 'Cuenta sin banco' : cuenta.banco),
+                          subtitle: Text('${cuenta.tipoTexto} ${cuenta.numero} · ${cuenta.titular}'),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                            IconButton(tooltip: 'Editar', icon: const Icon(Icons.edit_rounded), onPressed: () => _editarCuenta(i)),
+                            IconButton(tooltip: 'Quitar', icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.errorColor), onPressed: () => setState(() => _cuentas = [..._cuentas]..removeAt(i))),
+                          ]),
+                        ),
+                      if (_cuentas.length < 10)
+                        BotonValle(texto: 'Agregar cuenta', icono: Icons.add_rounded, tipo: TipoBoton.texto, onPressed: () => _editarCuenta(null)),
                       const SizedBox(height: 12),
                       BotonValle(texto: 'Guardar', icono: Icons.check_rounded, tipo: TipoBoton.secundario, cargando: _guardando, onPressed: _guardarConfig),
                     ]),

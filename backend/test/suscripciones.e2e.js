@@ -104,11 +104,20 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     check('clave que no es de ninguna: 401', r.status === 401);
     let desde = marca();
     await api('POST', '/api/auth/forgot-password', { email: 'carlos@test.com' });
-    const tokenReset = (await api('POST', '/api/auth/verify-reset-code', { email: 'carlos@test.com', code: await codigoDe('carlos@test.com', 'reset', desde) })).body.resetToken;
-    r = await api('POST', '/api/auth/reset-password', { resetToken: tokenReset, newPassword: 'nueva-clave-1', confirmarPassword: 'nueva-clave-1' });
-    check('recuperar la clave por correo: 200', r.status === 200, JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/verify-reset-code', { email: 'carlos@test.com', code: await codigoDe('carlos@test.com', 'reset', desde) });
+    const porCuenta = r.body.cuentas || [];
+    check('con varias cuentas, el código trae cada una con su propio resetToken para elegir', porCuenta.length === 2 && porCuenta.every((c) => c.resetToken && c.usuario && c.tipoUsuario), JSON.stringify(r.body).slice(0, 200));
+    r = await api('POST', '/api/auth/reset-password', { resetToken: porCuenta.find((c) => c.tipoUsuario === 'cliente').resetToken, newPassword: 'nueva-clave-1' });
+    check('recuperar la de cliente: 200 y dice qué usuario cambió', r.status === 200 && r.body.usuario === carlos.usuario.id && r.body.message.includes(carlos.usuario.id), JSON.stringify(r.body));
+    r = await api('POST', '/api/auth/login', { email: carlosRep.id, password: 'reparto99' });
+    check('su cuenta de repartidor NO cambió', r.status === 200);
+    r = await api('POST', '/api/auth/reset-password', { resetToken: porCuenta.find((c) => c.tipoUsuario === 'repartidor').resetToken, newPassword: 'nueva-clave-1' });
+    check('y la de repartidor se recupera aparte con su token', r.status === 200 && r.body.usuario === carlosRep.id);
     r = await api('POST', '/api/auth/login', { email: 'carlos@test.com', password: 'nueva-clave-1' });
-    check('la clave nueva queda en TODAS sus cuentas (pide elegir)', r.status === 409 && r.body.cuentas?.length === 2);
+    check('con la misma clave en las dos, el login pide elegir', r.status === 409 && r.body.cuentas?.length === 2);
+    desde = marca();
+    await api('POST', '/api/auth/forgot-password', { email: 'admin@vallexpress.local' });
+    check('una cuenta de administrador no recibe código por correo', (await codigoDe('admin@vallexpress.local', 'reset', desde)) === null);
     const C2 = (await api('POST', '/api/auth/login', { email: 'carlos@test.com', password: 'nueva-clave-1', tipoUsuario: 'cliente' })).body.token;
     const CR2 = (await api('POST', '/api/auth/login', { email: 'carlos@test.com', password: 'nueva-clave-1', tipoUsuario: 'repartidor' })).body.token;
     C = C2;      // restablecer la clave cerró sus sesiones anteriores
@@ -237,6 +246,15 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     check('cambia la cuota del repartidor', r.status === 200 && r.body.config.cuotaRepartidor === 12 && r.body.config.cuotaVendedor === 10);
     r = await api('GET', '/api/suscripcion', null, P);
     check('el próximo mes se cobra con la cuota nueva; lo pagado no cambia', r.body.meses[0].monto === 12 && r.body.meses.filter((m) => m.estado === 'pagado').every((m) => m.monto === 10), JSON.stringify(r.body.meses));
+    r = await api('PUT', '/api/admin/suscripciones/config', { cuentas: [
+      { banco: 'Banco Pichincha', tipo: 'ahorros', numero: '2201234567', titular: 'Jandry Cayapa', identificacion: '1900830447' },
+      { banco: 'Cooperativa JEP', tipo: 'corriente', numero: '406123456', titular: 'Jandry Cayapa' },
+    ] }, A);
+    check('el admin guarda varias cuentas bancarias', r.status === 200 && r.body.config.cuentas.length === 2 && r.body.config.cuenta.banco === 'Banco Pichincha', JSON.stringify(r.body.config).slice(0, 300));
+    r = await api('GET', '/api/suscripcion', null, P);
+    check('el repartidor ve las dos para transferir a la que le convenga', r.body.cuentas?.length === 2 && r.body.cuentas.every((c) => c.completa), JSON.stringify(r.body.cuentas));
+    r = await api('PUT', '/api/admin/suscripciones/config', { cuentas: [{ banco: 'X', numero: 'abc' }] }, A);
+    check('un número de cuenta con letras: 400', r.status === 400);
     r = await api('GET', '/api/legal/terminos-repartidor');
     check('los términos del repartidor muestran la cuota vigente', JSON.stringify(r.body).includes('$12.00'));
 

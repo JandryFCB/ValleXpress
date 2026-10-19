@@ -187,6 +187,11 @@ const CLAVEADMIN = 'admin-secreta-1';
     check('el admin quita el bloqueo temporal', r.status === 200 && r.body.usuario.bloqueoTemporal === null && r.body.usuario.intentosFallidos === 0);
     r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });
     check('y ya puede entrar sin esperar', r.status === 200);
+    await q("UPDATE tusuariosacceso SET fultimaconexion = now() - interval '20 days' WHERE cusuario = $1", [cliente.usuario.id]);
+    r = await api('GET', '/api/admin/usuarios?estado=sinactividad', null, A);
+    check('sin entrar hace 20 días: aparece como inactiva (sin bloquearla)', r.body.usuarios.some((x) => x.usuario === cliente.usuario.id && x.sinActividadDias === 20 && x.estatus === 'activo') && r.body.conteos.sinactividad >= 1, JSON.stringify(r.body).slice(0, 300));
+    r = await api('POST', '/api/auth/login', { email: 'ana@test.com', password: 'secreto1' });
+    check('puede entrar igual, y al entrar vuelve a estar activa', r.status === 200 && (await api('GET', `/api/admin/usuarios/${cliente.usuario.id}`, null, A)).body.usuario.sinActividadDias === null);
     r = await api('PATCH', '/api/admin/usuarios/admin/estado', { activo: false, motivo: 'Prueba' }, A);
     check('al administrador no se le bloquea: 403', r.status === 403 && r.body.code === 'ADMINPROTEGIDO');
 

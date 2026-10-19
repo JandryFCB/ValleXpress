@@ -59,8 +59,8 @@ const verifyResetCode = asyncHandler(async (req, res) => {
 });
 
 const resetPassword = asyncHandler(async (req, res) => {
-  await authService.restablecerClave(req.body, req);
-  res.json({ message: 'Contraseña actualizada correctamente' });
+  const r = await authService.restablecerClave(req.body, req);
+  res.json({ message: `Se actualizó la contraseña de tu usuario ${r.usuario}`, ...r });
 });
 
 const sendEmailVerification = asyncHandler(async (req, res) => {

@@ -224,6 +224,7 @@ class UsuarioAdmin {
     this.bloqueadoHasta,
     this.intentosFallidos = 0,
     this.eliminada = false,
+    this.sinActividadDias,
   });
 
   final String usuario;
@@ -243,6 +244,7 @@ class UsuarioAdmin {
   final DateTime? bloqueadoHasta; // bloqueo temporal por contraseñas incorrectas (sigue "activo")
   final int intentosFallidos;
   final bool eliminada; // la persona eliminó su cuenta: ya no tiene datos y no se reactiva
+  final int? sinActividadDias; // no abre la app hace estos días (15 o más): "Inactiva", sin bloquear nada
 
   bool get bloqueoTemporal => estatus == 'activo' && bloqueadoHasta != null && bloqueadoHasta!.isAfter(DateTime.now());
 
@@ -273,6 +275,7 @@ class UsuarioAdmin {
         bloqueadoHasta: _fecha((j['bloqueoTemporal'] as Map?)?['hasta'])?.toLocal(),
         intentosFallidos: (j['intentosFallidos'] as num?)?.toInt() ?? 0,
         eliminada: j['eliminada'] == true,
+        sinActividadDias: (j['sinActividadDias'] as num?)?.toInt(),
       );
 
   (String, Color, IconData) get estadoVisible => eliminada
@@ -281,6 +284,7 @@ class UsuarioAdmin {
           'bloqueado' => ('Bloqueada', AppTheme.errorColor, Icons.block_rounded),
           'inactivo' => ('Dada de baja', AppTheme.warningColor, Icons.person_off_rounded),
           _ when bloqueoTemporal => ('Bloqueo temporal', AppTheme.warningColor, Icons.lock_clock_rounded),
+          _ when sinActividadDias != null => ('Inactiva', Colors.blueGrey, Icons.bedtime_rounded),
           _ => ('Activa', AppTheme.successColor, Icons.check_circle_rounded),
         };
 

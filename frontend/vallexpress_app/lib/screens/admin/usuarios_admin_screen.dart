@@ -26,7 +26,7 @@ class UsuariosAdminScreen extends StatefulWidget {
 class _UsuariosAdminScreenState extends State<UsuariosAdminScreen> {
   static const _roles = [(null, 'Todos'), ('cliente', 'Clientes'), ('vendedor', 'Vendedores'), ('repartidor', 'Repartidores'), ('administrador', 'Admins')];
 
-  static const _estados = [(null, 'Todos', 'todos'), ('activo', 'Activas', 'activo'), ('temporal', 'Bloqueo temporal', 'temporal'), ('bloqueado', 'Bloqueadas', 'bloqueado'), ('inactivo', 'Dadas de baja', 'inactivo')];
+  static const _estados = [(null, 'Todos', 'todos'), ('activo', 'Activas', 'activo'), ('sinactividad', 'Inactivas', 'sinactividad'), ('temporal', 'Bloqueo temporal', 'temporal'), ('bloqueado', 'Bloqueadas', 'bloqueado'), ('inactivo', 'Dadas de baja', 'inactivo')];
 
   String? _rol;
   String? _estado;
@@ -431,7 +431,7 @@ class _UsuarioAdminScreenState extends State<UsuarioAdminScreen> {
         ),
         const EncabezadoSeccion('Estado de la cuenta'),
         // Qué le pasa a la cuenta, con la acción que corresponde
-        if (u.eliminada || u.estatus != 'activo' || u.bloqueoTemporal || u.intentosFallidos > 0) ...[
+        if (u.eliminada || u.estatus != 'activo' || u.bloqueoTemporal || u.intentosFallidos > 0 || u.sinActividadDias != null) ...[
           TarjetaValle(
             color: colorEstado.withValues(alpha: 0.10),
             colorBorde: colorEstado.withValues(alpha: 0.5),
@@ -447,7 +447,8 @@ class _UsuarioAdminScreenState extends State<UsuarioAdminScreen> {
                           'inactivo' => 'Esta cuenta está dada de baja: no puede entrar, pero su historial se conserva.',
                           _ when u.bloqueoTemporal =>
                             'Se bloqueó sola por escribir mal la contraseña ${u.intentosFallidos > 0 ? '${u.intentosFallidos} veces' : '5 veces'}. Podrá entrar a las ${Formato.hora(u.bloqueadoHasta!)}, o desbloquéala ahora.',
-                          _ => 'Lleva ${u.intentosFallidos} ${u.intentosFallidos == 1 ? 'intento fallido' : 'intentos fallidos'} de contraseña. A los 5 se bloquea 15 minutos.',
+                          _ when u.intentosFallidos > 0 => 'Lleva ${u.intentosFallidos} ${u.intentosFallidos == 1 ? 'intento fallido' : 'intentos fallidos'} de contraseña. A los 5 se bloquea 15 minutos.',
+                          _ => 'No abre la app hace ${u.sinActividadDias} días. Puede entrar normalmente: vuelve a estar activa apenas lo haga.',
                         },
                   style: tema.bodyMedium,
                 ),

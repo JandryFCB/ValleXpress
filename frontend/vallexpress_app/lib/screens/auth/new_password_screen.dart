@@ -8,7 +8,8 @@ import '../../widgets/ui/ui.dart';
 /// anteriores de la cuenta y se vuelve al inicio de sesión.
 class NewPasswordScreen extends StatefulWidget {
   final String resetToken;
-  const NewPasswordScreen({super.key, required this.resetToken});
+  final String? usuario; // la cuenta que se recupera (con el mismo correo puede tener varias)
+  const NewPasswordScreen({super.key, required this.resetToken, this.usuario});
 
   @override
   State<NewPasswordScreen> createState() => _NewPasswordScreenState();
@@ -41,9 +42,9 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
 
     setState(() => _cargando = true);
     try {
-      await PasswordResetService.resetPassword(widget.resetToken, _clave.text);
+      final mensaje = await PasswordResetService.resetPassword(widget.resetToken, _clave.text);
       if (!mounted) return;
-      mostrarExito(context, 'Contraseña actualizada. Ya puedes iniciar sesión.');
+      mostrarExito(context, '$mensaje. Ya puedes iniciar sesión.');
       Navigator.popUntil(context, (ruta) => ruta.isFirst); // vuelve al inicio de sesión
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
@@ -57,7 +58,9 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
     return PantallaFormulario(
       icono: Icons.verified_user_outlined,
       titulo: 'Crea tu nueva contraseña',
-      subtitulo: 'Elige una contraseña segura. Cerraremos tus sesiones anteriores por seguridad.',
+      subtitulo: widget.usuario == null || widget.usuario!.isEmpty
+          ? 'Elige una contraseña segura. Cerraremos tus sesiones anteriores por seguridad.'
+          : 'Para tu usuario ${widget.usuario}. Elige una contraseña segura; cerraremos sus sesiones anteriores.',
       textoBoton: 'Guardar contraseña',
       cargando: _cargando,
       onBoton: _guardar,

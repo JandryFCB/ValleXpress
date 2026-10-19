@@ -79,7 +79,16 @@ class EstadoSuscripcionVista extends StatelessWidget {
             ],
           ),
         ),
-        if (!paraAdmin) ...[const SizedBox(height: 12), _TarjetaCuenta(cuenta: cuenta.cuenta)],
+        if (!paraAdmin) ...[
+          const SizedBox(height: 12),
+          if (cuenta.cuentas.where((x) => x.completa).isEmpty)
+            const InsigniaValle('ValleXpress todavía no publicó su cuenta para transferir: escríbenos a soporte', color: AppTheme.infoColor, icono: Icons.info_outline)
+          else ...[
+            if (cuenta.cuentas.where((x) => x.completa).length > 1)
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Transfiere a la cuenta que te quede mejor:', style: tema.titleSmall)),
+            for (final c in cuenta.cuentas.where((x) => x.completa)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _TarjetaCuenta(cuenta: c)),
+          ],
+        ],
         EncabezadoSeccion('Meses', subtitulo: paraAdmin ? null : 'El mes en que te aprobamos es gratis'),
         for (final (i, m) in cuenta.meses.indexed)
           Aparecer(

@@ -105,6 +105,13 @@ class CuentaCobro {
 
   Map<String, String> aJson() => {'banco': banco, 'tipo': tipo, 'numero': numero, 'titular': titular, 'identificacion': identificacion, 'notas': notas};
 
+  /// Lista de cuentas del servidor ("cuentas"); las versiones anteriores mandaban una sola ("cuenta")
+  static List<CuentaCobro> listaDesdeJson(Map<String, dynamic> j) {
+    if (j['cuentas'] is List) return [for (final c in j['cuentas'] as List) CuentaCobro.desdeJson(c)];
+    final una = CuentaCobro.desdeJson(j['cuenta']);
+    return una.banco.isEmpty && una.numero.isEmpty ? [] : [una];
+  }
+
   factory CuentaCobro.desdeJson(Object? v) {
     final j = v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{'notas': '${v ?? ''}'};
     return CuentaCobro(
@@ -127,7 +134,7 @@ class EstadoSuscripcion {
     required this.saldoPendiente,
     required this.bloqueado,
     required this.diasGracia,
-    required this.cuenta,
+    required this.cuentas,
     this.tipo,
     this.cuota,
     this.vencidos = 0,
@@ -143,7 +150,7 @@ class EstadoSuscripcion {
   final int vencidos;
   final int enRevision;
   final int diasGracia; // hasta qué día del mes se paga
-  final CuentaCobro cuenta;
+  final List<CuentaCobro> cuentas; // a dónde puede transferir (a la que le convenga)
 
   bool get alDia => !bloqueado && saldoPendiente <= 0;
 
@@ -157,7 +164,7 @@ class EstadoSuscripcion {
         vencidos: (j['vencidos'] as num?)?.toInt() ?? 0,
         enRevision: (j['enRevision'] as num?)?.toInt() ?? 0,
         diasGracia: (j['diasGracia'] as num?)?.toInt() ?? 5,
-        cuenta: CuentaCobro.desdeJson(j['cuenta']),
+        cuentas: CuentaCobro.listaDesdeJson(j),
       );
 }
 
@@ -221,19 +228,19 @@ class ComprobantePorRevisar {
 
 /// Configuración del cobro: cuotas, día límite, desde qué mes se cobra y la cuenta para transferir
 class ConfigSuscripcion {
-  const ConfigSuscripcion({required this.cuotaVendedor, required this.cuotaRepartidor, required this.diasGracia, required this.inicio, required this.cuenta});
+  const ConfigSuscripcion({required this.cuotaVendedor, required this.cuotaRepartidor, required this.diasGracia, required this.inicio, required this.cuentas});
 
   final double cuotaVendedor;
   final double cuotaRepartidor;
   final int diasGracia;
   final String inicio; // AAAA-MM-01
-  final CuentaCobro cuenta;
+  final List<CuentaCobro> cuentas;
 
   factory ConfigSuscripcion.desdeJson(Map<String, dynamic> j) => ConfigSuscripcion(
         cuotaVendedor: _num(j['cuotaVendedor']),
         cuotaRepartidor: _num(j['cuotaRepartidor']),
         diasGracia: (j['diasGracia'] as num?)?.toInt() ?? 5,
         inicio: '${j['inicio'] ?? ''}',
-        cuenta: CuentaCobro.desdeJson(j['cuenta']),
+        cuentas: CuentaCobro.listaDesdeJson(j),
       );
 }
