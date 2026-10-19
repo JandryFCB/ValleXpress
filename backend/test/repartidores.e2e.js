@@ -238,6 +238,34 @@ const LOCAL = { lat: -0.18, lng: -78.48 };
     check('el color sí lo puede cambiar', r.status === 200 && r.body.repartidor?.color === 'Negro', JSON.stringify(r.body));
     r = await api('PUT', `/api/admin/repartidores/${moto.usuario.id}`, { vehiculo: 'auto', placa: 'PBC-4321', color: 'Gris' }, A);
     check('el administrador sí le cambia el vehículo (moto -> auto)', r.status === 200 && r.body.repartidor?.vehiculo === 'auto' && r.body.repartidor.placa === 'PBC4321', JSON.stringify(r.body));
+
+    seccion('Plazo para subir los documentos');
+    process.env.DB_NAME = 'vallexpress_test_repartidores';      // el servicio corre aquí mismo contra la BD de la prueba
+    const Docs = require('../src/modules/repartidores/documentos.service');
+    await t.registrar('tardio@test.com', 'Tito', 'Tardio', 'repartidor', { vehiculo: 'Moto', placa: 'TTT1234' });
+    const tardio = (await q("SELECT usuario FROM vusuarios WHERE email = 'tardio@test.com'"))[0].usuario;
+    await q("UPDATE trepartidores SET cestatusaprobacion = '001' WHERE cusuario = $1 AND fhasta = '2999-12-31 00:00:00-05'", [tardio]);
+    const dentro = (dias) => new Date(Date.now() + dias * 86400000 + 0);
+    const avisos = async () => (await q("SELECT titulo FROM tnotificaciones WHERE cusuario = $1 AND tipo = 'documentos_recordatorio' ORDER BY fcreacion", [tardio])).map((x) => x.titulo);
+    const mediodia = (dias) => { const d = dentro(dias); d.setUTCHours(17, 0, 0, 0); return d; };   // 12:00 en Ecuador
+    await Docs.vigilarDocumentos({ ahora: mediodia(0.2) });
+    check('recién registrado: todavía no se le avisa', (await avisos()).length === 0);
+    await Docs.vigilarDocumentos({ ahora: mediodia(1.2) });
+    check('al día siguiente: "Sube tus documentos para empezar"', (await avisos())[0]?.startsWith('Sube tus documentos'));
+    await Docs.vigilarDocumentos({ ahora: mediodia(1.5) });
+    check('no se repite', (await avisos()).length === 1);
+    await Docs.vigilarDocumentos({ ahora: mediodia(3.2) });
+    check('al tercer día: "Te quedan N días"', (await avisos())[1]?.startsWith('Te quedan'));
+    await Docs.vigilarDocumentos({ ahora: mediodia(7.2) });
+    const r7 = (await q("SELECT cestatusaprobacion, motivoaprobacion FROM trepartidores WHERE cusuario = $1 AND fhasta = '2999-12-31 00:00:00-05'", [tardio]))[0];
+    check('a los 7 días sin documentos: la solicitud se cierra (rechazada, con el motivo)', r7.cestatusaprobacion === '003' && r7.motivoaprobacion.includes('documentos'), JSON.stringify(r7));
+    check('y se le avisa', (await avisos()).at(-1) === 'Cerramos tu solicitud de repartidor');
+    const completo = await t.registrar('completo@test.com', 'Carla', 'Completa', 'repartidor', { vehiculo: 'bicicleta' });
+    await q("UPDATE trepartidores SET cestatusaprobacion = '001' WHERE cusuario = $1 AND fhasta = '2999-12-31 00:00:00-05'", [completo.usuario.id]);
+    for (const tipo of ['cedula_frente', 'cedula_reverso', 'selfie']) await api('PUT', `/api/repartidor/documentos/${tipo}`, { imagen: await t.imagen(500, 300, 'jpeg') }, completo.token);
+    await Docs.vigilarDocumentos({ ahora: mediodia(9) });
+    check('a quien ya subió todos sus documentos no se le cierra (espera la revisión del admin)', (await q("SELECT cestatusaprobacion FROM trepartidores WHERE cusuario = $1 AND fhasta = '2999-12-31 00:00:00-05'", [completo.usuario.id]))[0].cestatusaprobacion === '001');
+    check('su cuenta sigue activa (no se bloquea ni se elimina)', (await q("SELECT cestatususuario FROM tusuarios WHERE cusuario = $1 AND fhasta = '2999-12-31 00:00:00-05'", [tardio]))[0].cestatususuario === '001');
   } catch (e) {
     return t.finalizar(e);
   }

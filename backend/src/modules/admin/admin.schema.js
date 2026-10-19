@@ -143,7 +143,8 @@ const perfil = [
   booleanoOpcional('aprobacionAutomatica'),
   booleanoOpcional('aprobarPendientes'),
   body('cupo').optional().isInt({ min: 0, max: 10000 }).withMessage('El cupo es un número desde 0 (0 = sin límite)').toInt(),
-  body().custom((b) => b.registroAbierto !== undefined || b.aprobacionAutomatica !== undefined || b.aprobarPendientes === true || b.cupo !== undefined)
+  body('plazoDocumentos').optional().isInt({ min: 1, max: 60 }).withMessage('El plazo para los documentos va de 1 a 60 días').toInt(),
+  body().custom((b) => b.registroAbierto !== undefined || b.aprobacionAutomatica !== undefined || b.aprobarPendientes === true || b.cupo !== undefined || b.plazoDocumentos !== undefined)
     .withMessage('Indica qué permiso cambiar'),
 ];
 

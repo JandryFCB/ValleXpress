@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -175,19 +176,48 @@ class TusCuentas extends StatefulWidget {
   State<TusCuentas> createState() => _TusCuentasState();
 }
 
-class _TusCuentasState extends State<TusCuentas> {
+class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
   List<Map<String, dynamic>>? _cuentas;
   String? _cambiando; // la cuenta a la que se está cambiando (solo ella muestra la carga)
+
+  // El estado de las cuentas cambia solo (un bloqueo temporal vence, el admin desbloquea): se refresca cada 30 s, al
+  // volver a la app y justo cuando vence un bloqueo temporal
+  Timer? _cada;
+  Timer? _alVencer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _recargar();
+    _cada = Timer.periodic(const Duration(seconds: 30), (_) => _recargar());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cada?.cancel();
+    _alVencer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    if (estado == AppLifecycleState.resumed) _recargar();
   }
 
   void _recargar() {
     context.read<AuthProvider>().misCuentas().then((c) {
-      if (mounted) setState(() => _cuentas = c);
+      if (!mounted) return;
+      setState(() => _cuentas = c);
+      // Vuelve a consultar en el segundo en que vence el bloqueo temporal más próximo
+      _alVencer?.cancel();
+      final vencimientos = [
+        for (final x in c)
+          if (DateTime.tryParse('${x['hasta'] ?? ''}') case final h?) h.toLocal().difference(DateTime.now()),
+      ].where((d) => !d.isNegative).toList()
+        ..sort();
+      if (vencimientos.isNotEmpty) _alVencer = Timer(vencimientos.first + const Duration(seconds: 2), _recargar);
     }).catchError((_) {});
   }
 

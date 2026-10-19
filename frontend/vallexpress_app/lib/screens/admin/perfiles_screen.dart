@@ -123,6 +123,33 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
     }
   }
 
+  Future<void> _cambiarPlazo(PerfilPermisos p) async {
+    final control = TextEditingController(text: '${p.plazoDocumentos ?? 7}');
+    final valor = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Plazo para subir documentos'),
+        content: TextField(controller: control, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly], decoration: const InputDecoration(labelText: 'Días (1 a 60)')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(control.text.trim())), child: const Text('Guardar')),
+        ],
+      ),
+    );
+    if (valor == null) return;
+    setState(() => _guardando = p.rol);
+    try {
+      final r = await AdminService.cambiarPerfil(p.rol, plazoDocumentos: valor);
+      if (!mounted) return;
+      setState(() => _perfiles = [for (final x in _perfiles!) x.rol == p.rol ? r.perfil : x]);
+      mostrarMensaje(context, 'Guardado');
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _guardando = null);
+    }
+  }
+
   Future<bool?> _confirmar({required String titulo, required String mensaje, required String boton}) => showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -177,6 +204,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
                         onAprobacion: (v) => _cambiarAprobacion(p, v),
                         onVerPendientes: () => _verPendientes(p),
                         onCupo: () => _cambiarCupo(p),
+                        onPlazo: () => _cambiarPlazo(p),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -211,7 +239,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
 };
 
 class _TarjetaPerfil extends StatelessWidget {
-  const _TarjetaPerfil({required this.perfil, required this.guardando, required this.onRegistro, required this.onAprobacion, required this.onVerPendientes, this.onCupo});
+  const _TarjetaPerfil({required this.perfil, required this.guardando, required this.onRegistro, required this.onAprobacion, required this.onVerPendientes, this.onCupo, this.onPlazo});
 
   final PerfilPermisos perfil;
   final bool guardando;
@@ -219,6 +247,7 @@ class _TarjetaPerfil extends StatelessWidget {
   final ValueChanged<bool> onAprobacion;
   final VoidCallback onVerPendientes;
   final VoidCallback? onCupo;
+  final VoidCallback? onPlazo;
 
   @override
   Widget build(BuildContext context) {
@@ -330,6 +359,14 @@ class _TarjetaPerfil extends StatelessWidget {
               trailing: TextButton(onPressed: guardando ? null : onCupo, child: const Text('Cambiar')),
             ),
           ],
+          if (p.plazoDocumentos != null)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.event_busy_rounded, color: t.color),
+              title: Text('Plazo para subir documentos: ${p.plazoDocumentos} ${p.plazoDocumentos == 1 ? 'día' : 'días'}'),
+              subtitle: const Text('Se les recuerda al día 1 y al 3; al vencer se cierra la solicitud (pueden pedir revisión)'),
+              trailing: TextButton(onPressed: guardando ? null : onPlazo, child: const Text('Cambiar')),
+            ),
           if (!p.conAprobacion)
             const InsigniaValle('Sin aprobación: entran directo a pedir', color: AppTheme.successColor, icono: Icons.verified_user_rounded),
         ],

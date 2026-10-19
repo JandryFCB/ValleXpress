@@ -188,6 +188,14 @@ class _MisDocumentosState extends State<MisDocumentos> {
                     : 'Recibimos tus documentos: nuestro equipo los está revisando. Te avisamos apenas estés aprobado.',
             style: tema.bodySmall?.copyWith(color: context.colores.textoSuave),
           ),
+          if (docs != null && !docs.completos && docs.plazoHasta != null) ...[
+            const SizedBox(height: 8),
+            InsigniaValle(
+              'Súbelos hasta el ${docs.plazoHasta!.day}/${docs.plazoHasta!.month}: si no, se cierra tu solicitud',
+              color: AppTheme.warningColor,
+              icono: Icons.event_busy_rounded,
+            ),
+          ],
           const SizedBox(height: 6),
           if (docs != null)
             ListaDocumentos(docs: docs, onSubir: _subir, subiendo: _subiendo)

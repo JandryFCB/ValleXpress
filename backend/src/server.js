@@ -290,6 +290,8 @@ async function startServer() {
     require('./modules/pedidos/vencimiento.service').iniciar(io);
     // Recordatorios de la suscripción mensual (día 1, día antes del límite y al vencer)
     if (process.env.RECORDATORIOS !== 'no') require('./modules/suscripciones/suscripcion.service').iniciarRecordatorios(io);
+    // Plazo de los documentos del repartidor (recordatorios y cierre de la solicitud)
+    if (process.env.RECORDATORIOS !== 'no') require('./modules/repartidores/documentos.service').iniciarVigilancia(io);
 
     httpServer.listen(PORT, () => {
       console.log('========================================');

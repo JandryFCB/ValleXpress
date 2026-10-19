@@ -216,7 +216,7 @@ class AdminService {
 
   /// Cambia los permisos de un perfil. Con [aprobarPendientes] también aprueba las solicitudes que esperaban
   /// (cada una recibe su aviso y su correo); devuelve cuántas aprobó.
-  static Future<({PerfilPermisos perfil, int aprobados})> cambiarPerfil(String rol, {bool? registroAbierto, bool? aprobacionAutomatica, bool aprobarPendientes = false, int? cupo}) async {
+  static Future<({PerfilPermisos perfil, int aprobados})> cambiarPerfil(String rol, {bool? registroAbierto, bool? aprobacionAutomatica, bool aprobarPendientes = false, int? cupo, int? plazoDocumentos}) async {
     final res = await http.patch(
       _url('/perfiles/$rol'),
       headers: await _cabeceras(),
@@ -225,6 +225,7 @@ class AdminService {
         if (aprobacionAutomatica != null) 'aprobacionAutomatica': aprobacionAutomatica,
         if (aprobarPendientes) 'aprobarPendientes': true,
         if (cupo != null) 'cupo': cupo,
+        if (plazoDocumentos != null) 'plazoDocumentos': plazoDocumentos,
       }),
     );
     final datos = _json(res, 'No se pudo guardar el permiso');

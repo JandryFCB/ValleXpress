@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import '../screens/admin/sugerencias_admin_screen.dart';
 import '../screens/admin/suscripciones_admin_screen.dart';
 import '../screens/profile/ayudanos_screen.dart';
+import '../widgets/documentos_repartidor.dart';
 import '../screens/pedidos/pedido_detalle_screen.dart';
 import '../screens/repartidor/entrega_screen.dart';
 import '../screens/repartidor/reputacion_screen.dart';
@@ -32,6 +33,7 @@ Future<void> abrirAviso(BuildContext context, {String? tipo, int? pedidoId}) asy
     'advertencia_repartidor' => const MiReputacionScreen(),
     'sugerencia_nueva' => const SugerenciasAdminScreen(),
     'sugerencia_respondida' => const AyudanosScreen(),
+    'documentos_recordatorio' => const MisDocumentosScreen(),
     _ => null,
   };
   if (pantalla != null) await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));

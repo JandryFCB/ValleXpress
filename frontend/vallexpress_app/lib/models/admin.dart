@@ -118,7 +118,7 @@ class ResumenAdmin {
 /// Permisos de un perfil (cliente, vendedor, repartidor): si puede registrarse desde la app y, para vendedor y
 /// repartidor, si nace aprobado o espera la revisión. Con sus cuentas y las solicitudes que esperan.
 class PerfilPermisos {
-  const PerfilPermisos({required this.rol, required this.registroAbierto, this.aprobacionAutomatica, this.cuentas = 0, this.activas = 0, this.pendientes = 0, this.cupo});
+  const PerfilPermisos({required this.rol, required this.registroAbierto, this.aprobacionAutomatica, this.cuentas = 0, this.activas = 0, this.pendientes = 0, this.cupo, this.plazoDocumentos});
 
   final String rol;
   final bool registroAbierto;
@@ -127,6 +127,7 @@ class PerfilPermisos {
   final int activas;
   final int pendientes;
   final ({int limite, int ocupados, bool lleno})? cupo; // solo repartidores; limite 0 = sin límite
+  final int? plazoDocumentos; // solo repartidores: días para subir sus documentos
 
   bool get conAprobacion => aprobacionAutomatica != null;
 
@@ -142,6 +143,7 @@ class PerfilPermisos {
       cupo: j['cupo'] is Map
           ? (limite: (j['cupo']['limite'] as num?)?.toInt() ?? 0, ocupados: (j['cupo']['ocupados'] as num?)?.toInt() ?? 0, lleno: j['cupo']['lleno'] == true)
           : null,
+      plazoDocumentos: (j['plazoDocumentos'] as num?)?.toInt(),
     );
   }
 }

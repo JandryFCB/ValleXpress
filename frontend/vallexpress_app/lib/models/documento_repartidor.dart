@@ -23,12 +23,13 @@ class DocumentoRepartidor {
 
 /// Los documentos que se le piden a un repartidor y si ya están completos
 class DocumentosRepartidor {
-  const DocumentosRepartidor({required this.documentos, required this.completos, required this.faltan, this.aprobacion = 'pendiente'});
+  const DocumentosRepartidor({required this.documentos, required this.completos, required this.faltan, this.aprobacion = 'pendiente', this.plazoHasta});
 
   final List<DocumentoRepartidor> documentos;
   final bool completos;
   final int faltan;
   final String aprobacion; // estado de la cuenta del repartidor: pendiente | aprobado | rechazado | suspendido
+  final DateTime? plazoHasta; // hasta cuándo tiene para subirlos (si no, se cierra su solicitud)
 
   bool get aprobado => aprobacion == 'aprobado';
 
@@ -37,5 +38,6 @@ class DocumentosRepartidor {
         completos: j['completos'] == true,
         faltan: (j['faltan'] as num?)?.toInt() ?? 0,
         aprobacion: '${j['aprobacion'] ?? 'pendiente'}',
+        plazoHasta: j['plazoHasta'] == null ? null : DateTime.tryParse('${j['plazoHasta']}')?.toLocal(),
       );
 }

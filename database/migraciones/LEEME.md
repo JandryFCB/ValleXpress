@@ -30,6 +30,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `022_cupo_repartidores.sql` | Cupo de repartidores aprobados (0 = sin límite) y WhatsApp de soporte |
 | `023_sugerencias.sql` | "Ayúdanos a mejorar ValleXpress": sugerencias, problemas y felicitaciones (`TSUGERENCIAS`), con respuesta del administrador |
 | `024_mes_gratis_por_cedula.sql` | `TBENEFICIOS`: el mes gratis de la suscripción es uno solo por cédula y perfil (aunque elimine la cuenta y cree otra) |
+| `025_plazo_documentos.sql` | Días que tiene el repartidor para subir sus documentos (recordatorios y cierre de la solicitud) |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

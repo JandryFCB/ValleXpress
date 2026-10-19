@@ -696,11 +696,12 @@ async function perfiles() {
     repartidor: await Repartidor.count({ where: { aprobacion: APROBACION.PENDIENTE } }),
   };
   const cupo = await PerfilesService.cupoRepartidores();
+  const plazoDocs = await DocumentosService.plazoDias();
   return (await PerfilesService.permisos()).map((p) => ({
     ...p,
     cuentas: cuentas[p.rol] || { total: 0, activos: 0 },
     ...(PerfilesService.conAprobacion(p.rol) && { pendientes: pendientes[p.rol] }),
-    ...(p.rol === 'repartidor' && { cupo }),
+    ...(p.rol === 'repartidor' && { cupo, plazoDocumentos: plazoDocs }),
   }));
 }
 
@@ -716,16 +717,20 @@ const perfil = async (rol) => (await perfiles()).find((p) => p.rol === rol);
 
 // Cambia los permisos de un perfil. Con aprobarPendientes, además aprueba las solicitudes que estaban esperando
 // (cada una recibe su aviso y su correo, igual que si se aprobara a mano).
-async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica, aprobarPendientes, cupo }, req) {
+async function cambiarPerfil(admin, rol, { registroAbierto, aprobacionAutomatica, aprobarPendientes, cupo, plazoDocumentos }, req) {
   if (aprobacionAutomatica !== undefined && !PerfilesService.conAprobacion(rol)) {
     throw AppError.badRequest('Este perfil no pasa por aprobación', 'SINAPROBACION');
   }
-  if (cupo !== undefined && rol !== 'repartidor') throw AppError.badRequest('Solo los repartidores tienen cupo', 'SINCUPO');
+  if ((cupo !== undefined || plazoDocumentos !== undefined) && rol !== 'repartidor') throw AppError.badRequest('Eso solo aplica a los repartidores', 'SINCUPO');
   const cambios = await withTransaction(async (t) => {
     const hechos = await PerfilesService.fijar(rol, { registroAbierto, aprobacionAutomatica }, { transaction: t });
     if (cupo !== undefined && Number(cupo) !== (await PerfilesService.cupoRepartidores()).limite) {
       await ConfiguracionService.fijar('CUPOREPARTIDORES', Number(cupo), { transaction: t });
       hechos.cupo = Number(cupo);
+    }
+    if (plazoDocumentos !== undefined && Number(plazoDocumentos) !== (await DocumentosService.plazoDias())) {
+      await ConfiguracionService.fijar('DOCUMENTOSPLAZODIAS', Number(plazoDocumentos), { transaction: t });
+      hechos.plazoDocumentos = Number(plazoDocumentos);
     }
     return hechos;
   }, { usuarioId: admin.id });

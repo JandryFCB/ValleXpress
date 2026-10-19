@@ -45,7 +45,10 @@ async function documentos(usuarioId, req) {
     const url = f && urls[String(f.carchivo)];
     return { tipo: d.tipo, titulo: d.titulo, ayuda: d.ayuda, subido: !!f, ...(url && { url: url.url, miniatura: url.miniatura, fecha: f.fsubido }) };
   });
-  return { documentos: lista, completos: lista.every((d) => d.subido), faltan: lista.filter((d) => !d.subido).length, aprobacion: APROBACIONAAPI[estado?.aprobacion] || 'pendiente' };
+  const faltan = lista.filter((d) => !d.subido).length;
+  // Hasta cuándo tiene para subirlos (solo si está pendiente y le faltan)
+  const plazo = faltan && estado?.aprobacion === APROBACION.PENDIENTE ? await plazoDe(usuarioId) : null;
+  return { documentos: lista, completos: !faltan, faltan, aprobacion: APROBACIONAAPI[estado?.aprobacion] || 'pendiente', ...(plazo && { plazoHasta: plazo.hasta }) };
 }
 
 // Cuántos documentos subió cada repartidor y cuántos le piden (para la lista de aprobaciones del admin)
@@ -97,4 +100,95 @@ async function quitarTodos(usuarioId, opciones = {}) {
   return filas.map((f) => Number(f.carchivo));
 }
 
-module.exports = { TIPOS, DOCUMENTOS, DECODIGO, documentos, resumenDe, subir, quitarTodos, requeridosPara };
+// ---------------------------------------------------------------------------------------------
+// Plazo para subir los documentos (DOCUMENTOSPLAZODIAS, 7 por defecto). Cuenta desde que la solicitud quedó
+// pendiente (al registrarse o al pedir revisión). Mientras le falten documentos:
+//   día 1 → recordatorio · día 3 → "te quedan N días" · al vencer → la solicitud se cierra (rechazada, con el
+//   motivo); su cuenta sigue y puede pedir revisión cuando los suba.
+// Si ya subió todos, no se cierra nada (falta la revisión del administrador). Avisos solo de 8:00 a 21:00.
+// ---------------------------------------------------------------------------------------------
+const ConfiguracionService = require('../../shared/services/configuracion.service');
+const plazoDias = async () => Math.max(1, Number(await ConfiguracionService.obtener('DOCUMENTOSPLAZODIAS', 7)) || 7);
+const TIPOAVISO = 'documentos_recordatorio';
+
+// Repartidores pendientes, desde cuándo y cuántos documentos les faltan
+async function pendientesDeDocumentos(usuarios) {
+  const filtro = usuarios ? 'AND r.cusuario IN (:usuarios)' : '';
+  const filas = await consulta(`
+    WITH h AS (
+      SELECT cusuario, cestatusaprobacion, fdesde, LAG(cestatusaprobacion) OVER (PARTITION BY cusuario ORDER BY fdesde) AS anterior
+        FROM trepartidores)
+    SELECT r.cusuario, r.ctipovehiculo AS vehiculo,
+           (SELECT MAX(h.fdesde) FROM h WHERE h.cusuario = r.cusuario AND h.cestatusaprobacion = '001' AND (h.anterior IS NULL OR h.anterior <> '001')) AS desde
+      FROM trepartidores r
+      JOIN tusuarios u ON u.cusuario = r.cusuario AND u.fhasta = '2999-12-31 00:00:00-05' AND u.cestatususuario = '001'
+     WHERE r.fhasta = '2999-12-31 00:00:00-05' AND r.cestatusaprobacion = '001' ${filtro}`,
+  usuarios ? { usuarios } : {});
+  if (!filas.length) return [];
+  const docs = await consulta('SELECT cusuario, tipo FROM trepartidordocumentos WHERE cusuario IN (:u)', { u: filas.map((f) => f.cusuario) });
+  return filas.map((f) => {
+    const requeridos = requeridosPara(f.vehiculo).map((d) => d.codigo);
+    const faltan = requeridos.filter((c) => !docs.some((d) => d.cusuario === f.cusuario && d.tipo === c)).length;
+    return { usuario: f.cusuario, desde: new Date(f.desde), faltan };
+  });
+}
+
+// Hasta cuándo tiene para subirlos (null si no está pendiente o ya los subió todos)
+async function plazoDe(usuarioId) {
+  const [p] = await pendientesDeDocumentos([usuarioId]);
+  if (!p || !p.faltan) return null;
+  const dias = await plazoDias();
+  return { hasta: new Date(p.desde.getTime() + dias * 86400000), dias };
+}
+
+async function vigilarDocumentos({ io, ahora = new Date() } = {}) {
+  const hora = new Date(ahora.getTime() - 5 * 3600 * 1000).getUTCHours();
+  if (hora < 8 || hora >= 21) return 0;
+  const plazo = await plazoDias();
+  const Correo = require('../../shared/services/correo.service');
+  let hechos = 0;
+  for (const p of (await pendientesDeDocumentos()).filter((x) => x.faltan > 0)) {
+    const dias = (ahora - p.desde) / 86400000;
+    const etapa = dias >= plazo ? 'cierre' : dias >= 3 ? 'segundo' : dias >= 1 ? 'primero' : null;
+    if (!etapa) continue;
+    const clave = `${p.desde.toISOString()}:${etapa}`;
+    const [ya] = await consulta("SELECT 1 FROM tnotificaciones WHERE cusuario = :u AND tipo = :tipo AND datos->>'clave' = :clave LIMIT 1", { u: p.usuario, tipo: TIPOAVISO, clave });
+    if (ya) continue;
+    const quedan = Math.max(1, Math.ceil(plazo - dias));
+    const docs = p.faltan === 1 ? '1 documento' : `${p.faltan} documentos`;
+    if (etapa === 'cierre') {
+      const motivo = `No subiste tus documentos en ${plazo} días. Súbelos y pide una nueva revisión`;
+      await sequelize.query(
+        "UPDATE trepartidores SET cestatusaprobacion = '003', motivoaprobacion = :motivo WHERE cusuario = :u AND fhasta = '2999-12-31 00:00:00-05' AND cestatusaprobacion = '001'",
+        { replacements: { u: p.usuario, motivo } },
+      );
+      auditar({ accion: 'SOLICITUDCERRADAPORDOCUMENTOS', entidad: 'REPARTIDORES', entidadId: p.usuario, detalle: { faltan: p.faltan, plazo } });
+      await NotificacionService.notificar({ io, usuarioId: p.usuario, tipo: TIPOAVISO, titulo: 'Cerramos tu solicitud de repartidor', mensaje: `${motivo}.`, datos: { clave } });
+      const [u] = await consulta('SELECT email, nombres FROM vusuarios WHERE usuario = :u', { u: p.usuario });
+      if (u?.email) {
+        Correo.avisoCuenta({
+          para: u.email, nombre: u.nombres, asunto: 'Tu solicitud de repartidor se cerró', titulo: 'Te faltaron documentos',
+          parrafos: [`Pasaron ${plazo} días y aún te faltan ${docs}, así que cerramos tu solicitud.`, 'Cuando quieras, súbelos en la app (Perfil → Mis documentos) y toca "Pedir revisión".'],
+        });
+      }
+    } else {
+      await NotificacionService.notificar({
+        io, usuarioId: p.usuario, tipo: TIPOAVISO,
+        titulo: etapa === 'primero' ? 'Sube tus documentos para empezar 📄' : `Te quedan ${quedan} ${quedan === 1 ? 'día' : 'días'} para subir tus documentos`,
+        mensaje: `Te faltan ${docs}. Súbelos en Perfil → Mis documentos para que podamos aprobarte${etapa === 'segundo' ? '; si no, cerraremos tu solicitud' : ''}.`,
+        datos: { clave },
+      });
+    }
+    hechos += 1;
+  }
+  return hechos;
+}
+
+// Revisa cada 30 minutos (y una vez al arrancar). No impide que el proceso termine.
+function iniciarVigilancia(io) {
+  const pasada = () => vigilarDocumentos({ io }).catch(() => {});
+  setTimeout(pasada, 15 * 1000).unref();
+  return setInterval(pasada, 30 * 60 * 1000).unref();
+}
+
+module.exports = { TIPOS, DOCUMENTOS, DECODIGO, documentos, resumenDe, subir, quitarTodos, requeridosPara, plazoDe, plazoDias, vigilarDocumentos, iniciarVigilancia };
