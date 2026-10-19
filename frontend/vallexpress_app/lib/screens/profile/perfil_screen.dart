@@ -14,6 +14,7 @@ import '../../utils/formato.dart';
 import '../../utils/imagen.dart';
 import '../../widgets/ui/ui.dart';
 import 'addresses_screen.dart';
+import 'ayudanos_screen.dart';
 import 'permisos_screen.dart';
 import 'settings_screen.dart';
 import 'telefonos_screen.dart';
@@ -433,6 +434,26 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
           // Otras cuentas de la persona (cliente, negocio, repartidor): cambiar sin cerrar sesión
           const TusCuentas(),
+
+          if (rol != 'administrador') ...[
+            const SizedBox(height: 12),
+            TarjetaValle(
+              color: AppTheme.accentColor.withValues(alpha: 0.10),
+              colorBorde: AppTheme.accentColor.withValues(alpha: 0.4),
+              onTap: () => _abrir(const AyudanosScreen()),
+              child: Row(children: [
+                const Icon(Icons.tips_and_updates_rounded, color: AppTheme.accentColor, size: 30),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Ayúdanos a mejorar ValleXpress', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Cuéntanos una idea, algo que falla o lo que te gusta', style: Theme.of(context).textTheme.bodySmall),
+                  ]),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ]),
+            ),
+          ],
 
           // ------------------------------ Cuenta ------------------------------
           const SizedBox(height: 12),

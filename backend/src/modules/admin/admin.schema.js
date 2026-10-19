@@ -126,6 +126,12 @@ const configSuscripciones = [
 ];
 const idComprobante = [param('id').isInt({ min: 1 }).withMessage('Comprobante inválido').toInt()];
 const soporte = [body('whatsapp').isString().trim().matches(/^(09\d{8})?$/).withMessage('El WhatsApp es un celular de 10 dígitos que empieza con 09 (o vacío)')];
+const atenderSugerencia = [
+  param('id').isInt({ min: 1 }).withMessage('Sugerencia inválida').toInt(),
+  body('estado').optional().isIn(['nueva', 'leida', 'atendida']).withMessage('Estado: nueva, leida o atendida'),
+  body('respuesta').optional({ values: 'null' }).isString().trim().isLength({ max: 1000 }).withMessage('La respuesta es muy larga'),
+  body().custom((b) => b.estado !== undefined || b.respuesta !== undefined).withMessage('Indica qué cambiar'),
+];
 const advertencia = [body('motivo').isString().trim().isLength({ min: 10, max: 500 }).withMessage('Escribe el motivo de la advertencia (10 a 500 letras)')];
 const rechazoComprobante = [body('motivo').isString().trim().isLength({ min: 5, max: 300 }).withMessage('Escribe el motivo del rechazo (5 a 300 letras)')];
 
@@ -142,6 +148,6 @@ const perfil = [
 ];
 
 module.exports = {
-  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoSuscripcion, configSuscripciones, idComprobante, rechazoComprobante, advertencia, soporte,
+  listadoAprobacion, aprobacion, idNegocio, usuario, listadoPedidos, idPedido, cancelarPedido, listadoUsuarios, estadoUsuario, perfil, tarifas, zona, pagoSuscripcion, configSuscripciones, idComprobante, rechazoComprobante, advertencia, soporte, atenderSugerencia,
   crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, negocioGestion, editarRepartidor,
 };

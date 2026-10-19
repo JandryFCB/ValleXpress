@@ -46,6 +46,8 @@ const perfiles = asyncHandler(async (req, res) => res.json({ perfiles: await ser
 const cambiarPerfil = asyncHandler(async (req, res) => res.json(await service.cambiarPerfil(req.usuario, req.params.rol, req.body, req)));
 
 const quitarBloqueoTemporal = asyncHandler(async (req, res) => res.json({ usuario: await service.quitarBloqueoTemporal(req.usuario, req.params.usuario, req) }));
+const sugerencias = asyncHandler(async (req, res) => res.json(await require('../sugerencias/sugerencia.service').listar(req.query)));
+const atenderSugerencia = asyncHandler(async (req, res) => res.json({ sugerencia: await require('../sugerencias/sugerencia.service').atender(req.usuario, Number(req.params.id), req.body, req) }));
 const soporte = asyncHandler(async (req, res) => res.json({ soporte: await require('../../shared/services/perfiles.service').soporte() }));
 const cambiarSoporte = asyncHandler(async (req, res) => res.json({ soporte: await service.cambiarSoporte(req.usuario, req.body, req) }));
 
@@ -58,6 +60,6 @@ const advertirRepartidor = asyncHandler(async (req, res) => res.status(201).json
 
 const documentosRepartidor = asyncHandler(async (req, res) => res.json(await require('../repartidores/documentos.service').documentos(req.params.usuario, req)));
 
-module.exports = { quitarBloqueoTemporal, soporte, cambiarSoporte, reputacionRepartidor, advertirRepartidor, documentosRepartidor, detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
+module.exports = { sugerencias, atenderSugerencia, quitarBloqueoTemporal, soporte, cambiarSoporte, reputacionRepartidor, advertirRepartidor, documentosRepartidor, detalleCifra, legal, resumen, negocios, aprobacionNegocio, repartidores, aprobacionRepartidor, pedidos, pedido, cancelarPedido, usuarios, estadoUsuario, perfiles, cambiarPerfil, tarifas, cambiarTarifas, zona, cambiarZona,
   suscripciones, suscripcionDe, registrarSuscripcion, configSuscripciones, aprobarComprobante, rechazarComprobante,
   usuario, crearUsuario, editarUsuario, claveUsuario, fotoUsuario, bajaUsuario, editarRepartidor, resolverDueno };

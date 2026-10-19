@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../screens/admin/sugerencias_admin_screen.dart';
 import '../screens/admin/suscripciones_admin_screen.dart';
+import '../screens/profile/ayudanos_screen.dart';
 import '../screens/pedidos/pedido_detalle_screen.dart';
 import '../screens/repartidor/entrega_screen.dart';
 import '../screens/repartidor/reputacion_screen.dart';
@@ -28,6 +30,8 @@ Future<void> abrirAviso(BuildContext context, {String? tipo, int? pedidoId}) asy
     'comprobante_nuevo' => const SuscripcionesAdminScreen(),
     'suscripcion_pagada' || 'comprobante_rechazado' => const MiSuscripcionScreen(),
     'advertencia_repartidor' => const MiReputacionScreen(),
+    'sugerencia_nueva' => const SugerenciasAdminScreen(),
+    'sugerencia_respondida' => const AyudanosScreen(),
     _ => null,
   };
   if (pantalla != null) await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));

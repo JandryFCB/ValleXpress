@@ -12,6 +12,7 @@ import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import '../profile/perfil_screen.dart';
 import 'aprobaciones_screen.dart';
+import 'sugerencias_admin_screen.dart';
 import 'suscripciones_admin_screen.dart';
 import 'detalle_cifra_screen.dart';
 import 'legal_admin_screen.dart';
@@ -222,6 +223,16 @@ class _ResumenState extends State<_Resumen> {
                         : 'Cuota mensual de vendedores y repartidores, comprobantes y pagos',
                     insignia: r.comprobantesPorRevisar,
                     onTap: _abrirCobros,
+                  ),
+                  _AccesoConfig(
+                    icono: Icons.tips_and_updates_rounded,
+                    titulo: 'Sugerencias',
+                    detalle: 'Ideas, problemas y felicitaciones de tus usuarios',
+                    insignia: r.sugerenciasNuevas,
+                    onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const SugerenciasAdminScreen()));
+                      _cargar();
+                    },
                   ),
                   _AccesoConfig(
                     icono: Icons.gavel_rounded,

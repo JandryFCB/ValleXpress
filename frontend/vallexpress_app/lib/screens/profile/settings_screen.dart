@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'ayudanos_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/constants.dart';
@@ -183,6 +184,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: const Text('Términos y condiciones'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => abrirDocumentoLegal(context, 'terminos-$rol'),
+                  ),
+                  Divider(height: 1, color: context.colores.borde),
+                ],
+                if (rol != 'administrador') ...[
+                  ListTile(
+                    leading: const Icon(Icons.tips_and_updates_outlined),
+                    title: const Text('Ayúdanos a mejorar ValleXpress'),
+                    subtitle: const Text('Ideas, problemas o lo que te gusta'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AyudanosScreen())),
                   ),
                   Divider(height: 1, color: context.colores.borde),
                 ],

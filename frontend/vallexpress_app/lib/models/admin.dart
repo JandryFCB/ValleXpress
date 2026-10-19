@@ -45,6 +45,7 @@ class ResumenAdmin {
     this.cobradoSemana = 0,
     this.cobradoMes = 0,
     this.suscripcionesVencidas = 0,
+    this.sugerenciasNuevas = 0,
     this.correoConfigurado = true,
   });
 
@@ -66,6 +67,7 @@ class ResumenAdmin {
   final double cobradoSemana;
   final double cobradoMes; // últimos 30 días
   final int suscripcionesVencidas; // vendedores y repartidores bloqueados por no pagar
+  final int sugerenciasNuevas; // mensajes de "Ayúdanos a mejorar" sin leer
   final bool correoConfigurado;
 
   int get totalEnCurso => enCurso.values.fold(0, (a, b) => a + b);
@@ -101,6 +103,7 @@ class ResumenAdmin {
       cobradoSemana: _num((j['cobrado'] as Map?)?['semana']),
       cobradoMes: _num((j['cobrado'] as Map?)?['mes']),
       suscripcionesVencidas: (j['suscripcionesVencidas'] as num?)?.toInt() ?? 0,
+      sugerenciasNuevas: (j['sugerenciasNuevas'] as num?)?.toInt() ?? 0,
       correoConfigurado: j['correoConfigurado'] != false,
     );
   }

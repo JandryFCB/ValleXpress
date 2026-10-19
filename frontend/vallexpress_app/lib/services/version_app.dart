@@ -15,10 +15,10 @@ import 'api_http.dart' as http;
 class VersionApp {
   static bool _revisado = false;
 
-  /// Versión instalada, para mostrarla en Configuración ("1.0.1 (2)")
+  /// Versión instalada, para mostrarla en Configuración ("1.0.4")
   static Future<String> texto() async {
     final p = await PackageInfo.fromPlatform();
-    return '${p.version} (${p.buildNumber})';
+    return p.version; // solo la versión (1.0.4); el número de compilación es interno
   }
 
   static Future<void> revisar() async {

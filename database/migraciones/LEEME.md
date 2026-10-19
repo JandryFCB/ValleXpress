@@ -28,6 +28,7 @@ La base se construye por bloques. Cada archivo es un paso; Docker los ejecuta en
 | `020_multiperfil_suscripciones.sql` | Una cuenta por perfil y persona, `RENOMBRARUSUARIO()`, suscripción mensual (`TSUSCRIPCIONPAGOS`, la comisión pasa a 0), el negocio califica al repartidor y advertencias (`TREPARTIDORADVERTENCIAS`) |
 | `021_dispositivos_multicuenta.sql` | El mismo celular registrado para varias cuentas de la misma persona (sigue recibiendo los avisos de todas) |
 | `022_cupo_repartidores.sql` | Cupo de repartidores aprobados (0 = sin límite) y WhatsApp de soporte |
+| `023_sugerencias.sql` | "Ayúdanos a mejorar ValleXpress": sugerencias, problemas y felicitaciones (`TSUGERENCIAS`), con respuesta del administrador |
 
 ## Patrón (ver `PATRON_TABLAS_FITBANK.md`)
 

@@ -383,6 +383,30 @@ const VIGENTE = "'2999-12-31 00:00:00-05'";
     await api('POST', '/api/auth/login', { email: 'luis@test.com', password: 'mala-clave-1' });
     const intentos = await q("SELECT v.usuario, a.numerointentos FROM vusuarios v JOIN tusuariosacceso a ON a.cusuario = v.usuario WHERE v.email = 'luis@test.com'");
     check('una clave mala con el correo cuenta solo en la cuenta que usó por última vez', intentos.length === 2 && intentos.find((x) => x.usuario === 'luisito')?.numerointentos === 1 && intentos.filter((x) => x.usuario !== 'luisito').every((x) => x.numerointentos === 0), JSON.stringify(intentos) + dl2.cedula);
+
+    seccion('18. Ayúdanos a mejorar ValleXpress');
+    r = await api('POST', '/api/sugerencias', { tipo: 'sugerencia', mensaje: 'corto' }, C);
+    check('un mensaje muy corto: 400', r.status === 400);
+    r = await api('POST', '/api/sugerencias', { tipo: 'sugerencia', mensaje: 'Me gustaría poder pagar con transferencia', satisfaccion: 4, versionApp: '1.0.4' }, C);
+    check('el cliente envía una sugerencia', r.status === 201 && r.body.sugerencia.estado === 'nueva' && r.body.sugerencia.satisfaccion === 4, JSON.stringify(r.body));
+    const idSug = r.body.sugerencia.id;
+    r = await api('POST', '/api/sugerencias', { tipo: 'problema', mensaje: 'A veces el mapa tarda en cargar la ruta' }, P2);
+    check('el repartidor reporta un problema', r.status === 201);
+    check('los administradores reciben el aviso', (await q("SELECT 1 FROM tnotificaciones WHERE cusuario='admin' AND tipo='sugerencia_nueva'")).length === 2);
+    r = await api('GET', '/api/admin/sugerencias', null, A);
+    check('el admin las ve con quién las envió, con qué perfil y la satisfacción promedio', r.status === 200 && r.body.sugerencias.length === 2 && r.body.conteos.nueva === 2 && r.body.satisfaccionPromedio === 4 && r.body.sugerencias.some((x) => x.rol === 'repartidor' && x.nombre), JSON.stringify(r.body).slice(0, 300));
+    r = await api('GET', '/api/admin/resumen', null, A);
+    check('el resumen cuenta las sugerencias nuevas', r.body.sugerenciasNuevas === 2);
+    r = await api('PATCH', `/api/admin/sugerencias/${idSug}`, { respuesta: '¡Gracias! Ya estamos trabajando en los pagos por transferencia' }, A);
+    check('el admin responde: queda atendida', r.status === 200 && r.body.sugerencia.estado === 'atendida' && r.body.sugerencia.respuesta.startsWith('¡Gracias!'));
+    check('al cliente le llega la respuesta', (await q("SELECT 1 FROM tnotificaciones WHERE cusuario=$1 AND tipo='sugerencia_respondida'", [carlos.usuario.id])).length === 1);
+    r = await api('GET', '/api/sugerencias/mias', null, C);
+    check('el cliente ve su sugerencia con la respuesta', r.body.sugerencias[0]?.respuesta?.startsWith('¡Gracias!') && !('usuario' in r.body.sugerencias[0]));
+    r = await api('GET', '/api/admin/sugerencias', null, C);
+    check('un cliente no ve las de los demás: 403', r.status === 403);
+    for (let i = 0; i < 4; i++) await api('POST', '/api/sugerencias', { mensaje: `Otra idea más para la app número ${i}` }, C);
+    r = await api('POST', '/api/sugerencias', { mensaje: 'Y una sexta idea el mismo día' }, C);
+    check('más de 5 al día: 429', r.status === 429 && r.body.code === 'DEMASIADASSUGERENCIAS');
   } catch (e) {
     return t.finalizar(e);
   }

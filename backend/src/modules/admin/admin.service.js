@@ -107,6 +107,7 @@ async function resumen() {
     comprobantesPorRevisar: Number(comprobantes.total),
     cobrado: { hoy: num(cobrado.hoy), semana: num(cobrado.semana), mes: num(cobrado.mes) },
     suscripcionesVencidas: deudores.size,
+    sugerenciasNuevas: await require('../sugerencias/sugerencia.service').nuevas(),
     correoConfigurado: Correo.configurado(),
   };
 }

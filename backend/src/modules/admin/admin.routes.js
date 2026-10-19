@@ -45,6 +45,9 @@ router.delete('/usuarios/:usuario', schema.bajaUsuario, validar, controller.baja
 router.get('/tarifas', controller.tarifas);
 router.put('/tarifas', schema.tarifas, validar, controller.cambiarTarifas);
 router.get('/legal', controller.legal);
+// Sugerencias de clientes, vendedores y repartidores
+router.get('/sugerencias', controller.sugerencias);
+router.patch('/sugerencias/:id', schema.atenderSugerencia, validar, controller.atenderSugerencia);
 // Suscripción mensual: quiénes pagan, comprobantes por revisar, pagos a mano y la configuración del cobro
 router.get('/suscripciones', controller.suscripciones);
 router.put('/suscripciones/config', schema.configSuscripciones, validar, controller.configSuscripciones);
