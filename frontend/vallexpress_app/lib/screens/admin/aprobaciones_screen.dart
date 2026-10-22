@@ -162,10 +162,29 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
           builder: (ctx) => AlertDialog(
             icon: const Icon(Icons.warning_amber_rounded, color: AppTheme.warningColor, size: 36),
             title: const Text('Faltan documentos'),
-            content: Text('$nombre todavía no subió ${faltan == 1 ? '1 documento' : '$faltan documentos'}. ¿Quieres aprobarlo igual?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$nombre (${r.perfil.usuario}) no ha subido ${faltan == 1 ? 'este documento' : 'estos $faltan documentos'}:'),
+                const SizedBox(height: 10),
+                // Las versiones anteriores del servidor no mandan los nombres: entonces solo se ve cuántos faltan
+                for (final d in r.documentosFaltan)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(children: [
+                      const Icon(Icons.close_rounded, size: 18, color: AppTheme.errorColor),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(d, style: const TextStyle(fontWeight: FontWeight.w700))),
+                    ]),
+                  ),
+                const SizedBox(height: 8),
+                const Text('Si lo apruebas, podrá recibir pedidos sin que hayas verificado su identidad o su vehículo.'),
+              ],
+            ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Esperar')),
-              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Aprobar igual')),
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: AppTheme.warningColor), child: const Text('Aprobar de todas maneras')),
             ],
           ),
         );

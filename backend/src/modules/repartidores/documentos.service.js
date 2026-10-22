@@ -56,9 +56,11 @@ async function resumenDe(repartidores) {
   if (!repartidores.length) return {};
   const filas = await consulta('SELECT cusuario, tipo FROM trepartidordocumentos WHERE cusuario IN (:u)', { u: repartidores.map((r) => r.usuarioId) });
   return Object.fromEntries(repartidores.map((r) => {
-    const requeridos = requeridosPara(r.vehiculo).map((d) => d.codigo);
-    const subidos = filas.filter((f) => f.cusuario === r.usuarioId && requeridos.includes(f.tipo)).length;
-    return [r.usuarioId, { subidos, requeridos: requeridos.length }];
+    const requeridos = requeridosPara(r.vehiculo);
+    const tiene = (d) => filas.some((f) => f.cusuario === r.usuarioId && f.tipo === d.codigo);
+    const subidos = requeridos.filter(tiene).length;
+    // "faltan": los nombres de los que no ha subido (el admin los ve antes de aprobarlo igual)
+    return [r.usuarioId, { subidos, requeridos: requeridos.length, faltan: requeridos.filter((d) => !tiene(d)).map((d) => d.titulo) }];
   }));
 }
 

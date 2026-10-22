@@ -193,10 +193,11 @@ class NegocioAdmin {
 
 /// Un repartidor visto por el administrador: su perfil (vehículo, placa, entregas) y su contacto
 class RepartidorAdmin {
-  const RepartidorAdmin({required this.perfil, required this.aprobacion, this.aprobadoEn, this.contacto, this.documentosSubidos = 0, this.documentosRequeridos = 0, this.advertencias = 0});
+  const RepartidorAdmin({required this.perfil, required this.aprobacion, this.aprobadoEn, this.contacto, this.documentosSubidos = 0, this.documentosRequeridos = 0, this.documentosFaltan = const [], this.advertencias = 0});
 
   final int documentosSubidos; // fotos de documentos que ya subió
   final int documentosRequeridos;
+  final List<String> documentosFaltan; // nombres de los que no ha subido
   final int advertencias;
 
   final PerfilRepartidor perfil;
@@ -213,6 +214,7 @@ class RepartidorAdmin {
         contacto: CuentaContacto.desdeJson(j['contacto']),
         documentosSubidos: ((j['documentos'] as Map?)?['subidos'] as num?)?.toInt() ?? 0,
         documentosRequeridos: ((j['documentos'] as Map?)?['requeridos'] as num?)?.toInt() ?? 0,
+        documentosFaltan: [for (final d in ((j['documentos'] as Map?)?['faltan'] as List? ?? [])) '$d'],
         advertencias: (j['advertencias'] as num?)?.toInt() ?? 0,
       );
 }
