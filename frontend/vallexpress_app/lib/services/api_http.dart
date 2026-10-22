@@ -13,7 +13,7 @@ import 'session_store.dart';
 // y siguen usando http.get / http.post / http.put / http.patch / http.delete igual que antes (los demás tipos,
 // como http.Response, se re-exportan). Lo que cambia por dentro, SOLO en las peticiones que llevan Authorization:
 //   1. Se usa siempre el token de acceso más reciente (si estaba por vencer, se renueva antes de enviar).
-//   2. Si el servidor responde 401 TOKENEXPIRADO, se renueva la sesión con el refresh token y se REINTENTA una vez.
+//   2. Si el servidor responde 401 TOKENEXPIRADO (o TOKENINVALIDO), se renueva la sesión con el refresh token y se REINTENTA una vez.
 // Así el usuario no ve nunca el vencimiento de los 15 minutos.
 //   3. Ninguna petición espera para siempre (límite de tiempo) y si no hay conexión o el servidor no responde se
 //      lanza ErrorConexion con un mensaje humano, nunca el error técnico con la ruta del servidor.
@@ -92,10 +92,12 @@ Future<base.Response> _enviarSinCapturar(String metodo, Uri url, Map<String, Str
   return respuesta;
 }
 
+// TOKENINVALIDO también se renueva: pasa si el servidor cambió su clave de firma (el token de acceso ya no sirve pero
+// el refresh token sí). Si la renovación falla, la sesión terminó y la app vuelve al login.
 bool _esExpirado(base.Response r) {
   try {
     final cuerpo = jsonDecode(r.body);
-    return cuerpo is Map && cuerpo['code'] == 'TOKENEXPIRADO';
+    return cuerpo is Map && (cuerpo['code'] == 'TOKENEXPIRADO' || cuerpo['code'] == 'TOKENINVALIDO');
   } catch (_) {
     return false;
   }
