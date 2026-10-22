@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../models/direccion.dart';
+import '../../models/negocio.dart';
 import '../../models/pedido.dart';
 import '../../providers/carrito_provider.dart';
 import '../../services/address_service.dart';
@@ -141,6 +142,9 @@ class _CarritoScreenState extends State<CarritoScreen> {
   double _total(CarritoProvider carrito) => carrito.subtotal + _costoEnvio(carrito);
   bool get _fuera => _envio?.fueraDeCobertura == true;
 
+  // Si el negocio no recibe transferencias, queda efectivo aunque antes se haya elegido transferencia
+  String _metodoElegido(Negocio n) => _metodo == 'transferencia' && !n.aceptaTransferencia ? 'efectivo' : _metodo;
+
   Future<void> _pedir(CarritoProvider carrito) async {
     if (_direccion == null) return _elegirDireccion();
     setState(() => _enviando = true);
@@ -148,7 +152,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
       final pedido = await PedidosService.crear(
         negocioId: carrito.negocio!.id,
         direccionId: int.parse(_direccion!.id),
-        metodoPago: _metodo,
+        metodoPago: _metodoElegido(carrito.negocio!),
         productos: carrito.paraEnviar(),
         notas: _notas.text,
       );
@@ -177,7 +181,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
         child: EstadoVacio(
           icono: Icons.shopping_cart_outlined,
           titulo: 'Tu carrito está vacío',
-          mensaje: 'Entra a un negocio y agrega lo que se te antoje.',
+          mensaje: 'Entra a un negocio y agrega lo que necesites.',
           textoAccion: 'Volver',
           onAccion: () => Navigator.pop(context),
         ),
@@ -314,23 +318,30 @@ class _CarritoScreenState extends State<CarritoScreen> {
             spacing: 10,
             runSpacing: 8,
             children: [
-              for (final m in _metodos)
+              // Transferencia solo si el negocio registró cuentas para recibirla
+              for (final m in _metodos.where((m) => m.codigo != 'transferencia' || n.aceptaTransferencia))
                 ChoiceChip(
-                  avatar: Icon(m.icono, size: 18, color: _metodo == m.codigo ? Colors.white : c.textoSuave),
+                  avatar: Icon(m.icono, size: 18, color: _metodoElegido(n) == m.codigo ? Colors.white : c.textoSuave),
                   label: Text(m.descripcion),
-                  selected: _metodo == m.codigo,
+                  selected: _metodoElegido(n) == m.codigo,
                   showCheckmark: false,
-                  labelStyle: TextStyle(color: _metodo == m.codigo ? Colors.white : c.texto, fontWeight: FontWeight.w600),
+                  labelStyle: TextStyle(color: _metodoElegido(n) == m.codigo ? Colors.white : c.texto, fontWeight: FontWeight.w600),
                   onSelected: (_) => setState(() => _metodo = m.codigo),
                 ),
             ],
           ),
-          if (_metodo == 'efectivo') ...[
+          if (_metodoElegido(n) == 'efectivo') ...[
             const SizedBox(height: 8),
-            Text('Pagas al recibir. Ten el monto exacto si puedes.', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
-          ] else if (_metodo == 'transferencia') ...[
+            Text(
+              'Pagas al recibir. Ten el monto exacto si puedes.${!n.aceptaTransferencia && _metodos.any((m) => m.codigo == 'transferencia') ? ' Este negocio todavía no recibe transferencias.' : ''}',
+              style: tema.bodySmall?.copyWith(color: c.textoSuave),
+            ),
+          ] else if (_metodoElegido(n) == 'transferencia') ...[
             const SizedBox(height: 8),
-            Text('El negocio te pasará sus datos para la transferencia.', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+            Text(
+              'Cuando el negocio confirme tu pedido verás sus cuentas: transfieres y subes la foto del comprobante. Así no pagas algo que no te puedan atender.',
+              style: tema.bodySmall?.copyWith(color: c.textoSuave),
+            ),
           ],
 
           // ---------------------------- Indicaciones ----------------------------

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../config/theme.dart';
 import '../models/suscripcion.dart';
 import '../utils/formato.dart';
+import 'cuentas_banco.dart';
 import 'ui/ui.dart';
 
 const _meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -86,7 +86,7 @@ class EstadoSuscripcionVista extends StatelessWidget {
           else ...[
             if (cuenta.cuentas.where((x) => x.completa).length > 1)
               Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Transfiere a la cuenta que te quede mejor:', style: tema.titleSmall)),
-            for (final c in cuenta.cuentas.where((x) => x.completa)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _TarjetaCuenta(cuenta: c)),
+            for (final c in cuenta.cuentas.where((x) => x.completa)) Padding(padding: const EdgeInsets.only(bottom: 10), child: TarjetaCuentaBanco(cuenta: c)),
           ],
         ],
         EncabezadoSeccion('Meses', subtitulo: paraAdmin ? null : 'El mes en que te aprobamos es gratis'),
@@ -103,63 +103,6 @@ class EstadoSuscripcionVista extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// A dónde transferir: banco, tipo, número, titular y cédula/RUC, con botones para copiar
-class _TarjetaCuenta extends StatelessWidget {
-  const _TarjetaCuenta({required this.cuenta});
-
-  final CuentaCobro cuenta;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colores;
-    final tema = Theme.of(context).textTheme;
-    if (!cuenta.completa) {
-      return const InsigniaValle('ValleXpress todavía no publicó su cuenta para transferir: escríbenos a soporte', color: AppTheme.infoColor, icono: Icons.info_outline);
-    }
-    void copiar(String texto, String que) {
-      Clipboard.setData(ClipboardData(text: texto));
-      HapticFeedback.selectionClick();
-      mostrarMensaje(context, 'Copiamos $que');
-    }
-
-    Widget fila(String etiqueta, String valor, {bool copiable = false}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(children: [
-            SizedBox(width: 92, child: Text(etiqueta, style: tema.bodySmall?.copyWith(color: c.textoSuave))),
-            Expanded(child: Text(valor, style: tema.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
-            if (copiable)
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => copiar(valor, 'el número de cuenta'),
-                child: Padding(padding: const EdgeInsets.all(4), child: Icon(Icons.copy_rounded, size: 18, color: c.primario)),
-              ),
-          ]),
-        );
-
-    return TarjetaValle(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(Icons.account_balance_rounded, color: c.primario),
-            const SizedBox(width: 10),
-            Expanded(child: Text('Transfiere a', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
-          ]),
-          const SizedBox(height: 8),
-          fila('Banco', cuenta.banco),
-          fila('Tipo', 'Cuenta de ${cuenta.tipoTexto.toLowerCase()}'),
-          fila('Número', cuenta.numero, copiable: true),
-          fila('Titular', cuenta.titular),
-          if (cuenta.identificacion.isNotEmpty) fila('Cédula/RUC', cuenta.identificacion),
-          if (cuenta.notas.isNotEmpty) ...[const SizedBox(height: 4), Text(cuenta.notas, style: tema.bodySmall?.copyWith(color: c.textoSuave))],
-          const SizedBox(height: 10),
-          BotonValle(texto: 'Copiar todos los datos', icono: Icons.copy_all_rounded, tipo: TipoBoton.texto, onPressed: () => copiar(cuenta.paraCopiar, 'los datos de la cuenta')),
-        ],
-      ),
     );
   }
 }

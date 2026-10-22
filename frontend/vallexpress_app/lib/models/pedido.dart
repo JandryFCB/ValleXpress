@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
+import 'suscripcion.dart';
 
 double _num(Object? v) => v is num ? v.toDouble() : (double.tryParse('${v ?? ''}') ?? 0);
 String? _texto(Object? v) => (v == null || '$v'.trim().isEmpty) ? null : '$v';
@@ -15,7 +16,7 @@ enum EstadoPedido {
   enCamino('en_camino', 'Repartidor asignado', 'Un repartidor va a recoger tu pedido', Icons.two_wheeler_rounded, AppTheme.accentSecondary, 3),
   recogido('recogido', 'En camino', 'Tu pedido va hacia ti', Icons.delivery_dining_rounded, AppTheme.accentSecondary, 4),
   entregado('entregado', 'Entregado', 'El repartidor dejó tu pedido. ¿Ya lo tienes?', Icons.where_to_vote_rounded, AppTheme.successColor, 5),
-  recibido('recibido', 'Recibido', '¡Buen provecho!', Icons.check_circle_rounded, AppTheme.successColor, 5),
+  recibido('recibido', 'Recibido', '¡Que lo disfrutes!', Icons.check_circle_rounded, AppTheme.successColor, 5),
   rechazado('rechazado', 'Rechazado', 'El negocio no pudo atender tu pedido', Icons.cancel_rounded, AppTheme.errorColor, -1),
   cancelado('cancelado', 'Cancelado', 'Cancelaste este pedido', Icons.block_rounded, AppTheme.errorColor, -1);
 
@@ -61,6 +62,45 @@ class MetodoPago {
       };
 
   factory MetodoPago.desdeJson(Map<String, dynamic> j) => MetodoPago('${j['codigo']}', '${j['descripcion']}');
+}
+
+/// Comprobante de la transferencia que subió el cliente (estado: enviado | aprobado | rechazado)
+class ComprobantePedido {
+  const ComprobantePedido({required this.estado, this.imagen, this.referencia, this.motivo, this.fecha});
+
+  final String estado;
+  final String? imagen;
+  final String? referencia;
+  final String? motivo; // por qué el negocio dijo que no le llegó
+  final DateTime? fecha;
+
+  bool get enviado => estado == 'enviado';
+  bool get aprobado => estado == 'aprobado';
+  bool get rechazado => estado == 'rechazado';
+
+  static ComprobantePedido? desdeJson(Object? j) {
+    if (j is! Map) return null;
+    return ComprobantePedido(estado: '${j['estado'] ?? 'enviado'}', imagen: _texto(j['imagen']), referencia: _texto(j['referencia']), motivo: _texto(j['motivo']), fecha: _fecha(j['fecha']));
+  }
+}
+
+/// Pago por transferencia de un pedido: las cuentas del negocio (solo al cliente, cuando ya puede pagar), si puede
+/// subir el comprobante y el último que subió
+class TransferenciaPedido {
+  const TransferenciaPedido({this.cuentas = const [], this.puedeSubir = false, this.comprobante});
+
+  final List<CuentaCobro> cuentas;
+  final bool puedeSubir;
+  final ComprobantePedido? comprobante;
+
+  static TransferenciaPedido? desdeJson(Object? j) {
+    if (j is! Map) return null;
+    return TransferenciaPedido(
+      cuentas: [for (final c in (j['cuentas'] as List? ?? [])) CuentaCobro.desdeJson({...Map<String, dynamic>.from(c), 'completa': true})],
+      puedeSubir: j['puedeSubir'] == true,
+      comprobante: ComprobantePedido.desdeJson(j['comprobante']),
+    );
+  }
 }
 
 /// Un producto dentro del pedido (con el precio de cuando se pidió)
@@ -178,6 +218,7 @@ class Pedido {
     this.referenciaEntrega,
     this.metodoPago,
     this.pagado = false,
+    this.transferencia,
     this.subtotal = 0,
     this.costoEnvio = 0,
     this.descuento = 0,
@@ -215,6 +256,7 @@ class Pedido {
   final String? referenciaEntrega;
   final String? metodoPago;
   final bool pagado;
+  final TransferenciaPedido? transferencia; // solo en pedidos por transferencia (cliente, negocio y admin)
   final double subtotal;
   final double costoEnvio;
   final double descuento;
@@ -256,7 +298,15 @@ class Pedido {
   /// Del repartidor al negocio (solo en la lista de pedidos libres)
   final double? distanciaAlNegocioKm;
 
-  bool get puedeCancelar => estado == EstadoPedido.pendiente;
+  bool get esTransferencia => metodoPago == 'transferencia';
+
+  /// Por transferencia y sin pagar, sin comprobante en revisión (o con el último rechazado)
+  bool get sinPagoEnCamino => esTransferencia && !pagado && (transferencia?.comprobante == null || transferencia!.comprobante!.rechazado);
+
+  /// El negocio ya confirmó y espera la transferencia del cliente
+  bool get esperandoPago => esTransferencia && !pagado && estado == EstadoPedido.confirmado;
+
+  bool get puedeCancelar => estado == EstadoPedido.pendiente || (estado == EstadoPedido.confirmado && sinPagoEnCamino);
   bool get puedeConfirmarRecibido => estado == EstadoPedido.entregado;
   bool get puedeCalificar => (estado == EstadoPedido.entregado || estado == EstadoPedido.recibido) && calificacion == null;
   /// El negocio califica al repartidor desde que recoge el pedido
@@ -289,6 +339,7 @@ class Pedido {
       referenciaEntrega: _texto(entrega['referencia']),
       metodoPago: _texto(j['metodoPago']),
       pagado: j['pagado'] == true,
+      transferencia: TransferenciaPedido.desdeJson(j['transferencia']),
       subtotal: _num(j['subtotal']),
       costoEnvio: _num(j['costoEnvio']),
       descuento: _num(j['descuento']),
@@ -347,12 +398,16 @@ class Aviso {
         'pedido_sin_repartidor' => Icons.hourglass_bottom_rounded,
         'pedido_entregado' || 'pedido_recibido' => Icons.check_circle_rounded,
         'pedido_rechazado' || 'pedido_cancelado' => Icons.cancel_rounded,
+        'pedido_comprobante' => Icons.receipt_long_rounded,
+        'pago_recibido' => Icons.verified_rounded,
+        'pago_rechazado' => Icons.report_gmailerrorred_rounded,
         _ => Icons.notifications_rounded,
       };
 
   Color get color => switch (tipo) {
-        'pedido_rechazado' || 'pedido_cancelado' => AppTheme.errorColor,
-        'pedido_nuevo' => AppTheme.accentColor,
+        'pedido_rechazado' || 'pedido_cancelado' || 'pago_rechazado' => AppTheme.errorColor,
+        'pedido_nuevo' || 'pedido_comprobante' => AppTheme.accentColor,
+        'pago_recibido' => AppTheme.successColor,
         'pedido_sin_repartidor' => AppTheme.warningColor,
         'pedido_entregado' || 'pedido_recibido' => AppTheme.successColor,
         _ => AppTheme.infoColor,

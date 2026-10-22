@@ -110,9 +110,30 @@ class PedidosService {
         'No se pudo guardar tu calificación',
       );
 
+  /// Sube la foto de la transferencia (cuando el negocio ya confirmó el pedido)
+  static Future<Pedido> subirComprobante(int id, {required String imagen, String? referencia}) async => _pedido(
+        await http.post(
+          _url('/pedidos/$id/comprobante'),
+          headers: await _cabeceras(),
+          body: jsonEncode({'imagen': imagen, if (referencia != null && referencia.trim().isNotEmpty) 'referencia': referencia.trim()}),
+        ),
+        'No se pudo enviar el comprobante',
+        201,
+      );
+
   // -------------------------------------------------------------------------------------------
   // Pedidos de mi negocio (vendedor)
   // -------------------------------------------------------------------------------------------
+  /// El negocio confirma si le llegó la transferencia ("Pago recibido") o no, con el motivo
+  static Future<Pedido> revisarPago(int id, {required bool recibido, String? motivo}) async => _pedido(
+        await http.post(
+          _url('/mi-negocio/pedidos/$id/pago'),
+          headers: await _cabeceras(),
+          body: jsonEncode({'recibido': recibido, if (!recibido) 'motivo': motivo?.trim()}),
+        ),
+        'No se pudo guardar',
+      );
+
   /// El negocio califica al repartidor que se llevó el pedido (desde que lo recoge)
   static Future<Pedido> calificarRepartidorComoNegocio(int id, {required int puntuacion, String? comentario}) async => _pedido(
         await http.post(

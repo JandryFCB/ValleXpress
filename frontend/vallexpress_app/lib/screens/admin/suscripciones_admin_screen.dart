@@ -5,6 +5,7 @@ import '../../models/suscripcion.dart';
 import '../../services/admin_service.dart';
 import '../../services/api_error.dart';
 import '../../utils/formato.dart';
+import '../../widgets/cuentas_banco.dart';
 import '../../widgets/estado_cuenta.dart';
 import '../../widgets/ui/ui.dart';
 import 'pedir_motivo.dart';
@@ -90,56 +91,7 @@ class _SuscripcionesAdminScreenState extends State<SuscripcionesAdminScreen> {
 
   // Agregar (indice null) o editar una cuenta bancaria. Se guarda con el botón "Guardar" de abajo.
   Future<void> _editarCuenta(int? indice) async {
-    final actual = indice == null ? const CuentaCobro() : _cuentas[indice];
-    final banco = TextEditingController(text: actual.banco);
-    final numero = TextEditingController(text: actual.numero);
-    final titular = TextEditingController(text: actual.titular);
-    final identificacion = TextEditingController(text: actual.identificacion);
-    var tipo = actual.tipo;
-    final lista = await showModalBottomSheet<CuentaCobro>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setHoja) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(indice == null ? 'Nueva cuenta' : 'Editar cuenta', style: Theme.of(ctx).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              CampoValle(controller: banco, etiqueta: 'Banco o cooperativa', icono: Icons.account_balance_rounded, maxLongitud: 60, mayusculas: TextCapitalization.words),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: const [ButtonSegment(value: 'ahorros', label: Text('Ahorros')), ButtonSegment(value: 'corriente', label: Text('Corriente'))],
-                  selected: {tipo},
-                  onSelectionChanged: (v) => setHoja(() => tipo = v.first),
-                ),
-              ),
-              const SizedBox(height: 12),
-              CampoValle(controller: numero, etiqueta: 'Número de cuenta', icono: Icons.numbers_rounded, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))], maxLongitud: 30),
-              const SizedBox(height: 12),
-              CampoValle(controller: titular, etiqueta: 'Titular', icono: Icons.person_outline_rounded, maxLongitud: 100, mayusculas: TextCapitalization.words),
-              const SizedBox(height: 12),
-              CampoValle(controller: identificacion, etiqueta: 'Cédula o RUC del titular', icono: Icons.badge_outlined, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 13),
-              const SizedBox(height: 16),
-              BotonValle(
-                texto: 'Listo',
-                icono: Icons.check_rounded,
-                onPressed: () {
-                  final id = identificacion.text.trim();
-                  if (banco.text.trim().isEmpty || numero.text.trim().isEmpty || titular.text.trim().isEmpty) return mostrarError(ctx, 'Escribe el banco, el número y el titular');
-                  if (id.isNotEmpty && id.length != 10 && id.length != 13) return mostrarError(ctx, 'La cédula tiene 10 dígitos y el RUC 13');
-                  Navigator.pop(ctx, CuentaCobro(banco: banco.text.trim(), tipo: tipo, numero: numero.text.trim(), titular: titular.text.trim(), identificacion: id, notas: actual.notas, completa: true));
-                },
-              ),
-            ]),
-          ),
-        ),
-      ),
-    );
+    final lista = await editarCuentaBanco(context, actual: indice == null ? null : _cuentas[indice]);
     if (lista == null || !mounted) return;
     setState(() => _cuentas = indice == null ? [..._cuentas, lista] : [for (final (i, c) in _cuentas.indexed) i == indice ? lista : c]);
     mostrarMensaje(context, 'Toca "Guardar" para publicarla');

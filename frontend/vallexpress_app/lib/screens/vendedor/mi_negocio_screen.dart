@@ -9,6 +9,7 @@ import '../../utils/formato.dart';
 import '../../utils/imagen.dart';
 import '../../widgets/ui/ui.dart';
 import '../profile/address_picker_screen.dart';
+import 'cuentas_negocio_screen.dart';
 import 'horarios_screen.dart';
 import '../suscripcion/mi_suscripcion_screen.dart';
 import 'mis_productos_screen.dart';
@@ -270,6 +271,16 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
             child: Column(
               children: [
                 _Fila(icono: Icons.restaurant_menu_rounded, titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos', valor: 'Menú, precios, stock e imágenes', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisProductosScreen()))),
+                Divider(height: 1, indent: 70, color: c.borde),
+                _Fila(
+                  icono: Icons.account_balance_rounded,
+                  titulo: 'Cuentas para transferencias',
+                  valor: n.aceptaTransferencia ? 'Tus clientes pueden pagarte por transferencia' : 'Sin cuentas: tus clientes solo pagan en efectivo',
+                  onTap: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const CuentasNegocioScreen()));
+                    _cargar();
+                  },
+                ),
                 Divider(height: 1, indent: 70, color: c.borde),
                 if (!CatalogoService.gestionandoComoAdmin) ...[
                   _Fila(

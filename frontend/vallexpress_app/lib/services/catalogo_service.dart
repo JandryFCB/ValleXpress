@@ -2,6 +2,7 @@ import 'dart:convert';
 import '../config/constants.dart';
 import '../models/negocio.dart';
 import '../models/producto.dart';
+import '../models/suscripcion.dart';
 import 'api_error.dart';
 import 'api_http.dart' as http;
 import 'session_store.dart';
@@ -126,6 +127,18 @@ class CatalogoService {
   /// tipo: 'logo' | 'portada'. La imagen va en base64.
   static Future<Negocio> subirImagenNegocio(String tipo, String base64) async =>
       _negocio(await http.put(_url('$_base/$tipo'), headers: await _cabeceras(), body: jsonEncode({'imagen': base64})));
+
+  /// Cuentas donde el negocio recibe las transferencias de sus clientes
+  static Future<List<CuentaCobro>> cuentasNegocio() async {
+    final j = _json(await http.get(_url('$_base/cuentas'), headers: await _cabeceras()), 200, 'No se pudieron cargar tus cuentas');
+    return [for (final c in (j['cuentas'] as List? ?? [])) CuentaCobro.desdeJson({...Map<String, dynamic>.from(c), 'completa': true})];
+  }
+
+  static Future<List<CuentaCobro>> guardarCuentasNegocio(List<CuentaCobro> cuentas) async {
+    final res = await http.put(_url('$_base/cuentas'), headers: await _cabeceras(), body: jsonEncode({'cuentas': [for (final c in cuentas) c.aJson()]}));
+    final j = _json(res, 200, 'No se pudieron guardar tus cuentas');
+    return [for (final c in (j['cuentas'] as List? ?? [])) CuentaCobro.desdeJson({...Map<String, dynamic>.from(c), 'completa': true})];
+  }
 
   // -------------------------------------------------------------------------------------------
   // Productos de mi negocio

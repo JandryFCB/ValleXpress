@@ -85,6 +85,7 @@ class Negocio {
     this.abierto = false,
     this.abiertoAhora = false,
     this.aceptaPedidos = true,
+    this.aceptaTransferencia = false,
     this.calificacion = 0,
     this.numeroCalificaciones = 0,
     this.numeroPedidos = 0,
@@ -114,6 +115,7 @@ class Negocio {
   final bool abierto;
   final bool abiertoAhora;
   final bool aceptaPedidos;
+  final bool aceptaTransferencia; // tiene cuentas para recibir transferencias
   final double calificacion;
   final int numeroCalificaciones;
   final int numeroPedidos;
@@ -148,6 +150,7 @@ class Negocio {
         abierto: j['abierto'] == true,
         abiertoAhora: j['abiertoAhora'] == true,
         aceptaPedidos: j['aceptaPedidos'] != false,
+        aceptaTransferencia: j['aceptaTransferencia'] == true,
         calificacion: _num(j['calificacion']),
         numeroCalificaciones: (j['numeroCalificaciones'] as num?)?.toInt() ?? 0,
         numeroPedidos: (j['numeroPedidos'] as num?)?.toInt() ?? 0,

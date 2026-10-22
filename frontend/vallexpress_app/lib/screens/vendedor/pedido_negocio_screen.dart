@@ -8,6 +8,7 @@ import '../../services/tiempo_real.dart';
 import '../../utils/contacto.dart';
 import '../../utils/formato.dart';
 import '../../widgets/mapa_pedido.dart';
+import '../../widgets/pago_transferencia.dart';
 import '../../widgets/ui/ui.dart';
 import '../pedidos/pedido_detalle_screen.dart' show TarjetaRepartidor, pedirCalificacion;
 import 'pedidos_negocio_screen.dart';
@@ -120,6 +121,23 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
           ),
         ),
 
+        // Transferencia: el comprobante que subió el cliente (o que todavía lo espera)
+        if (p.esTransferencia && !e.fallido && (p.esperandoPago || p.transferencia?.comprobante != null)) ...[
+          const EncabezadoSeccion('Pago por transferencia'),
+          if (p.transferencia?.comprobante != null)
+            ComprobanteMiniatura(comprobante: p.transferencia!.comprobante!)
+          else
+            InsigniaValle(
+              e == EstadoPedido.confirmado ? 'El cliente ya ve tus cuentas: espera su comprobante antes de prepararlo' : 'Cuando lo aceptes, el cliente verá tus cuentas y subirá su comprobante',
+              color: AppTheme.infoColor,
+              icono: Icons.account_balance_rounded,
+            ),
+          if (p.esperandoPago && p.transferencia?.comprobante?.enviado == true) ...[
+            const SizedBox(height: 6),
+            Text('Revisa en tu banco que te llegó ${Formato.dinero(p.total)} y toca "Pago recibido".', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+          ],
+        ],
+
         // Productos (lo que necesita la cocina)
         const EncabezadoSeccion('Productos'),
         TarjetaValle(
@@ -150,6 +168,12 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
               const SizedBox(height: 10),
               Row(children: [Expanded(child: Text('Productos', style: tema.bodyMedium)), Text(Formato.dinero(p.subtotal))]),
               Row(children: [Expanded(child: Text('Envío (para el repartidor)', style: tema.bodyMedium)), Text(Formato.dinero(p.costoEnvio))]),
+              // Por transferencia el envío llegó a la cuenta del negocio: se lo da al repartidor cuando retira el pedido
+              if (p.esTransferencia && p.pagado)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: InsigniaValle('Entrega ${Formato.dinero(p.costoEnvio)} al repartidor cuando retire el pedido', color: AppTheme.infoColor, icono: Icons.delivery_dining_rounded),
+                ),
               const SizedBox(height: 4),
               Row(children: [Expanded(child: Text('Total que paga el cliente', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))), Text(Formato.dinero(p.total), style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))]),
               // Lo que es del negocio: los productos (el envío es del repartidor). Los pedidos de antes del 18 de octubre
@@ -215,7 +239,12 @@ class _PedidoNegocioScreenState extends State<PedidoNegocioScreen> {
               Row(children: [
                 Icon(Icons.payments_outlined, color: c.textoSuave, size: 20),
                 const SizedBox(width: 10),
-                Expanded(child: Text('${MetodoPago.nombre(p.metodoPago)} · ${p.pagado ? 'pagado' : 'se cobra al entregar'}', style: tema.bodySmall?.copyWith(color: c.textoSuave))),
+                Expanded(
+                  child: Text(
+                    '${MetodoPago.nombre(p.metodoPago)} · ${p.pagado ? 'pagado' : (p.esTransferencia ? 'falta confirmar la transferencia' : 'se cobra al entregar')}',
+                    style: tema.bodySmall?.copyWith(color: c.textoSuave),
+                  ),
+                ),
               ]),
             ],
           ),

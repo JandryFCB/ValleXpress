@@ -9,6 +9,7 @@ import '../../services/tiempo_real.dart';
 import '../../utils/formato.dart';
 import '../../utils/contacto.dart';
 import '../../widgets/mapa_pedido.dart';
+import '../../widgets/pago_transferencia.dart';
 import '../../widgets/ui/ui.dart';
 
 /// Seguimiento de un pedido: estado actual, barra de progreso con la hora de cada paso, productos, totales y
@@ -114,7 +115,9 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('El negocio aún no lo acepta, así que puedes cancelarlo sin problema.'),
+            Text(_pedido!.estado == EstadoPedido.pendiente
+                ? 'El negocio aún no lo acepta, así que puedes cancelarlo sin problema.'
+                : 'Todavía no has transferido, así que puedes cancelarlo sin problema.'),
             const SizedBox(height: 12),
             TextField(controller: motivo, maxLength: 300, decoration: const InputDecoration(hintText: 'Motivo (opcional)')),
           ],
@@ -165,7 +168,7 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
   Widget? _barraAcciones(Pedido p) {
     final botones = <Widget>[
       if (p.puedeConfirmarRecibido)
-        BotonValle(texto: 'Ya lo recibí', icono: Icons.check_circle_rounded, cargando: _ocupado, onPressed: () => _accion(() => PedidosService.confirmarRecibido(p.id), '¡Buen provecho!')),
+        BotonValle(texto: 'Ya lo recibí', icono: Icons.check_circle_rounded, cargando: _ocupado, onPressed: () => _accion(() => PedidosService.confirmarRecibido(p.id), '¡Que lo disfrutes!')),
       if (p.puedeCalificar) BotonValle(texto: 'Calificar a ${p.negocioNombre}', icono: Icons.star_rounded, tipo: p.puedeConfirmarRecibido ? TipoBoton.secundario : TipoBoton.principal, onPressed: _ocupado ? null : _calificar),
       if (!p.puedeCalificar && p.puedeCalificarRepartidor)
         BotonValle(texto: 'Calificar a ${p.repartidor!.nombre}', icono: Icons.two_wheeler_rounded, tipo: p.puedeConfirmarRecibido ? TipoBoton.secundario : TipoBoton.principal, onPressed: _ocupado ? null : _calificarRepartidor),
@@ -245,6 +248,12 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
             ],
           ),
         ),
+
+        // ---------------------------- Pago por transferencia ----------------------------
+        if (p.esTransferencia && !e.fallido && (e == EstadoPedido.pendiente || e == EstadoPedido.confirmado || p.pagado)) ...[
+          const SizedBox(height: 12),
+          Aparecer(child: PagoTransferenciaCliente(pedido: p, onActualizado: (n) => setState(() => _pedido = n))),
+        ],
 
         // ---------------------------- Repartidor y mapa en vivo ----------------------------
         if (p.repartidor != null && (p.enReparto || e == EstadoPedido.entregado)) ...[
@@ -332,7 +341,11 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
             children: [
               _Dato(Icons.location_on_outlined, p.direccionEntrega, p.referenciaEntrega),
               const SizedBox(height: 12),
-              _Dato(Icons.payments_outlined, MetodoPago.nombre(p.metodoPago), p.pagado ? 'Pagado' : 'Se paga al recibir'),
+              _Dato(
+                Icons.payments_outlined,
+                MetodoPago.nombre(p.metodoPago),
+                p.pagado ? 'Pagado' : (p.esTransferencia ? (e.fallido ? 'Sin pagar' : 'Falta confirmar tu transferencia') : 'Se paga al recibir'),
+              ),
               if (p.notas != null) ...[const SizedBox(height: 12), _Dato(Icons.chat_bubble_outline_rounded, 'Indicaciones', p.notas)],
               if (p.repartidor != null && !(p.enReparto || e == EstadoPedido.entregado)) ...[
                 const SizedBox(height: 12),

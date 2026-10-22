@@ -24,6 +24,7 @@ import '../repartidor/vehiculo_screen.dart';
 import '../suscripcion/mi_suscripcion_screen.dart';
 import '../../widgets/cambiar_cuenta.dart';
 import '../../widgets/documentos_repartidor.dart';
+import '../vendedor/cuentas_negocio_screen.dart';
 import '../vendedor/mi_negocio_screen.dart';
 import '../vendedor/mis_productos_screen.dart';
 
@@ -439,6 +440,14 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     valor: 'Menú, precios, stock e imágenes',
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _abrir(const MisProductosScreen()),
+                  ),
+                  const _Separador(),
+                  _Fila(
+                    icono: Icons.account_balance_rounded,
+                    titulo: 'Cuentas para transferencias',
+                    valor: 'Donde te pagan tus clientes',
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _abrir(const CuentasNegocioScreen()),
                   ),
                   const _Separador(),
                   _Fila(

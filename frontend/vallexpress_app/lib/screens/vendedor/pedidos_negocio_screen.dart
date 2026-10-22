@@ -10,6 +10,7 @@ import '../../utils/formato.dart';
 import '../../widgets/aviso_permisos.dart';
 import '../../widgets/campana_avisos.dart';
 import '../../widgets/ui/ui.dart';
+import '../admin/pedir_motivo.dart';
 import '../suscripcion/mi_suscripcion_screen.dart';
 import 'pedido_negocio_screen.dart';
 
@@ -208,7 +209,9 @@ class TarjetaPedidoNegocio extends StatelessWidget {
 
 /// Cómo ve el negocio cada estado
 String _etiquetaNegocio(Pedido p) => switch (p.estado) {
-      EstadoPedido.pendiente => '¡Nuevo! Por aceptar',
+      EstadoPedido.pendiente => p.esTransferencia ? '¡Nuevo! Por aceptar · transferencia' : '¡Nuevo! Por aceptar',
+      EstadoPedido.confirmado when p.esperandoPago =>
+        p.transferencia?.comprobante?.enviado == true ? 'Revisa la transferencia' : 'Esperando la transferencia',
       EstadoPedido.listo => 'Listo · buscando repartidor',
       EstadoPedido.enCamino => '${p.repartidor?.nombre ?? 'Repartidor'} viene por él',
       EstadoPedido.recogido => 'En camino al cliente',
@@ -275,7 +278,48 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
     if (minutos != null) await _cambiar('confirmado', tiempo: minutos, exito: 'Pedido aceptado');
   }
 
+  // Transferencia: "Pago recibido" o "No me llegó" (con el motivo que verá el cliente)
+  Future<void> _pago(bool recibido) async {
+    String? motivo;
+    if (!recibido) {
+      motivo = await pedirMotivo(
+        context,
+        titulo: '¿Qué pasó con la transferencia?',
+        explicacion: 'Se lo diremos al cliente para que suba el comprobante correcto.',
+        textoBoton: 'Avisar al cliente',
+        sugerencias: const ['No me llegó la transferencia', 'El monto no coincide', 'La foto no se lee', 'Es de otro pedido'],
+        minimo: 3,
+      );
+      if (motivo == null) return;
+    } else {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('¿Te llegaron ${Formato.dinero(widget.pedido.total)}?'),
+          content: const Text('Revisa en tu banco que la transferencia esté acreditada antes de confirmar.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Todavía no')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí, me llegó')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    setState(() => _ocupado = true);
+    try {
+      await PedidosService.revisarPago(widget.pedido.id, recibido: recibido, motivo: motivo);
+      HapticFeedback.lightImpact();
+      if (mounted) mostrarExito(context, recibido ? 'Pago confirmado: ya puedes prepararlo' : 'Le avisamos al cliente');
+      widget.alCambiar();
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
   Future<void> _rechazar() async {
+    final sinPago = widget.pedido.estado == EstadoPedido.confirmado;
     final motivo = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -288,9 +332,12 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
             children: [
               Text('¿Por qué no puedes atenderlo?', style: Theme.of(ctx).textTheme.titleLarge),
               const SizedBox(height: 4),
-              Text('Se lo diremos al cliente. Si pagaba con efectivo, no se le cobra nada.', style: Theme.of(ctx).textTheme.bodySmall),
+              Text(sinPago ? 'Se lo diremos al cliente. Todavía no te ha transferido, así que no hay nada que devolver.' : 'Se lo diremos al cliente. Si pagaba con efectivo, no se le cobra nada.',
+                  style: Theme.of(ctx).textTheme.bodySmall),
               const SizedBox(height: 12),
-              for (final m in const ['Se nos acabó un producto', 'Estamos muy llenos', 'Ya vamos a cerrar', 'No llegamos a esa dirección'])
+              for (final m in sinPago
+                  ? const ['El cliente no transfirió', 'Se nos acabó un producto', 'Ya vamos a cerrar']
+                  : const ['Se nos acabó un producto', 'Estamos muy llenos', 'Ya vamos a cerrar', 'No llegamos a esa dirección'])
                 ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.chat_bubble_outline_rounded), title: Text(m), onTap: () => Navigator.pop(ctx, m)),
             ],
           ),
@@ -313,6 +360,23 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
             Expanded(flex: 2, child: BotonValle(texto: 'Aceptar', icono: Icons.check_rounded, cargando: _ocupado, onPressed: _aceptar)),
           ],
         );
+      // Por transferencia y sin pagar: primero se confirma el pago
+      case EstadoPedido.confirmado when p.esperandoPago:
+        if (p.transferencia?.comprobante?.enviado == true) {
+          return Row(
+            children: [
+              Expanded(child: BotonValle(texto: 'No me llegó', tipo: TipoBoton.secundario, onPressed: _ocupado ? null : () => _pago(false))),
+              const SizedBox(width: 10),
+              Expanded(flex: 2, child: BotonValle(texto: 'Pago recibido', icono: Icons.verified_rounded, cargando: _ocupado, onPressed: () => _pago(true))),
+            ],
+          );
+        }
+        return Row(children: [
+          SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: c.primario)),
+          const SizedBox(width: 10),
+          Expanded(child: Text('Esperando la transferencia del cliente…', style: Theme.of(context).textTheme.bodySmall)),
+          TextButton(onPressed: _ocupado ? null : _rechazar, style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor), child: const Text('Rechazar')),
+        ]);
       case EstadoPedido.confirmado:
         return Row(
           children: [

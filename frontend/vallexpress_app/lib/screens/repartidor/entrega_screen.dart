@@ -203,6 +203,17 @@ class _EntregaScreenState extends State<EntregaScreen> {
             ]),
           ),
         ],
+        // Por transferencia el cliente le pagó todo al negocio: el negocio le da el envío al repartidor al recoger
+        if (p.esTransferencia) ...[
+          const SizedBox(height: 12),
+          InsigniaValle(
+            recogiendo
+                ? 'Pagado por transferencia al negocio: pide tus ${Formato.dinero(p.costoEnvio)} del envío al recoger'
+                : 'Pagado por transferencia: no cobras nada al cliente',
+            color: AppTheme.infoColor,
+            icono: Icons.account_balance_rounded,
+          ),
+        ],
         if (p.notas != null) ...[
           const SizedBox(height: 12),
           TarjetaValle(child: Row(children: [
