@@ -1,8 +1,8 @@
 ---
 titulo: Términos y condiciones para negocios afiliados
-version: 3.0
-vigencia: 2026-10-18
-resumen: Ya no cobramos comisión por pedido: ahora pagas una suscripción mensual fija. Además, puedes calificar al repartidor que se lleva tus pedidos.
+version: 3.1
+vigencia: 2026-10-21
+resumen: Ahora tus clientes pueden pagarte por transferencia: registra tus cuentas en la app y confirma cada pago con el comprobante que te suben.
 ---
 
 Estos términos regulan la relación entre ValleXpress y los negocios que venden a través de la plataforma ("el negocio"). Al registrarte y marcar "Acepto", declaras, en nombre propio o del negocio que representas, haberlos leído y aceptado, junto con la **Política de privacidad**.
@@ -52,10 +52,11 @@ ValleXpress es una plataforma tecnológica operada por **Jandry Franklin Cayapa 
 
 ## 7. Pagos de los clientes
 
-- Por ahora los clientes pagan **en efectivo al repartidor** al recibir el pedido.
-- El valor de los productos corresponde al negocio y el costo de envío al repartidor. El negocio y el repartidor acuerdan cómo se entrega al negocio el valor de los productos cobrados en efectivo (por ejemplo, al retirar el pedido).
-- ValleXpress no recibe ni custodia ese dinero y no responde por los acuerdos entre negocio y repartidor, aunque podrá mediar y suspender cuentas ante incumplimientos.
-- Cuando se habiliten pagos por transferencia u otros medios, sus condiciones se informarán en la app.
+- Los clientes pagan **en efectivo al repartidor** al recibir el pedido o, si registraste tus cuentas en *Cuentas para transferencias*, **por transferencia directa a tu cuenta**.
+- **En efectivo:** el valor de los productos corresponde al negocio y el costo de envío al repartidor. El negocio y el repartidor acuerdan cómo se entrega al negocio el valor de los productos cobrados en efectivo (por ejemplo, al retirar el pedido).
+- **Por transferencia:** al aceptar el pedido, el cliente ve tus cuentas, transfiere el total y sube la foto del comprobante. Revisas en tu banco que el dinero llegó y tocas *Pago recibido*; solo entonces puedes prepararlo. Si no llegó, tocas *No me llegó* e indicas el motivo. El total transferido incluye el costo de envío, que debes entregar al repartidor al retirar el pedido.
+- Eres responsable de que tus cuentas sean correctas y estén a tu nombre o al de tu negocio. Si un pedido ya pagado por transferencia se cancela o no se entrega por causas del negocio, **debes devolver al cliente lo que transfirió**.
+- ValleXpress no recibe ni custodia ese dinero y no responde por los acuerdos entre negocio, cliente y repartidor, aunque podrá mediar y suspender cuentas ante incumplimientos.
 
 ## 8. Cancelaciones y reclamos
 

@@ -56,6 +56,7 @@ async function valores() {
     envioPorKm: dinero(await c('ENVIOPORKM', 0.3)),
     venceSinRepartidor: String(Number(await c('PEDIDOVENCESINREPARTIDORMIN', 60))),
     vencePendiente: String(Number(await c('PEDIDOVENCEPENDIENTEMIN', 30))),
+    venceTransferencia: String(Number(await c('PEDIDOVENCETRANSFERENCIAMIN', 30))),
   };
 }
 const completar = (texto, v) => texto.replace(/\{\{(\w+)\}\}/g, (_, k) => v[k] ?? '');

@@ -483,6 +483,8 @@ async function eliminarCuenta(id, { password }, req) {
           WHERE cusuario = :u AND fhasta = '2999-12-31 00:00:00-05'`,
         { replacements: { u: id, suspendido: APROBACION.SUSPENDIDO }, transaction: t },
       );
+      // Sus cuentas bancarias (titular, cédula) son datos personales
+      await sequelize.query('DELETE FROM tnegociocuentas WHERE cnegocio IN (:negocios)', { replacements: { negocios }, transaction: t });
     }
     await sequelize.query('DELETE FROM tcodigosverificacion WHERE correo = :correo', { replacements: { correo: usuario.email }, transaction: t });
     await SesionService.cerrarTodas(id, 'DESACTIVADA', { transaction: t });

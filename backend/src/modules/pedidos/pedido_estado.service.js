@@ -8,9 +8,11 @@ const { ESTADOPEDIDO: E, ESTADOPEDIDOAAPI } = require('../../shared/constants/co
 //   PENDIENTE -> CONFIRMADO -> PREPARANDO -> LISTO -> EN CAMINO -> RECOGIDO -> ENTREGADO -> RECIBIDO
 //        |  \-> RECHAZADO (negocio)            (EN CAMINO: un repartidor aceptó y va al negocio)
 //        \----> CANCELADO (cliente, solo mientras está pendiente)
+// Un pedido por transferencia CONFIRMADO que sigue sin pago en camino también se puede rechazar o cancelar
+// (lo comprueba pedido.service con TransferenciaService.sinPagoEnCamino).
 const TRANSICIONES = Object.freeze({
   [E.PENDIENTE]: [E.CONFIRMADO, E.RECHAZADO, E.CANCELADO],
-  [E.CONFIRMADO]: [E.PREPARANDO, E.LISTO],
+  [E.CONFIRMADO]: [E.PREPARANDO, E.LISTO, E.RECHAZADO, E.CANCELADO],
   [E.PREPARANDO]: [E.LISTO],
   [E.LISTO]: [E.ENCAMINO],
   [E.ENCAMINO]: [E.RECOGIDO],

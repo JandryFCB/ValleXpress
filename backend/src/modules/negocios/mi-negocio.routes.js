@@ -17,6 +17,8 @@ function rutasDeGestion(router) {
   router.patch('/estado', schema.estado, validar, controller.estado);
   router.put('/logo', schema.imagen, validar, controller.logo);
   router.put('/portada', schema.imagen, validar, controller.portada);
+  router.get('/cuentas', controller.cuentas);
+  router.put('/cuentas', schema.cuentas, validar, controller.fijarCuentas);
 
   router.get('/productos', controller.misProductos);
   router.post('/productos', productoSchema.crear, validar, controller.crearProducto);
@@ -38,6 +40,7 @@ rutasDeGestion(router);
 // Pedidos que recibe el negocio
 router.get('/pedidos', pedidoSchema.listado, validar, pedidoController.delNegocio);
 router.patch('/pedidos/:id/estado', pedidoSchema.estadoNegocio, validar, pedidoController.estadoNegocio);
+router.post('/pedidos/:id/pago', pedidoSchema.pago, validar, pedidoController.pagoNegocio);
 router.post('/pedidos/:id/calificar-repartidor', pedidoSchema.calificar, validar, pedidoController.calificarRepartidor);
 
 module.exports = router;

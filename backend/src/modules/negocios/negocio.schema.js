@@ -60,7 +60,9 @@ const estado = [
   }),
 ];
 
+const cuentas = [body('cuentas').isArray({ max: 5 }).withMessage('Envía la lista de cuentas (hasta 5)')];
+
 const imagen = [body('imagen').isString().withMessage('Envía la imagen').notEmpty().withMessage('Envía la imagen')];
 
 module.exports = {
-  id, listar, crear: datos(true), actualizar: datos(false), local, horarios, estado, imagen };
+  id, listar, crear: datos(true), actualizar: datos(false), local, horarios, estado, imagen, cuentas };

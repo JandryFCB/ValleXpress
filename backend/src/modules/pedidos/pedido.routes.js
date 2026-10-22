@@ -16,6 +16,7 @@ router.get('/mis-pedidos', cliente, schema.listado, validar, controller.misPedid
 router.patch('/:id/cancelar', cliente, schema.cancelar, validar, controller.cancelar);
 router.patch('/:id/recibido', cliente, schema.id, validar, controller.recibido);
 router.post('/:id/calificar', cliente, schema.calificar, validar, controller.calificar);
+router.post('/:id/comprobante', cliente, schema.comprobante, validar, controller.comprobante);
 
 // Cualquier participante: el servicio comprueba que el pedido sea suyo (cliente, negocio o repartidor)
 router.get('/:id', verificarToken, schema.id, validar, controller.obtener);

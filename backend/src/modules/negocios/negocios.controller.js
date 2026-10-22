@@ -27,6 +27,8 @@ const horarios = asyncHandler(async (req, res) => res.json({ negocio: await Nego
 const estado = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.cambiarEstado(u(req), req.body, req) }));
 const logo = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.subirImagen(u(req), 'logo', req.body.imagen, req) }));
 const portada = asyncHandler(async (req, res) => res.json({ negocio: await NegocioService.subirImagen(u(req), 'portada', req.body.imagen, req) }));
+const cuentas = asyncHandler(async (req, res) => res.json(await NegocioService.cuentas(u(req))));
+const fijarCuentas = asyncHandler(async (req, res) => res.json(await NegocioService.fijarCuentas(u(req), req.body.cuentas, req)));
 
 // --- Productos de mi negocio ---
 const pid = (req) => Number(req.params.id);
@@ -44,6 +46,6 @@ const eliminarProducto = asyncHandler(async (req, res) => {
 module.exports = {
   categorias, listar, obtener, menu,
   revision, zona,
-  miNegocio, crear, actualizar, local, horarios, estado, logo, portada,
+  miNegocio, crear, actualizar, local, horarios, estado, logo, portada, cuentas, fijarCuentas,
   misProductos, crearProducto, actualizarProducto, estadoProducto, stockProducto, imagenProducto, eliminarProducto,
 };

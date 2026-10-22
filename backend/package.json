@@ -10,7 +10,7 @@
     "test:cuenta": "node test/cuenta.e2e.js",
     "test:catalogo": "node test/catalogo.e2e.js",
     "test:pedidos": "node test/pedidos.e2e.js",
-    "test": "npm run test:auth && npm run test:cuenta && npm run test:catalogo && npm run test:pedidos && npm run test:repartidores && npm run test:admin && npm run test:vencimientos && npm run test:tarifas && npm run test:suscripciones && npm run test:legal",
+    "test": "npm run test:auth && npm run test:cuenta && npm run test:catalogo && npm run test:pedidos && npm run test:repartidores && npm run test:admin && npm run test:vencimientos && npm run test:tarifas && npm run test:suscripciones && npm run test:legal && npm run test:transferencias",
     "test:repartidores": "node test/repartidores.e2e.js",
     "simular:entrega": "node scripts/simular-entrega.js",
     "admin:clave": "node scripts/clave-admin.js",
@@ -18,7 +18,8 @@
     "test:vencimientos": "node test/vencimientos.e2e.js",
     "test:tarifas": "node test/tarifas.e2e.js",
     "test:suscripciones": "node test/suscripciones.e2e.js",
-    "test:legal": "node test/legal.e2e.js"
+    "test:legal": "node test/legal.e2e.js",
+    "test:transferencias": "node test/transferencias.e2e.js"
   },
   "keywords": [
     "delivery",

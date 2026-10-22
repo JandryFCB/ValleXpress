@@ -43,4 +43,19 @@ const calificar = [
   body('destino').optional().toLowerCase().isIn(['negocio', 'repartidor']).withMessage('Se califica al negocio o al repartidor'),
 ];
 
-module.exports = { id, listado, cotizar, crear, estadoNegocio, cancelar, calificar };
+// El cliente sube la foto de su transferencia
+const comprobante = [
+  ...id,
+  body('imagen').isString().withMessage('Adjunta la foto del comprobante').notEmpty().withMessage('Adjunta la foto del comprobante'),
+  body('referencia').optional({ values: 'null' }).isString().trim().isLength({ max: 100 }).withMessage('La referencia es muy larga'),
+];
+
+// El negocio confirma si le llegó la transferencia
+const pago = [
+  ...id,
+  body('recibido').isBoolean().withMessage('Indica si te llegó el pago').toBoolean(),
+  body('motivo').if(body('recibido').equals('false')).isString().withMessage('Cuéntale al cliente qué pasó').trim()
+    .isLength({ min: 3, max: 300 }).withMessage('Cuéntale al cliente qué pasó (3 a 300 letras)'),
+];
+
+module.exports = { id, listado, cotizar, crear, estadoNegocio, cancelar, calificar, comprobante, pago };

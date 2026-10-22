@@ -13,6 +13,7 @@ const misPedidos = asyncHandler(async (req, res) => res.json(await service.lista
 const cancelar = asyncHandler(async (req, res) => res.json({ pedido: await service.cancelar(req.usuario, id(req), req.body, req) }));
 const recibido = asyncHandler(async (req, res) => res.json({ pedido: await service.marcarRecibido(req.usuario, id(req), req) }));
 const calificar = asyncHandler(async (req, res) => res.json({ pedido: await service.calificar(req.usuario, id(req), req.body, req) }));
+const comprobante = asyncHandler(async (req, res) => res.status(201).json({ pedido: await service.subirComprobante(req.usuario, id(req), req.body, req) }));
 const calificarRepartidor = asyncHandler(async (req, res) => res.json({ pedido: await service.calificarRepartidorComoNegocio(req.usuario, id(req), req.body, req) }));
 
 // --- Cualquier participante (el servicio comprueba que el pedido sea suyo) ---
@@ -21,5 +22,6 @@ const obtener = asyncHandler(async (req, res) => res.json({ pedido: await servic
 // --- Negocio (rutas en /api/mi-negocio/pedidos) ---
 const delNegocio = asyncHandler(async (req, res) => res.json(await service.listarDelNegocio(req.usuario.id, req.query, req)));
 const estadoNegocio = asyncHandler(async (req, res) => res.json({ pedido: await service.cambiarEstadoNegocio(req.usuario, id(req), req.body, req) }));
+const pagoNegocio = asyncHandler(async (req, res) => res.json({ pedido: await service.revisarPago(req.usuario, id(req), req.body, req) }));
 
-module.exports = { metodosPago, cotizar, crear, misPedidos, cancelar, recibido, calificar, calificarRepartidor, obtener, delNegocio, estadoNegocio };
+module.exports = { metodosPago, cotizar, crear, misPedidos, cancelar, recibido, calificar, comprobante, calificarRepartidor, obtener, delNegocio, estadoNegocio, pagoNegocio };

@@ -4,8 +4,9 @@ const NotificacionService = require('../notificaciones/notificacion.service');
 const Notificacion = require('../notificaciones/notificacion.model');
 const ConfiguracionService = require('../../shared/services/configuracion.service');
 const { auditar, logMensaje } = require('../../shared/services/log.service');
-const { ESTADOPEDIDO: E } = require('../../shared/constants/codigos');
+const { ESTADOPEDIDO: E, METODOPAGO } = require('../../shared/constants/codigos');
 const PedidoService = require('./pedido.service');
+const TransferenciaService = require('./transferencia.service');
 
 // VIGILANTE DE VENCIMIENTOS: ningún pedido queda varado horas o días. Cada minuto revisa:
 //   * LISTO o EN CAMINO sin que un repartidor lo recoja (minutos contados desde que quedó LISTO):
@@ -13,6 +14,8 @@ const PedidoService = require('./pedido.service');
 //         repartidores en línea (una sola vez por pedido).
 //       - a los PEDIDOVENCESINREPARTIDORMIN: lo cancela.
 //   * PENDIENTE sin respuesta del negocio a los PEDIDOVENCEPENDIENTEMIN: lo cancela.
+//   * CONFIRMADO por transferencia sin que el cliente suba el comprobante (o sin subir otro después de que el negocio
+//     rechazara el anterior) a los PEDIDOVENCETRANSFERENCIAMIN: lo cancela.
 // Al cancelar vuelve el stock y avisan al cliente, al negocio y al repartidor. Queda en la auditoría como "sistema".
 const SISTEMA = 'sistema';
 const CADAMS = Number(process.env.VENCIMIENTO_CADA_MS) || 60 * 1000;     // las pruebas lo bajan para no esperar
@@ -24,11 +27,16 @@ async function candidatos() {
   return sequelize.query(
     `SELECT p.cpedido AS id, p.cestatuspedido AS estado, p.fpedido AS pedido, p.cnegocio AS negocio, p.cusuario_repartidor AS repartidor,
             n.nombre AS "negocioNombre", n.cusuario AS dueno,
-            (SELECT MIN(h.fdesde) FROM tpedidos h WHERE h.cpedido = p.cpedido AND h.cestatuspedido = :listo) AS listo
+            (SELECT MIN(h.fdesde) FROM tpedidos h WHERE h.cpedido = p.cpedido AND h.cestatuspedido = :listo) AS listo,
+            (SELECT MIN(h.fdesde) FROM tpedidos h WHERE h.cpedido = p.cpedido AND h.cestatuspedido = :confirmado) AS confirmado
        FROM tpedidos p
        JOIN tnegocios n ON n.cnegocio = p.cnegocio AND n.fhasta = ${VIGENTE}
-      WHERE p.fhasta = ${VIGENTE} AND p.cestatuspedido IN (:estados)`,
-    { replacements: { listo: E.LISTO, estados: [E.PENDIENTE, E.LISTO, E.ENCAMINO] }, type: QueryTypes.SELECT },
+      WHERE p.fhasta = ${VIGENTE}
+        AND (p.cestatuspedido IN (:estados) OR (p.cestatuspedido = :confirmado AND p.cmetodopago = :transferencia AND NOT p.espagado))`,
+    {
+      replacements: { listo: E.LISTO, confirmado: E.CONFIRMADO, transferencia: METODOPAGO.TRANSFERENCIA, estados: [E.PENDIENTE, E.LISTO, E.ENCAMINO] },
+      type: QueryTypes.SELECT,
+    },
   );
 }
 
@@ -51,9 +59,9 @@ async function costoEnvio(id) {
   return f?.costoenvio ?? 0;
 }
 
-async function cancelar(p, motivo, io) {
+async function cancelar(p, motivo, io, siSigue) {
   const cancelado = await PedidoService.cancelarEnCurso(p.id, {
-    motivoGuardado: `Cancelado automáticamente: ${motivo}`, motivoAviso: motivo, usuarioId: SISTEMA, io, soloSi: [p.estado],
+    motivoGuardado: `Cancelado automáticamente: ${motivo}`, motivoAviso: motivo, usuarioId: SISTEMA, io, soloSi: [p.estado], siSigue,
   });
   if (cancelado) auditar({ usuarioId: SISTEMA, accion: 'PEDIDOVENCIDO', entidad: 'PEDIDOS', entidadId: p.id, detalle: { estado: p.estado, motivo } });
   return !!cancelado;
@@ -61,8 +69,9 @@ async function cancelar(p, motivo, io) {
 
 // Una pasada. "ahora" se puede adelantar en las pruebas para no esperar una hora de verdad.
 async function revisar({ io, ahora = new Date() } = {}) {
-  const [aviso, vence, vencePendiente] = await Promise.all([
+  const [aviso, vence, vencePendiente, venceTransferencia] = await Promise.all([
     minutos('PEDIDOAVISOSINREPARTIDORMIN', 30), minutos('PEDIDOVENCESINREPARTIDORMIN', 60), minutos('PEDIDOVENCEPENDIENTEMIN', 30),
+    minutos('PEDIDOVENCETRANSFERENCIAMIN', 30),
   ]);
   const resultado = { avisados: [], cancelados: [] };
   for (const p of await candidatos()) {
@@ -71,6 +80,16 @@ async function revisar({ io, ahora = new Date() } = {}) {
       if (p.estado === E.PENDIENTE) {
         const m = Math.floor((ahora - new Date(p.pedido)) / 60000);
         if (m >= vencePendiente && (await cancelar(p, `${p.negocioNombre} no respondió a tiempo`, io))) resultado.cancelados.push(p.id);
+        continue;
+      }
+      if (p.estado === E.CONFIRMADO) {
+        // Sin pago en camino desde que se confirmó (o desde que el negocio rechazó el último comprobante)
+        const c = await TransferenciaService.ultimo(p.id);
+        if (c && c.estado !== 'RECHAZADO') continue;
+        const desde = new Date(c?.frevision || p.confirmado);
+        const m = Math.floor((ahora - desde) / 60000);
+        const sigueSinPago = async (actual, t) => TransferenciaService.sinPagoEnCamino(actual, await TransferenciaService.ultimo(actual.id, { transaction: t }));
+        if (m >= venceTransferencia && (await cancelar(p, 'no recibimos el comprobante de la transferencia a tiempo', io, sigueSinPago))) resultado.cancelados.push(p.id);
         continue;
       }
       if (!p.listo) continue;

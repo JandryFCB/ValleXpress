@@ -18,8 +18,9 @@ const { distanciaKm } = require('../../shared/utils/geo');
 const TarifasService = require('../../shared/services/tarifas.service');
 const ZonaService = require('../../shared/services/zona.service');
 const SuscripcionService = require('../suscripciones/suscripcion.service');
+const TransferenciaService = require('./transferencia.service');
 const {
-  ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGOAAPI, APIAMETODOPAGO, VEHICULOAAPI,
+  ESTADOPEDIDO: E, ESTADOPEDIDOAAPI, APIAESTADOPEDIDO, ESTADOPRODUCTO, APROBACION, METODOPAGO, METODOPAGOAAPI, APIAMETODOPAGO, VEHICULOAAPI,
 } = require('../../shared/constants/codigos');
 
 // Lógica de los PEDIDOS.
@@ -91,6 +92,7 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
   const productos = idsProductos.length ? await Producto.findAll({ where: { id: idsProductos }, attributes: ['id', 'imagenId'] }) : [];
   const imagenDe = Object.fromEntries(productos.map((p) => [String(p.id), p.imagenId]));
   const urls = await ArchivoService.mapaUrls(req, [...lista.map((p) => p.negocio?.logoId), ...Object.values(imagenDe)]);
+  const transferencias = await TransferenciaService.paraApi(lista, req, rol);
 
   const salida = [];
   for (const p of lista) {
@@ -114,6 +116,8 @@ async function aApi(entrada, req, { rol = 'cliente', detalle = false } = {}) {
       entrega: { direccion: p.direccionEntrega, referencia: p.referenciaEntrega, latitud: num(p.latitud), longitud: num(p.longitud) },
       metodoPago: METODOPAGOAAPI[p.metodoPago],
       pagado: p.pagado,
+      // Pago por transferencia: cuentas del negocio, si ya puede subir el comprobante y el último que subió
+      ...(transferencias.has(String(p.id)) && { transferencia: transferencias.get(String(p.id)) }),
       subtotal: num(p.subtotal),
       costoEnvio: num(p.costoEnvio),
       descuento: num(p.descuento),
@@ -216,8 +220,8 @@ function avisarCambio(io, pedido, duenoId, { repartidores = false } = {}) {
 
 const AVISOCLIENTE = {
   [E.CONFIRMADO]: ['pedido_confirmado', '¡Pedido confirmado! ✅', (p, n) => `${n} confirmó tu pedido #${p.id}${p.tiempoEstimado ? `. Llega en unos ${p.tiempoEstimado} min` : ''}`],
-  [E.PREPARANDO]: ['pedido_preparando', 'Preparando tu pedido 👨‍🍳', (p, n) => `${n} está preparando tu pedido #${p.id}`],
-  [E.LISTO]: ['pedido_listo', '¡Tu pedido está listo! 🍽️', (p) => `Tu pedido #${p.id} está listo; pronto saldrá hacia ti`],
+  [E.PREPARANDO]: ['pedido_preparando', 'Preparando tu pedido 📦', (p, n) => `${n} está preparando tu pedido #${p.id}`],
+  [E.LISTO]: ['pedido_listo', '¡Tu pedido está listo! ✅', (p) => `Tu pedido #${p.id} está listo; pronto saldrá hacia ti`],
   [E.RECHAZADO]: ['pedido_rechazado', 'Pedido rechazado', (p, n) => `${n} no pudo atender tu pedido #${p.id}${p.motivoCancelacion ? `: ${p.motivoCancelacion}` : ''}`],
   [E.ENCAMINO]: ['pedido_en_camino', 'Repartidor asignado 🛵', (p, n, r) => `${r} va a ${n} a recoger tu pedido #${p.id}`],
   [E.RECOGIDO]: ['pedido_recogido', '¡Tu pedido va hacia ti! 🛵', (p, n, r) => `${r} recogió tu pedido #${p.id}. Síguelo en el mapa`],
@@ -297,6 +301,9 @@ async function crear(cliente, datos, req) {
      WHERE n.cnegocio = :negocio AND n.fhasta = '2999-12-31 00:00:00-05' AND d.cpersona = :persona LIMIT 1`,
   { replacements: { negocio: Number(datos.negocioId), persona: cliente.personaId }, type: QueryTypes.SELECT });
   if (propio) throw AppError.conflict('No puedes hacer pedidos a tu propio negocio', 'PEDIDOPROPIO');
+  if (metodoPago === METODOPAGO.TRANSFERENCIA && !(await TransferenciaService.conCuentas([Number(datos.negocioId)])).size) {
+    throw AppError.badRequest('Este negocio todavía no recibe transferencias: paga en efectivo al recibir', 'TRANSFERENCIANODISPONIBLE');
+  }
   const { pedido, negocio } = await withTransaction(async (t) => {
     const negocio = await Negocio.findOne({
       where: { id: datos.negocioId },
@@ -412,12 +419,13 @@ async function listarTodos(query, req) {
 // Cancela un pedido en curso FUERA del flujo normal: el administrador (disputa) o el vigilante de vencimientos.
 // Devuelve el stock y avisa al cliente, al negocio y al repartidor (que queda libre para otra entrega).
 // Con "soloSi" solo cancela si el pedido sigue en uno de esos estados (el vigilante no pisa a un repartidor que
-// justo lo recogió); si no, devuelve null.
-async function cancelarEnCurso(id, { motivoGuardado, motivoAviso, usuarioId, io, soloSi }) {
+// justo lo recogió); si no, devuelve null. "siSigue(p, t)" es otra condición que se revisa con el pedido bloqueado.
+async function cancelarEnCurso(id, { motivoGuardado, motivoAviso, usuarioId, io, soloSi, siSigue }) {
   const pedido = await withTransaction(async (t) => {
     const p = await Pedido.findOne({ where: { id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!p) throw noEncontrado();
     if (soloSi && !soloSi.includes(p.estado)) return null;
+    if (siSigue && !(await siSigue(p, t))) return null;
     validarCancelacionAdmin(p.estado);
     await devolverStock(p.id, t);
     await p.update({ estado: E.CANCELADO, motivoCancelacion: motivoGuardado }, { transaction: t });
@@ -427,8 +435,17 @@ async function cancelarEnCurso(id, { motivoGuardado, motivoAviso, usuarioId, io,
 
   const negocio = await Negocio.findOne({ where: { id: pedido.negocioId }, attributes: ['id', 'duenoId'] });
   const aviso = { io, tipo: 'pedido_cancelado', titulo: 'Pedido cancelado', pedidoId: pedido.id, datos: { estado: 'cancelado' } };
-  await NotificacionService.notificar({ ...aviso, usuarioId: pedido.clienteId, mensaje: `ValleXpress canceló tu pedido #${pedido.id}: ${motivoAviso}` });
-  await NotificacionService.notificar({ ...aviso, usuarioId: negocio?.duenoId, mensaje: `ValleXpress canceló el pedido #${pedido.id}: ${motivoAviso}` });
+  // Si el cliente ya transfirió, el negocio le devuelve el dinero (ValleXpress no lo maneja)
+  const comp = TransferenciaService.esTransferencia(pedido) ? await TransferenciaService.ultimo(pedido.id) : null;
+  const yaPago = pedido.pagado || ['ENVIADO', 'APROBADO'].includes(comp?.estado);
+  await NotificacionService.notificar({
+    ...aviso, usuarioId: pedido.clienteId,
+    mensaje: `ValleXpress canceló tu pedido #${pedido.id}: ${motivoAviso}${yaPago ? '. El negocio te devolverá lo que transferiste; si no, escríbenos' : ''}`,
+  });
+  await NotificacionService.notificar({
+    ...aviso, usuarioId: negocio?.duenoId,
+    mensaje: `ValleXpress canceló el pedido #${pedido.id}: ${motivoAviso}${yaPago ? '. El cliente ya había transferido: devuélvele el dinero' : ''}`,
+  });
   if (pedido.repartidorId) await NotificacionService.notificar({ ...aviso, usuarioId: pedido.repartidorId, mensaje: `El pedido #${pedido.id} fue cancelado. Ya puedes tomar otro` });
   avisarCambio(io, pedido, negocio?.duenoId, { repartidores: true });
   return pedido;
@@ -452,6 +469,15 @@ async function cambiarEstadoNegocio(usuario, id, { estado, motivo, tiempoEstimad
     const p = await Pedido.findOne({ where: { id, negocioId: negocio.id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!p) throw noEncontrado();
     validarTransicion(p.estado, siguiente, 'vendedor');
+    if (TransferenciaService.esTransferencia(p) && !p.pagado && [E.PREPARANDO, E.LISTO].includes(siguiente)) {
+      throw AppError.conflict('Primero confirma que te llegó la transferencia del cliente', 'PAGOPENDIENTE');
+    }
+    if (p.estado === E.CONFIRMADO && siguiente === E.RECHAZADO) {
+      if (!TransferenciaService.esTransferencia(p) || p.pagado) throw AppError.conflict('Ya confirmaste este pedido; no se puede rechazar', 'TRANSICIONINVALIDA');
+      if (!TransferenciaService.sinPagoEnCamino(p, await TransferenciaService.ultimo(p.id, { transaction: t }))) {
+        throw AppError.conflict('El cliente ya subió su comprobante: revísalo antes', 'COMPROBANTEPORREVISAR');
+      }
+    }
     const cambios = { estado: siguiente };
     if (siguiente === E.RECHAZADO) {
       cambios.motivoCancelacion = motivo?.trim() || null;
@@ -464,7 +490,11 @@ async function cambiarEstadoNegocio(usuario, id, { estado, motivo, tiempoEstimad
 
   auditar({ usuarioId: usuario.id, accion: `PEDIDO${String(estado).toUpperCase()}`, entidad: 'PEDIDOS', entidadId: id, req });
   const [tipo, titulo, mensaje] = AVISOCLIENTE[siguiente];
-  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo, titulo, mensaje: mensaje(pedido, negocio.nombre), pedidoId: pedido.id, datos: { estado } });
+  // Por transferencia, al confirmarlo el cliente ya puede pagar
+  const texto = siguiente === E.CONFIRMADO && TransferenciaService.esTransferencia(pedido)
+    ? `${negocio.nombre} confirmó tu pedido #${pedido.id}. Transfiere y sube el comprobante para que empiece a prepararlo`
+    : mensaje(pedido, negocio.nombre);
+  await NotificacionService.notificar({ io: req.io, usuarioId: pedido.clienteId, tipo, titulo, mensaje: texto, pedidoId: pedido.id, datos: { estado } });
   if (siguiente === E.LISTO) await avisarRepartidores(req.io, pedido, negocio.nombre);
   avisarCambio(req.io, pedido, negocio.duenoId, { repartidores: [E.CONFIRMADO, E.PREPARANDO, E.LISTO, E.RECHAZADO].includes(siguiente) });
   return aApi(await cargar(id), req, { rol: 'vendedor', detalle: true });
@@ -573,7 +603,9 @@ async function cancelar(usuario, id, { motivo } = {}, req) {
   const pedido = await withTransaction(async (t) => {
     const p = await Pedido.findOne({ where: { id, clienteId: usuario.id }, transaction: t, lock: t.LOCK.UPDATE });
     if (!p) throw noEncontrado();
-    if (p.estado !== E.PENDIENTE) throw AppError.conflict('El negocio ya aceptó tu pedido; ya no se puede cancelar desde la app', 'PEDIDOENPROCESO');
+    // Por transferencia, mientras no haya pagado (ni mandado un comprobante) todavía puede cancelarlo
+    const sinPagar = p.estado === E.CONFIRMADO && TransferenciaService.sinPagoEnCamino(p, await TransferenciaService.ultimo(p.id, { transaction: t }));
+    if (p.estado !== E.PENDIENTE && !sinPagar) throw AppError.conflict('El negocio ya aceptó tu pedido; ya no se puede cancelar desde la app', 'PEDIDOENPROCESO');
     validarTransicion(p.estado, E.CANCELADO, 'cliente');
     await devolverStock(p.id, t);
     await p.update({ estado: E.CANCELADO, motivoCancelacion: motivo?.trim() || null }, { transaction: t });
@@ -692,6 +724,68 @@ async function avisarCalificacionBaja(req, p, puntuacion, comentario, quien) {
   });
 }
 
+// ---------------------------------------------------------------------------------------------
+// Pago por transferencia: el cliente sube el comprobante y el negocio confirma si le llegó
+// ---------------------------------------------------------------------------------------------
+async function subirComprobante(usuario, id, { imagen, referencia }, req) {
+  const pedido = await withTransaction(async (t) => {
+    const p = await Pedido.findOne({ where: { id, clienteId: usuario.id }, transaction: t, lock: t.LOCK.UPDATE });
+    if (!p) throw noEncontrado();
+    if (!TransferenciaService.esTransferencia(p)) throw AppError.badRequest('Este pedido no es por transferencia', 'NOESTRANSFERENCIA');
+    if (p.pagado) throw AppError.conflict('Este pedido ya está pagado', 'YAPAGADO');
+    if (p.estado === E.PENDIENTE) throw AppError.conflict('Espera a que el negocio confirme tu pedido para transferir', 'PEDIDONOCONFIRMADO');
+    const c = await TransferenciaService.ultimo(p.id, { transaction: t });
+    if (c?.estado === 'ENVIADO') throw AppError.conflict('Ya enviaste tu comprobante: el negocio lo está revisando', 'COMPROBANTEENREVISION');
+    if (!TransferenciaService.puedeSubir(p, c)) throw AppError.conflict('Este pedido ya no recibe comprobantes', 'PEDIDOENPROCESO');
+    const archivo = await ArchivoService.guardarBase64({ base64: imagen, categoria: 'DOCUMENTO', propietario: usuario.id, nombreOriginal: `pedido-${p.id}` }, { transaction: t });
+    await sequelize.query(
+      'INSERT INTO tpedidocomprobantes (cpedido, carchivo, referencia, cusuario_registro) VALUES (:p, :a, :r, :u)',
+      { replacements: { p: p.id, a: archivo.id, r: referencia?.trim() || null, u: usuario.id }, transaction: t },
+    );
+    return p;
+  }, { usuarioId: usuario.id });
+
+  auditar({ usuarioId: usuario.id, accion: 'PEDIDOCOMPROBANTE', entidad: 'PEDIDOS', entidadId: id, req });
+  const negocio = await Negocio.findOne({ where: { id: pedido.negocioId }, attributes: ['id', 'duenoId'] });
+  await NotificacionService.notificar({
+    io: req.io, usuarioId: negocio?.duenoId, tipo: 'pedido_comprobante', titulo: 'Revisa la transferencia 🧾',
+    mensaje: `El cliente subió el comprobante de $${num(pedido.total).toFixed(2)} del pedido #${pedido.id}. Confirma si te llegó`,
+    pedidoId: pedido.id, datos: { estado: ESTADOPEDIDOAAPI[pedido.estado] },
+  });
+  avisarCambio(req.io, pedido, negocio?.duenoId);
+  return aApi(await cargar(id), req, { detalle: true });
+}
+
+// El negocio revisa el comprobante: "Pago recibido" (el pedido queda pagado) o "No me llegó" con un motivo
+async function revisarPago(usuario, id, { recibido, motivo }, req) {
+  const negocio = await NegocioService.exigirMio(usuario.id);
+  const pedido = await withTransaction(async (t) => {
+    const p = await Pedido.findOne({ where: { id, negocioId: negocio.id }, transaction: t, lock: t.LOCK.UPDATE });
+    if (!p) throw noEncontrado();
+    if (!TransferenciaService.esTransferencia(p)) throw AppError.badRequest('Este pedido no es por transferencia', 'NOESTRANSFERENCIA');
+    if (p.pagado) throw AppError.conflict('Ya confirmaste el pago de este pedido', 'YAPAGADO');
+    const c = await TransferenciaService.ultimo(p.id, { transaction: t });
+    if (c?.estado !== 'ENVIADO') throw AppError.conflict('El cliente todavía no sube el comprobante', 'SINCOMPROBANTE');
+    await sequelize.query(
+      `UPDATE tpedidocomprobantes SET estado = :estado, motivorechazo = :motivo, frevision = clock_timestamp(), cusuario_revision = :u
+        WHERE ccomprobante = :id AND estado = 'ENVIADO'`,
+      { replacements: { id: c.id, estado: recibido ? 'APROBADO' : 'RECHAZADO', motivo: recibido ? null : motivo.trim(), u: usuario.id }, transaction: t },
+    );
+    if (recibido) await p.update({ pagado: true }, { transaction: t });
+    return p;
+  }, { usuarioId: usuario.id });
+
+  auditar({ usuarioId: usuario.id, accion: recibido ? 'PEDIDOPAGORECIBIDO' : 'PEDIDOPAGORECHAZADO', entidad: 'PEDIDOS', entidadId: id, detalle: recibido ? null : { motivo }, req });
+  await NotificacionService.notificar({
+    io: req.io, usuarioId: pedido.clienteId, pedidoId: pedido.id, datos: { estado: ESTADOPEDIDOAAPI[pedido.estado] },
+    ...(recibido
+      ? { tipo: 'pago_recibido', titulo: 'Pago recibido ✅', mensaje: `${negocio.nombre} confirmó tu transferencia del pedido #${pedido.id}` }
+      : { tipo: 'pago_rechazado', titulo: 'Revisa tu transferencia', mensaje: `${negocio.nombre} no recibió tu transferencia del pedido #${pedido.id}: ${motivo.trim()}. Sube el comprobante correcto` }),
+  });
+  avisarCambio(req.io, pedido, negocio.duenoId);
+  return aApi(await cargar(id), req, { rol: 'vendedor', detalle: true });
+}
+
 // Métodos de pago que la app puede ofrecer hoy
 async function metodosPago() {
   const filas = await sequelize.query(
@@ -703,6 +797,7 @@ async function metodosPago() {
 
 module.exports = {
   crear, cotizar, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, calificarRepartidorComoNegocio, metodosPago,
+  subirComprobante, revisarPago,
   libresParaRepartidor, listarDelRepartidor, aceptar,
   recoger: (usuario, id, req) => pasoRepartidor(usuario, id, E.RECOGIDO, req),
   entregar: (usuario, id, req) => pasoRepartidor(usuario, id, E.ENTREGADO, req),

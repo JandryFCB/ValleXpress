@@ -1,8 +1,8 @@
 ---
 titulo: Términos y condiciones para clientes
-version: 2.1
-vigencia: 2026-10-18
-resumen: Ahora puedes tener, con tu misma cédula y correo, una cuenta de cliente, una de negocio y una de repartidor.
+version: 2.2
+vigencia: 2026-10-21
+resumen: Ahora puedes pagar por transferencia a los negocios que lo permiten: transfieres cuando el negocio confirma tu pedido y subes el comprobante.
 ---
 
 Estos términos regulan el uso de ValleXpress por parte de quienes compran a través de la app. Al crear tu cuenta y marcar "Acepto", declaras haberlos leído y aceptado, junto con la **Política de privacidad**. Si no estás de acuerdo, no uses la plataforma.
@@ -37,7 +37,9 @@ Por ahora ValleXpress funciona solo en **{{zona}}** y sus alrededores. La app no
 - Los precios de los productos los fija cada negocio y **ya incluyen IVA** cuando corresponde.
 - El **costo de envío** se calcula según la distancia entre el local y tu dirección, y **siempre se muestra antes de confirmar**. La tarifa vigente es de {{envioBase}} más {{envioPorKm}} por kilómetro aproximado de recorrido. El costo de envío es para el repartidor.
 - Algunos negocios tienen un pedido mínimo, que la app te indica.
-- **Por ahora el pago es en efectivo, al repartidor, cuando recibes tu pedido.** Ten listo el valor exacto o cambio razonable. Cuando habilitemos otros medios (por ejemplo, transferencia), aparecerán en la app con sus condiciones.
+- Puedes pagar **en efectivo, al repartidor, cuando recibes tu pedido** (ten listo el valor exacto o cambio razonable) o **por transferencia**, si el negocio registró sus cuentas en la app.
+- **Por transferencia:** cuando el negocio confirma tu pedido, la app te muestra sus cuentas. Transfieres el total directamente al negocio y subes la foto del comprobante. El negocio revisa que le llegó y empieza a preparar tu pedido. Si te dice que no le llegó, te indica el motivo y puedes subir el comprobante correcto. Si no subes el comprobante dentro de {{venceTransferencia}} minutos desde que el negocio confirma, el pedido se cancela automáticamente.
+- ValleXpress **no recibe ni custodia el dinero** de las transferencias: va directo a la cuenta del negocio. Si un pedido que ya pagaste se cancela, el negocio debe devolverte lo que transferiste; si no lo hace, escríbenos y mediaremos.
 - No cobramos propinas ni recargos ocultos: pagas el total que ves al confirmar.
 
 ## 6. Cómo funciona un pedido
@@ -46,13 +48,13 @@ Por ahora ValleXpress funciona solo en **{{zona}}** y sus alrededores. La app no
 2. El negocio acepta o rechaza el pedido. Si no responde en {{vencePendiente}} minutos, el pedido se cancela automáticamente.
 3. Cuando está listo, un repartidor lo recoge y te lo lleva. Puedes seguir su ubicación en el mapa.
 4. Si ningún repartidor lo recoge dentro de {{venceSinRepartidor}} minutos desde que estuvo listo, el pedido se cancela automáticamente y te avisamos. En ese caso no debes pagar nada.
-5. Al recibirlo, pagas al repartidor y puedes calificar al negocio y al repartidor.
+5. Al recibirlo, pagas al repartidor (si elegiste efectivo) y puedes calificar al negocio y al repartidor.
 
 Los tiempos que muestra la app son estimados y pueden variar por tráfico, clima u otras causas.
 
 ## 7. Cancelaciones
 
-- Puedes cancelar tu pedido desde la app **mientras el negocio todavía no lo acepta**. Después de que el negocio lo acepta, ya empezó a prepararlo y no se puede cancelar desde la app.
+- Puedes cancelar tu pedido desde la app **mientras el negocio todavía no lo acepta**. Después de que el negocio lo acepta, ya empezó a prepararlo y no se puede cancelar desde la app. Si pagas por transferencia, también puedes cancelarlo mientras no hayas subido el comprobante.
 - El negocio puede rechazar un pedido (por ejemplo, por falta de stock) y ValleXpress puede cancelarlo si detecta un problema. En todos los casos te avisamos.
 - Si haces pedidos que luego no recibes o no pagas, podemos suspender tu cuenta.
 

@@ -11,6 +11,7 @@ const PerfilesService = require('../../shared/services/perfiles.service');
 const TarifasService = require('../../shared/services/tarifas.service');
 const ZonaService = require('../../shared/services/zona.service');
 const SuscripcionService = require('../suscripciones/suscripcion.service');
+const TransferenciaService = require('../pedidos/transferencia.service');
 const { auditar } = require('../../shared/services/log.service');
 const { APROBACION, CATEGORIA, TIPODIRECCION } = require('../../shared/constants/codigos');
 
@@ -73,6 +74,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
   const tarifas = await TarifasService.tarifas();
   const desde = privado ? null : await direccionDe(req);
   const conDeuda = await SuscripcionService.negociosBloqueados(lista.map((n) => Number(n.id)));
+  const conCuentas = await TransferenciaService.conCuentas(lista.map((n) => Number(n.id)));
   const envioDe = (n) => {
     const local = n.local ? { lat: num(n.local.latitud), lng: num(n.local.longitud) } : null;
     const e = TarifasService.envioEntre(tarifas, local && desde ? local : null, local && desde ? desde : null);
@@ -97,6 +99,7 @@ async function aApi(entrada, req, { privado = false } = {}) {
       abierto: e.abierto === true,
       abiertoAhora: e.abierto === true && dentroDeHorario(horarios),
       aceptaPedidos: e.aceptaPedidos !== false && !conDeuda.has(String(n.id)),
+      aceptaTransferencia: conCuentas.has(String(n.id)),     // tiene cuentas para recibir transferencias
       calificacion: num(e.calificacion) ?? 0,
       numeroCalificaciones: e.numeroCalificaciones ?? 0,
       numeroPedidos: e.numeroPedidos ?? 0,
@@ -279,8 +282,22 @@ async function subirImagen(usuarioId, tipo, base64, req) {
   return miNegocio(usuarioId, req);
 }
 
+// Cuentas donde el negocio recibe las transferencias de sus clientes
+async function cuentas(usuarioId) {
+  const n = await exigirMio(usuarioId);
+  return { cuentas: await TransferenciaService.cuentas(n.id), maximo: TransferenciaService.MAXCUENTAS };
+}
+
+async function fijarCuentas(usuarioId, lista, req) {
+  const n = await exigirMio(usuarioId);
+  const quien = req?.usuario?.id || usuarioId;      // el dueño o el administrador que gestiona
+  const nuevas = await TransferenciaService.fijarCuentas(n.id, lista, quien);
+  auditar({ usuarioId: quien, accion: 'NEGOCIOCUENTAS', entidad: 'NEGOCIOS', entidadId: n.id, detalle: { cuentas: nuevas.length }, req });
+  return { cuentas: nuevas, maximo: TransferenciaService.MAXCUENTAS };
+}
+
 module.exports = {
-  categorias, listar, obtener,
+  categorias, listar, obtener, cuentas, fijarCuentas,
   delDueno, exigirMio, miNegocio, crearParaUsuario, crear, actualizar, pedirRevision, fijarLocal, fijarHorarios, cambiarEstado, subirImagen,
   dentroDeHorario, aApi,
 };
