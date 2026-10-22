@@ -274,7 +274,7 @@ class _PasoRol extends StatelessWidget {
           valor: 'cliente',
           icono: Icons.shopping_bag_outlined,
           titulo: 'Cliente',
-          descripcion: 'Pide comida y productos de los negocios de tu zona.',
+          descripcion: 'Pide comida, compras, farmacia y más a los negocios de tu zona.',
           color: AppTheme.clienteColor,
           controlador: c,
         ),

@@ -128,7 +128,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
                     _alBuscar(v);
                   },
                   decoration: InputDecoration(
-                    hintText: 'Buscar negocios o comidas',
+                    hintText: 'Buscar negocios o productos',
                     prefixIcon: const Icon(Icons.search_rounded),
                     suffixIcon: _busqueda.text.isEmpty
                         ? null

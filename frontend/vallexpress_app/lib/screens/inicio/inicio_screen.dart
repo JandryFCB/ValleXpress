@@ -220,7 +220,8 @@ class _Cabecera extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('${_saludo()}${nombre.isEmpty ? '' : ', $nombre'} 👋', style: tema.bodyLarge?.copyWith(color: c.textoSuave)),
-                    Text('¿Qué se te antoja hoy?', style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('¿Qué te llevamos hoy?', style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Comida, tiendas, farmacias, mascotas y más', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
                   ],
                 ),
               ),
