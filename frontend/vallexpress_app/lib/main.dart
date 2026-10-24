@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'providers/auth_provider.dart';
 import 'providers/carrito_provider.dart';
 import 'providers/tema_provider.dart';
+import 'web/escritorio.dart' show PestanasAdaptables, RutaWeb;
 
 import 'config/theme.dart';
 import 'config/constants.dart';
@@ -23,6 +24,7 @@ import 'services/fcm_mobile.dart'
 void main() async {
   // Web: direcciones limpias (app.vallexpress.com/pedidos) en vez de /#/home. En el celular no hace nada.
   usePathUrlStrategy();
+  PestanasAdaptables.recordarRutaAlAbrir();
   WidgetsFlutterBinding.ensureInitialized();
   // Solo vertical: las pantallas están diseñadas para el celular de pie (girarlo descuadraba el diseño).
   // En Android también lo fija el manifiesto (screenOrientation) para que no gire ni durante el arranque.
@@ -60,6 +62,7 @@ class MyApp extends StatelessWidget {
         builder: (context, tema, _) => MaterialApp(
         title: 'ValleXpress',
         navigatorKey: navigatorKey,
+        navigatorObservers: [RutaWeb.deLaApp], // web: /perfil/direcciones... en la barra de direcciones
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,

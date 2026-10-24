@@ -20,7 +20,7 @@ Future<void> abrirPedido(BuildContext context, int pedidoId) {
     'repartidor' => EntregaScreen(pedidoId: pedidoId),
     _ => PedidoDetalleScreen(pedidoId: pedidoId),
   };
-  return Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
+  return Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla, settings: RouteSettings(name: 'pedido/$pedidoId')));
 }
 
 /// Abre lo que corresponde a un aviso: su pedido o, en los de cobros, la de la suscripción (Suscripciones

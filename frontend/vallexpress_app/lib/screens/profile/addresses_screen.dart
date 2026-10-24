@@ -49,7 +49,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
   Future<void> _agregarOEditar([Direccion? actual]) async {
     final elegida = await Navigator.push<DireccionElegida>(
       context,
-      MaterialPageRoute(builder: (_) => AddressPickerScreen(actual: actual)),
+      MaterialPageRoute(builder: (_) => AddressPickerScreen(actual: actual), settings: RouteSettings(name: actual == null ? 'nueva' : 'editar')),
     );
     if (elegida == null || !mounted) return;
 

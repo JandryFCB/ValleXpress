@@ -139,7 +139,7 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
   }
 
   // En el computador el carrito se abre dentro de la página (la barra de arriba sigue a la vista)
-  void _abrirCarrito() => Navigator.push(contextoDeContenido(context), MaterialPageRoute(builder: (_) => const CarritoScreen()));
+  void _abrirCarrito() => Navigator.push(contextoDeContenido(context), MaterialPageRoute(builder: (_) => const CarritoScreen(), settings: const RouteSettings(name: 'carrito')));
 
   @override
   Widget build(BuildContext context) {
@@ -338,6 +338,7 @@ class _PedidoEnCurso extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido),
+            settings: RouteSettings(name: 'pedido/${pedido.id}'),
           ),
         ),
         child: Row(

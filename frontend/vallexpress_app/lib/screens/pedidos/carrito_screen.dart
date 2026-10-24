@@ -129,7 +129,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
       _cotizar();
     }
     if (elegida == 'gestionar') {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressesScreen()));
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressesScreen(), settings: const RouteSettings(name: 'direcciones')));
       await _cargar();
     }
   }
@@ -174,6 +174,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
       nav.push(
         MaterialPageRoute(
           builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido, recienHecho: true),
+          settings: RouteSettings(name: 'pedido/${pedido.id}'),
         ),
       );
     } catch (e) {

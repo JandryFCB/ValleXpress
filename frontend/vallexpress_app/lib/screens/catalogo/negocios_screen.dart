@@ -132,7 +132,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
 
   void _abrir(Negocio n) {
     FocusManager.instance.primaryFocus?.unfocus(); // al volver, el buscador no debe abrir el teclado
-    Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n)));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n), settings: RouteSettings(name: 'negocio/${n.id}')));
   }
 
   void _elegirCategoria(String? codigo) {

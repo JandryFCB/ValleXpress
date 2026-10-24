@@ -186,8 +186,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
     }
   }
 
-  Future<void> _abrir(Widget pantalla) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
+  /// [ruta]: cómo se ve en la dirección de la web (/perfil/ruta)
+  Future<void> _abrir(Widget pantalla, String ruta) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla, settings: RouteSettings(name: ruta)));
     if (mounted) _cargar(); // al volver, el resumen refleja lo que se cambió
   }
 
@@ -310,7 +311,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   ? 'Agrega tu primer teléfono'
                   : '${Formato.telefono(principal.numero)}${_telefonos.length > 1 ? '  ·  +${_telefonos.length - 1}' : ''}',
               trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => _abrir(const TelefonosScreen()),
+              onTap: () => _abrir(const TelefonosScreen(), 'telefonos'),
             ),
             const _Separador(),
             _Fila(
@@ -318,7 +319,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
               titulo: 'Mis direcciones',
               valor: predeterminada == null ? 'Agrega tu primera dirección' : '${predeterminada.titulo}: ${predeterminada.direccion}',
               trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => _abrir(const AddressesScreen()),
+              onTap: () => _abrir(const AddressesScreen(), 'direcciones'),
             ),
           ],
         ),
@@ -339,7 +340,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () async {
                       final perfil = await PedidosService.miPerfilRepartidor().catchError((_) => null);
-                      if (mounted) _abrir(VehiculoScreen(actual: perfil));
+                      if (mounted) _abrir(VehiculoScreen(actual: perfil), 'vehiculo');
                     },
                   ),
                   const _Separador(),
@@ -348,7 +349,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     titulo: 'Mis documentos',
                     valor: 'Para verificar tu identidad y tu vehículo',
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _abrir(const MisDocumentosScreen()),
+                    onTap: () => _abrir(const MisDocumentosScreen(), 'documentos'),
                   ),
                   const _Separador(),
                   _Fila(
@@ -356,7 +357,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     titulo: 'Mi reputación',
                     valor: 'Calificaciones y advertencias',
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _abrir(const MiReputacionScreen()),
+                    onTap: () => _abrir(const MiReputacionScreen(), 'reputacion'),
                   ),
                   const _Separador(),
                   _Fila(
@@ -364,7 +365,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     titulo: 'Mi suscripción',
                     valor: 'Cuota mensual y comprobantes',
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _abrir(const MiSuscripcionScreen()),
+                    onTap: () => _abrir(const MiSuscripcionScreen(), 'suscripcion'),
                   ),
                 ],
               ),
@@ -383,7 +384,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     titulo: 'Mi negocio',
                     valor: 'Datos, horario, ubicación, logo y portada',
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _abrir(const MiNegocioScreen()),
+                    onTap: () => _abrir(const MiNegocioScreen(), 'mi-negocio'),
                   ),
                   const _Separador(),
                   _Fila(
@@ -391,7 +392,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     titulo: 'Mis productos',
                     valor: 'Menú, precios, stock e imágenes',
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _abrir(const MisProductosScreen()),
+                    onTap: () => _abrir(const MisProductosScreen(), 'productos'),
                   ),
                   const _Separador(),
                   _Fila(
@@ -399,7 +400,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     titulo: 'Cuentas para transferencias',
                     valor: 'Donde te pagan tus clientes',
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _abrir(const CuentasNegocioScreen()),
+                    onTap: () => _abrir(const CuentasNegocioScreen(), 'cuentas-bancarias'),
                   ),
                   const _Separador(),
                   _Fila(
@@ -407,7 +408,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     titulo: 'Mi suscripción',
                     valor: 'Cuota mensual y comprobantes',
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _abrir(const MiSuscripcionScreen()),
+                    onTap: () => _abrir(const MiSuscripcionScreen(), 'suscripcion'),
                   ),
                 ],
               ),
@@ -418,7 +419,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
         : TarjetaValle(
             color: AppTheme.accentColor.withValues(alpha: 0.10),
             colorBorde: AppTheme.accentColor.withValues(alpha: 0.4),
-            onTap: () => _abrir(const AyudanosScreen()),
+            onTap: () => _abrir(const AyudanosScreen(), 'sugerencias'),
             child: Row(
               children: [
                 const Icon(Icons.tips_and_updates_rounded, color: AppTheme.accentColor, size: 30),
@@ -448,7 +449,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 titulo: 'Permisos del celular',
                 valor: rol == 'repartidor' ? 'Ubicación, notificaciones y batería' : 'Notificaciones',
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => _abrir(PermisosScreen(rol: rol)),
+                onTap: () => _abrir(PermisosScreen(rol: rol), 'permisos'),
               ),
               const _Separador(),
             ],
@@ -457,7 +458,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
               titulo: 'Configuración',
               valor: 'Apariencia, contraseña, notificaciones y más',
               trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => _abrir(const SettingsScreen()),
+              onTap: () => _abrir(const SettingsScreen(), 'configuracion'),
             ),
           ],
         ),

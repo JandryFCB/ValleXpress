@@ -161,87 +161,238 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
     // Alto realmente disponible: sin el teclado. Así, al escribir, el formulario no se come el mapa entero.
     final alto = MediaQuery.sizeOf(context).height - MediaQuery.viewInsetsOf(context).bottom;
 
+    // ---------------------------- Mapa con el pin fijo al centro ----------------------------
+    final mapa = Stack(
+      children: [
+        FlutterMap(
+          mapController: _mapa,
+          options: MapOptions(
+            initialCenter: _centro.value,
+            initialZoom: 16,
+            minZoom: 5,
+            maxZoom: 19,
+            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+            onPositionChanged: (camara, _) => _centro.value = camara.center,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'ec.vallexpress.app',
+              tileBuilder: oscuro ? darkModeTileBuilder : null,
+            ),
+            // OpenStreetMap exige mostrar el crédito en el mapa
+            const RichAttributionWidget(attributions: [TextSourceAttribution('© OpenStreetMap')], alignment: AttributionAlignment.bottomLeft),
+          ],
+        ),
+        // El pin: su punta queda exactamente en el centro del mapa
+        IgnorePointer(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 44),
+              child: Icon(
+                Icons.location_on_rounded,
+                size: 48,
+                color: c.primario,
+                shadows: const [Shadow(blurRadius: 10, color: Colors.black45)],
+              ),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _BotonRedondo(icono: Icons.arrow_back_ios_new_rounded, tooltip: 'Atrás', onTap: () => Navigator.pop(context)),
+                _BotonRedondo(icono: Icons.my_location_rounded, tooltip: 'Mi ubicación', cargando: _buscandoUbicacion, onTap: _irAMiUbicacion),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 12,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: c.tarjeta.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: c.borde),
+              ),
+              child: Text('Mueve el mapa para ubicar el pin', style: Theme.of(context).textTheme.labelMedium),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    // ---------------------------- Formulario ----------------------------
+    final formulario = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.paraLocal ? 'Ubicación de tu negocio' : (_editando ? 'Editar dirección' : 'Nueva dirección'),
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 14),
+        if (!widget.paraLocal)
+          // En el celular se desliza de lado; en la tarjeta del computador bajan de línea (no se corta "Otro")
+          esEscritorio(context)
+              ? Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final t in TipoDireccion.values)
+                      ChoiceChip(
+                        avatar: Icon(t.icono, size: 18, color: _tipo == t ? Colors.white : c.textoSuave),
+                        label: Text(t.etiqueta),
+                        selected: _tipo == t,
+                        showCheckmark: false,
+                        labelStyle: TextStyle(color: _tipo == t ? Colors.white : c.texto, fontWeight: FontWeight.w600),
+                        onSelected: (_) => setState(() => _tipo = t),
+                      ),
+                  ],
+                )
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    spacing: 8,
+                    children: [
+                      for (final t in TipoDireccion.values)
+                        ChoiceChip(
+                          avatar: Icon(t.icono, size: 18, color: _tipo == t ? Colors.white : c.textoSuave),
+                          label: Text(t.etiqueta),
+                          selected: _tipo == t,
+                          showCheckmark: false,
+                          labelStyle: TextStyle(color: _tipo == t ? Colors.white : c.texto, fontWeight: FontWeight.w600),
+                          onSelected: (_) => setState(() => _tipo = t),
+                        ),
+                    ],
+                  ),
+                ),
+        const SizedBox(height: 16),
+        CampoValle(
+          controller: _direccion,
+          etiqueta: 'Dirección',
+          icono: Icons.signpost_outlined,
+          mayusculas: TextCapitalization.sentences,
+          maxLongitud: 500,
+          maxLineas: 2,
+          estado: _errorDireccion == null ? EstadoCampo.neutro : EstadoCampo.error,
+          ayuda: _errorDireccion ?? 'Calle principal y secundaria, barrio o sector',
+          onChanged: (_) {
+            if (_errorDireccion != null) setState(() => _errorDireccion = null);
+          },
+        ),
+        const SizedBox(height: 14),
+        CampoValle(
+          controller: _referencia,
+          etiqueta: 'Referencia (opcional)',
+          icono: Icons.flag_outlined,
+          mayusculas: TextCapitalization.sentences,
+          maxLongitud: 500,
+          ayuda: 'Ej: frente al parque, portón verde',
+        ),
+        if (!widget.paraLocal)
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text('Más detalles', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              children: [
+                CampoValle(
+                  controller: _nombre,
+                  etiqueta: 'Nombre (opcional)',
+                  icono: Icons.label_outline,
+                  mayusculas: TextCapitalization.words,
+                  maxLongitud: 50,
+                  ayuda: 'Ej: Mi casa, Oficina',
+                ),
+                const SizedBox(height: 14),
+                CampoValle(
+                  controller: _instrucciones,
+                  etiqueta: 'Indicaciones para el repartidor',
+                  icono: Icons.delivery_dining_outlined,
+                  mayusculas: TextCapitalization.sentences,
+                  maxLongitud: 500,
+                  maxLineas: 2,
+                  ayuda: 'Ej: tocar el timbre dos veces',
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        if (!widget.paraLocal)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Usar como predeterminada'),
+            subtitle: const Text('Se propone primero cuando hagas un pedido'),
+            value: _predeterminada,
+            onChanged: (v) => setState(() => _predeterminada = v),
+          ),
+      ],
+    );
+    final guardar = BotonValle(
+      texto: widget.paraLocal ? 'Guardar ubicación' : (_editando ? 'Guardar cambios' : 'Guardar dirección'),
+      icono: Icons.check_rounded,
+      onPressed: _guardar,
+    );
+
+    // Computador: el mapa grande a la izquierda y el formulario en una tarjeta a la derecha
+    if (esEscritorio(context)) {
+      return Scaffold(
+        backgroundColor: c.fondo,
+        body: Padding(
+          padding: const EdgeInsets.fromLTRB(margenWeb, 24, margenWeb, 24),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: c.borde),
+                  ),
+                  child: mapa,
+                ),
+              ),
+              const SizedBox(width: 24),
+              SizedBox(
+                width: 440,
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: c.tarjeta,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: c.borde),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(24, 24, 24, 12), child: formulario),
+                      ),
+                      Padding(padding: const EdgeInsets.fromLTRB(24, 8, 24, 24), child: guardar),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: Column(
         children: [
-          // ---------------------------- Mapa con el pin fijo al centro ----------------------------
-          Expanded(
-            child: Stack(
-              children: [
-                FlutterMap(
-                  mapController: _mapa,
-                  options: MapOptions(
-                    initialCenter: _centro.value,
-                    initialZoom: 16,
-                    minZoom: 5,
-                    maxZoom: 19,
-                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
-                    onPositionChanged: (camara, _) => _centro.value = camara.center,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'ec.vallexpress.app',
-                      tileBuilder: oscuro ? darkModeTileBuilder : null,
-                    ),
-                    // OpenStreetMap exige mostrar el crédito en el mapa
-                    const RichAttributionWidget(attributions: [TextSourceAttribution('© OpenStreetMap')], alignment: AttributionAlignment.bottomLeft),
-                  ],
-                ),
-                // El pin: su punta queda exactamente en el centro del mapa
-                IgnorePointer(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 44),
-                      child: Icon(
-                        Icons.location_on_rounded,
-                        size: 48,
-                        color: c.primario,
-                        shadows: const [Shadow(blurRadius: 10, color: Colors.black45)],
-                      ),
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _BotonRedondo(icono: Icons.arrow_back_ios_new_rounded, tooltip: 'Atrás', onTap: () => Navigator.pop(context)),
-                        _BotonRedondo(
-                          icono: Icons.my_location_rounded,
-                          tooltip: 'Mi ubicación',
-                          cargando: _buscandoUbicacion,
-                          onTap: _irAMiUbicacion,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 12,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: c.tarjeta.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: c.borde),
-                      ),
-                      child: Text('Mueve el mapa para ubicar el pin', style: Theme.of(context).textTheme.labelMedium),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ---------------------------- Formulario ----------------------------
+          Expanded(child: mapa),
           Container(
             constraints: BoxConstraints(maxHeight: alto * 0.5),
             decoration: BoxDecoration(
@@ -255,94 +406,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
               child: SingleChildScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.paraLocal ? 'Ubicación de tu negocio' : (_editando ? 'Editar dirección' : 'Nueva dirección'),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 14),
-                    if (!widget.paraLocal)
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          spacing: 8,
-                          children: [
-                            for (final t in TipoDireccion.values)
-                              ChoiceChip(
-                                avatar: Icon(t.icono, size: 18, color: _tipo == t ? Colors.white : c.textoSuave),
-                                label: Text(t.etiqueta),
-                                selected: _tipo == t,
-                                showCheckmark: false,
-                                labelStyle: TextStyle(color: _tipo == t ? Colors.white : c.texto, fontWeight: FontWeight.w600),
-                                onSelected: (_) => setState(() => _tipo = t),
-                              ),
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    CampoValle(
-                      controller: _direccion,
-                      etiqueta: 'Dirección',
-                      icono: Icons.signpost_outlined,
-                      mayusculas: TextCapitalization.sentences,
-                      maxLongitud: 500,
-                      maxLineas: 2,
-                      estado: _errorDireccion == null ? EstadoCampo.neutro : EstadoCampo.error,
-                      ayuda: _errorDireccion ?? 'Calle principal y secundaria, barrio o sector',
-                      onChanged: (_) {
-                        if (_errorDireccion != null) setState(() => _errorDireccion = null);
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    CampoValle(
-                      controller: _referencia,
-                      etiqueta: 'Referencia (opcional)',
-                      icono: Icons.flag_outlined,
-                      mayusculas: TextCapitalization.sentences,
-                      maxLongitud: 500,
-                      ayuda: 'Ej: frente al parque, portón verde',
-                    ),
-                    if (!widget.paraLocal)
-                      Theme(
-                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                        child: ExpansionTile(
-                          tilePadding: EdgeInsets.zero,
-                          title: Text('Más detalles', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                          children: [
-                            CampoValle(
-                              controller: _nombre,
-                              etiqueta: 'Nombre (opcional)',
-                              icono: Icons.label_outline,
-                              mayusculas: TextCapitalization.words,
-                              maxLongitud: 50,
-                              ayuda: 'Ej: Mi casa, Oficina',
-                            ),
-                            const SizedBox(height: 14),
-                            CampoValle(
-                              controller: _instrucciones,
-                              etiqueta: 'Indicaciones para el repartidor',
-                              icono: Icons.delivery_dining_outlined,
-                              mayusculas: TextCapitalization.sentences,
-                              maxLongitud: 500,
-                              maxLineas: 2,
-                              ayuda: 'Ej: tocar el timbre dos veces',
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                        ),
-                      ),
-                    if (!widget.paraLocal)
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Usar como predeterminada'),
-                        subtitle: const Text('Se propone primero cuando hagas un pedido'),
-                        value: _predeterminada,
-                        onChanged: (v) => setState(() => _predeterminada = v),
-                      ),
-                  ],
-                ),
+                child: formulario,
               ),
             ),
           ),
@@ -354,14 +418,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
             ),
             child: SafeArea(
               top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                child: BotonValle(
-                  texto: widget.paraLocal ? 'Guardar ubicación' : (_editando ? 'Guardar cambios' : 'Guardar dirección'),
-                  icono: Icons.check_rounded,
-                  onPressed: _guardar,
-                ),
-              ),
+              child: Padding(padding: const EdgeInsets.fromLTRB(20, 12, 20, 12), child: guardar),
             ),
           ),
         ],

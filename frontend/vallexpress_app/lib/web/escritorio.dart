@@ -83,8 +83,14 @@ class PestanasAdaptables extends StatelessWidget {
   /// recargar o abrir un enlace se vuelve a esa pestaña
   final List<String>? rutas;
 
-  static String? _rutaAlAbrir = kIsWeb ? Uri.base.path : null;
-  static String? _ultimaRuta;
+  static String? _rutaAlAbrir;
+
+  /// Se llama al arrancar (main), antes de que la app cambie la dirección de la página. Al recargar
+  /// /perfil/direcciones se vuelve a la pestaña /perfil (lo de adentro no se reabre).
+  static void recordarRutaAlAbrir() {
+    final partes = Uri.base.pathSegments.where((p) => p.isNotEmpty);
+    _rutaAlAbrir = kIsWeb && partes.isNotEmpty ? '/${partes.first}' : null;
+  }
 
   /// Pestaña con la que arranca un inicio: la de la dirección con que se abrió la web (una sola vez)
   static int indiceInicial(List<String> rutas) {
@@ -96,10 +102,7 @@ class PestanasAdaptables extends StatelessWidget {
 
   void _anunciarRuta() {
     if (!kIsWeb || rutas == null || indice >= rutas!.length) return;
-    final ruta = rutas![indice];
-    if (ruta == _ultimaRuta) return;
-    _ultimaRuta = ruta;
-    WidgetsBinding.instance.addPostFrameCallback((_) => SystemNavigator.routeInformationUpdated(uri: Uri(path: ruta), replace: true));
+    RutaWeb.pestana(rutas![indice]);
   }
 
   final int indice;
@@ -189,6 +192,7 @@ class _NavegadorInterno extends StatefulWidget {
 
 class _NavegadorInternoState extends State<_NavegadorInterno> {
   final _llave = GlobalKey<NavigatorState>();
+  final _observador = RutaWeb.observador();
   static GlobalKey<NavigatorState>? _actual;
 
   @override
@@ -216,6 +220,7 @@ class _NavegadorInternoState extends State<_NavegadorInterno> {
       onPopWithResult: (_) => _llave.currentState?.maybePop(),
       child: Navigator(
         key: _llave,
+        observers: [_observador],
         pages: [MaterialPage(key: const ValueKey('pestanas'), child: widget.child)],
         onDidRemovePage: (_) {},
       ),
@@ -422,5 +427,61 @@ class BotonTema extends StatelessWidget {
       );
     }
     return IconButton(tooltip: oscuro ? 'Modo claro' : 'Modo oscuro', onPressed: cambiar, icon: icono);
+  }
+}
+
+/// Dirección que muestra el navegador: la pestaña (/perfil) más las pantallas abiertas encima que tienen nombre
+/// (RouteSettings.name), p. ej. /perfil/direcciones/nueva. Solo en la web.
+class RutaWeb {
+  static String _pestana = '';
+  static final List<Route<dynamic>> _abiertas = [];
+  static String? _ultima;
+
+  static void pestana(String ruta) {
+    _pestana = ruta;
+    _anunciar();
+  }
+
+  /// Para cada Navigator (el de la app y el del área de contenido del computador)
+  static NavigatorObserver observador() => _Observador();
+
+  /// El del Navigator de la app (uno solo, aunque MaterialApp se reconstruya al cambiar el tema)
+  static final NavigatorObserver deLaApp = _Observador();
+
+  static void _anunciar() {
+    if (!kIsWeb) return;
+    final ruta = [_pestana, for (final r in _abiertas) '/${r.settings.name}'].join();
+    if (ruta.isEmpty || ruta == _ultima) return;
+    _ultima = ruta;
+    WidgetsBinding.instance.addPostFrameCallback((_) => SystemNavigator.routeInformationUpdated(uri: Uri(path: ruta), replace: true));
+  }
+}
+
+class _Observador extends NavigatorObserver {
+  // Las rutas con nombre de la app ('/', '/home'...) no cuentan: solo los nombres cortos de las pantallas de adentro
+  bool _conNombre(Route<dynamic>? r) => r is PageRoute && (r.settings.name ?? '').isNotEmpty && !r.settings.name!.startsWith('/');
+
+  void _quitar(Route<dynamic>? r) {
+    if (RutaWeb._abiertas.remove(r)) RutaWeb._anunciar();
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (!_conNombre(route)) return;
+    RutaWeb._abiertas.add(route);
+    RutaWeb._anunciar();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _quitar(route);
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => _quitar(route);
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    RutaWeb._abiertas.remove(oldRoute);
+    if (_conNombre(newRoute)) RutaWeb._abiertas.add(newRoute!);
+    RutaWeb._anunciar();
   }
 }

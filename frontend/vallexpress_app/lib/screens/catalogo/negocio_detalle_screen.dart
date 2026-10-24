@@ -117,7 +117,7 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
         child: BarraCarrito(
           key: const ValueKey('carrito'),
           carrito: carrito,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen())),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen(), settings: const RouteSettings(name: 'carrito'))),
         ),
       ),
       body: Container(
@@ -406,7 +406,7 @@ class _CarritoLateral extends StatelessWidget {
     final tema = Theme.of(context).textTheme;
     final carrito = context.watch<CarritoProvider>();
     final otro = carrito.esDeOtroNegocio(negocio);
-    void abrirCarrito() => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen()));
+    void abrirCarrito() => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen(), settings: const RouteSettings(name: 'carrito')));
 
     Widget fila(String texto, String valor, {bool fuerte = false}) => Padding(
       padding: const EdgeInsets.only(top: 6),
