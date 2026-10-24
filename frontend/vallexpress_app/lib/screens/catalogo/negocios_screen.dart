@@ -160,7 +160,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
           conMargen(SliverToBoxAdapter(child: Text('Categorías', style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800))), arriba: 36, abajo: 16),
           conMargen(
             SliverGrid(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 220, mainAxisExtent: 120, crossAxisSpacing: 14, mainAxisSpacing: 14),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 200, mainAxisExtent: 130, crossAxisSpacing: 14, mainAxisSpacing: 14),
               delegate: SliverChildListDelegate([
                 FichaCategoria(codigo: null, texto: 'Todos', icono: Icons.apps_rounded, seleccionada: _categoria == null, onTap: () => _elegirCategoria(null)),
                 for (final k in _categorias)
@@ -196,7 +196,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
           if (hayLista)
             conMargen(
               SliverGrid(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 330, mainAxisExtent: 270, crossAxisSpacing: 22, mainAxisSpacing: 28),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 320, mainAxisExtent: 270, crossAxisSpacing: 20, mainAxisSpacing: 20),
                 delegate: SliverChildBuilderDelegate(
                   (_, i) => Aparecer(
                     key: ValueKey('negocio-web-${_negocios[i].id}'),

@@ -182,6 +182,19 @@ class _NavegadorInterno extends StatefulWidget {
 
 class _NavegadorInternoState extends State<_NavegadorInterno> {
   final _llave = GlobalKey<NavigatorState>();
+  static GlobalKey<NavigatorState>? _actual;
+
+  @override
+  void initState() {
+    super.initState();
+    _actual = _llave;
+  }
+
+  @override
+  void dispose() {
+    if (_actual == _llave) _actual = null;
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(covariant _NavegadorInterno vieja) {
@@ -369,4 +382,11 @@ Future<T?> mostrarHoja<T>(
       ),
     ),
   );
+}
+
+/// Contexto para abrir pantallas DENTRO del área de contenido del computador (desde la barra de arriba, que está fuera
+/// de ella: carrito, avisos). En el celular, o si no hay área de contenido, devuelve el mismo [context].
+BuildContext contextoDeContenido(BuildContext context) {
+  if (!esEscritorio(context)) return context;
+  return _NavegadorInternoState._actual?.currentState?.overlay?.context ?? context;
 }

@@ -134,11 +134,12 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
   }
 
   Future<void> _abrirAvisos() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const AvisosScreen()));
+    await abrirAvisos(context);
     _cargarNoLeidos();
   }
 
-  void _abrirCarrito() => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarritoScreen()));
+  // En el computador el carrito se abre dentro de la página (la barra de arriba sigue a la vista)
+  void _abrirCarrito() => Navigator.push(contextoDeContenido(context), MaterialPageRoute(builder: (_) => const CarritoScreen()));
 
   @override
   Widget build(BuildContext context) {

@@ -50,7 +50,7 @@ class _CampanaAvisosState extends State<CampanaAvisos> {
   }
 
   Future<void> _abrir() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const AvisosScreen()));
+    await abrirAvisos(context);
     _cargar();
   }
 

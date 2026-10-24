@@ -8,20 +8,18 @@ import '../widgets/ui/ui.dart';
 
 // Piezas del inicio del cliente en el computador (la lógica de carga está en NegociosScreen).
 
-/// Color vivo de cada categoría (las fichas de colores del inicio). Texto encima: azul marino.
-Color colorCategoria(String? codigo) => switch (codigo) {
-      '001' => const Color(0xFFFF7A59), // comida
-      '002' => const Color(0xFF2F9BE0), // bebidas
-      '003' => const Color(0xFFB58AF0), // heladería
-      '004' => const Color(0xFFF6B92B), // panadería
-      '005' => const Color(0xFF35B35A), // víveres
-      '006' => const Color(0xFF3CC0B8), // farmacia
-      '007' => const Color(0xFFF28FB1), // mascotas
-      null => const Color(0xFF0B1A2B), // todos
-      _ => const Color(0xFFC9D3CE),
+/// Colores suaves de cada categoría (estilo "Fresco"): (fondo pastel, color del ícono y del texto encima)
+(Color, Color) colorCategoria(String? codigo) => switch (codigo) {
+      '001' => (const Color(0xFFFFF1D1), const Color(0xFF8A5A00)), // comida
+      '002' => (const Color(0xFFE9E4FB), const Color(0xFF4F3AA0)), // bebidas
+      '003' => (const Color(0xFFFCE7F3), const Color(0xFF9D2B6B)), // postres
+      '004' => (const Color(0xFFF3E8DC), const Color(0xFF7A4B1F)), // panadería
+      '005' => (const Color(0xFFDDF1E3), const Color(0xFF187A3C)), // supermercado
+      '006' => (const Color(0xFFDDEFFC), const Color(0xFF145A8C)), // farmacia
+      '007' => (const Color(0xFFFCE3E0), const Color(0xFF9A3328)), // mascotas
+      null => (const Color(0xFFE6ECE8), const Color(0xFF15201A)), // todos
+      _ => (const Color(0xFFEEF0EF), const Color(0xFF4A5650)),
     };
-
-const _marino = Color(0xFF0B1A2B);
 
 /// Margen lateral: el contenido queda centrado en 1280 px con 32 de aire (alineado con la barra de arriba)
 double margenEscritorio(BuildContext context) {
@@ -99,7 +97,7 @@ class BienvenidaEscritorio extends StatelessWidget {
   }
 }
 
-/// Ficha de color de una categoría (seleccionable)
+/// Ficha blanca de una categoría con su ícono sobre un color suave (seleccionable)
 class FichaCategoria extends StatefulWidget {
   const FichaCategoria({super.key, required this.codigo, required this.texto, required this.icono, required this.seleccionada, required this.onTap});
 
@@ -118,8 +116,8 @@ class _FichaCategoriaState extends State<FichaCategoria> {
 
   @override
   Widget build(BuildContext context) {
-    final fondo = colorCategoria(widget.codigo);
-    final tinta = fondo == _marino ? Colors.white : _marino;
+    final c = context.colores;
+    final (fondo, tinta) = colorCategoria(widget.codigo);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _encima = true),
@@ -128,31 +126,34 @@ class _FichaCategoriaState extends State<FichaCategoria> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          transform: Matrix4.translationValues(0, _encima ? -4 : 0, 0),
-          padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+          transform: Matrix4.translationValues(0, _encima ? -3 : 0, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
           decoration: BoxDecoration(
-            color: fondo,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: widget.seleccionada ? _marino : Colors.transparent, width: 3),
-            boxShadow: [if (_encima || widget.seleccionada) BoxShadow(color: fondo.withValues(alpha: 0.45), blurRadius: 18, offset: const Offset(0, 8))],
+            color: c.tarjeta,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: widget.seleccionada ? c.primario : c.borde, width: widget.seleccionada ? 2 : 1),
+            boxShadow: [if (_encima) BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, 6))],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Row(
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(widget.icono, color: tinta, size: 28),
-                  const Spacer(),
-                  if (widget.seleccionada) Icon(Icons.check_circle_rounded, color: tinta, size: 22),
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(color: fondo, borderRadius: BorderRadius.circular(18)),
+                    child: Icon(widget.icono, color: tinta, size: 28),
+                  ),
+                  const SizedBox(height: 10),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(widget.texto, maxLines: 1, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 15)),
+                  ),
                 ],
               ),
-              // Nombres largos ("Supermercado") se achican en vez de cortarse
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(widget.texto, maxLines: 1, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: tinta, fontWeight: FontWeight.w800)),
-              ),
+              if (widget.seleccionada) Positioned(top: 0, right: 0, child: Icon(Icons.check_circle_rounded, color: c.primario, size: 20)),
             ],
           ),
         ),
@@ -161,7 +162,7 @@ class _FichaCategoriaState extends State<FichaCategoria> {
   }
 }
 
-/// Tarjeta grande de un negocio: foto con "Abierto"/"Cerrado" y el tiempo, y debajo nombre, categoría y envío
+/// Tarjeta blanca de un negocio: foto arriba con "Abierto"/"Cerrado", y debajo nombre, categoría, tiempo y envío
 class TarjetaNegocioEscritorio extends StatefulWidget {
   const TarjetaNegocioEscritorio({super.key, required this.negocio, required this.onTap});
 
@@ -180,7 +181,7 @@ class _TarjetaNegocioEscritorioState extends State<TarjetaNegocioEscritorio> {
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
     final n = widget.negocio;
-    final color = colorCategoria(n.categoria.codigo);
+    final (fondo, tinta) = colorCategoria(n.categoria.codigo);
     final envio = n.costoEnvio == 0 ? 'Envío gratis' : 'Envío ${n.envioEstimado ? '' : 'desde '}${Formato.dinero(n.costoEnvio)}';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -188,77 +189,81 @@ class _TarjetaNegocioEscritorioState extends State<TarjetaNegocioEscritorio> {
       onExit: (_) => setState(() => _encima = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: AnimatedScale(
-                scale: _encima ? 1.02 : 1,
-                duration: const Duration(milliseconds: 180),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Hero(
-                        tag: 'portada-negocio-${n.id}',
-                        child: n.portada != null
-                            ? ImagenRed(url: n.portada, radio: 0)
-                            : Container(
-                                color: Color.alphaBlend(color.withValues(alpha: 0.35), Colors.white),
-                                child: Icon(n.categoria.icono, size: 64, color: _marino.withValues(alpha: 0.55)),
-                              ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          transform: Matrix4.translationValues(0, _encima ? -4 : 0, 0),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: c.tarjeta,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(color: const Color(0xFF102818).withValues(alpha: 0.06), blurRadius: 2, offset: const Offset(0, 1)),
+              BoxShadow(color: const Color(0xFF102818).withValues(alpha: _encima ? 0.14 : 0.06), blurRadius: _encima ? 28 : 24, offset: const Offset(0, 8)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Hero(
+                      tag: 'portada-negocio-${n.id}',
+                      child: n.portada != null
+                          ? ImagenRed(url: n.portada, radio: 0)
+                          : Container(color: fondo, child: Icon(n.categoria.icono, size: 56, color: tinta.withValues(alpha: 0.7))),
+                    ),
+                    if (!n.abiertoAhora) Container(color: Colors.black.withValues(alpha: 0.30)),
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: _Pastilla(
+                        n.abiertoAhora ? 'Abierto' : 'Cerrado',
+                        fondo: n.abiertoAhora ? Colors.white : const Color(0xFF15201A),
+                        tinta: n.abiertoAhora ? const Color(0xFF187A3C) : Colors.white,
                       ),
-                      if (!n.abiertoAhora) Container(color: Colors.black.withValues(alpha: 0.35)),
+                    ),
+                    if (n.logo != null)
                       Positioned(
-                        top: 12,
                         right: 12,
-                        child: _Pastilla(
-                          n.abiertoAhora ? 'Abierto' : 'Cerrado',
-                          fondo: n.abiertoAhora ? const Color(0xFF35B35A) : _marino,
-                          tinta: n.abiertoAhora ? _marino : Colors.white,
+                        bottom: 12,
+                        child: Container(
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white, width: 2)),
+                          child: ImagenRed(url: n.logo, ancho: 44, alto: 44, radio: 12),
                         ),
                       ),
-                      Positioned(left: 12, bottom: 12, child: _Pastilla('${n.tiempoPreparacion} min', fondo: Colors.white, tinta: _marino)),
-                      if (n.logo != null)
-                        Positioned(
-                          right: 12,
-                          bottom: 12,
-                          child: Container(
-                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white, width: 2)),
-                            child: ImagenRed(url: n.logo, ancho: 44, alto: 44, radio: 12),
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(n.nombre, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontSize: 18), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                  if (n.numeroCalificaciones > 0) ...[
-                    const Icon(Icons.star_rounded, size: 18, color: AppTheme.accentColor),
-                    Text(' ${n.calificacion.toStringAsFixed(1)}', style: tema.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(n.nombre, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontSize: 17), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        if (n.numeroCalificaciones > 0) ...[
+                          const Icon(Icons.star_rounded, size: 18, color: AppTheme.accentColor),
+                          Text(' ${n.calificacion.toStringAsFixed(1)}', style: tema.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(n.categoria.descripcion, style: tema.bodyMedium?.copyWith(color: c.textoSuave), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${n.tiempoPreparacion} min · $envio',
+                      style: tema.labelLarge?.copyWith(fontWeight: FontWeight.w600, color: c.texto),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
-                ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
-              child: Text(
-                '${n.categoria.descripcion} · $envio',
-                style: tema.bodyMedium?.copyWith(color: c.textoSuave),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

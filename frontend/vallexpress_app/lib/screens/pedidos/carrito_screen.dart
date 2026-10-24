@@ -55,7 +55,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
       final direcciones = r[0].map((d) => Direccion.desdeJson(Map<String, dynamic>.from(d))).toList();
       setState(() {
         _direcciones = direcciones;
-        _direccion = direcciones.where((d) => d.id == _direccion?.id).firstOrNull ?? direcciones.where((d) => d.esPredeterminada).firstOrNull ?? direcciones.firstOrNull;
+        _direccion =
+            direcciones.where((d) => d.id == _direccion?.id).firstOrNull ?? direcciones.where((d) => d.esPredeterminada).firstOrNull ?? direcciones.firstOrNull;
         _metodos = r[1] as List<MetodoPago>;
         if (!_metodos.any((m) => m.codigo == _metodo) && _metodos.isNotEmpty) _metodo = _metodos.first.codigo;
       });
@@ -68,7 +69,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
   }
 
   Future<void> _elegirDireccion() async {
-    final elegida = await mostrarHoja<Object>(context,
+    final elegida = await mostrarHoja<Object>(
+      context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (ctx) => SafeArea(
@@ -96,7 +98,12 @@ class _CarritoScreenState extends State<CarritoScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(d.titulo, style: Theme.of(ctx).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                              Text(d.direccion, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: ctx.colores.textoSuave)),
+                              Text(
+                                d.direccion,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: ctx.colores.textoSuave),
+                              ),
                             ],
                           ),
                         ),
@@ -105,7 +112,12 @@ class _CarritoScreenState extends State<CarritoScreen> {
                     ),
                   ),
                 ),
-              BotonValle(texto: 'Agregar o editar direcciones', icono: Icons.add_location_alt_outlined, tipo: TipoBoton.secundario, onPressed: () => Navigator.pop(ctx, 'gestionar')),
+              BotonValle(
+                texto: 'Agregar o editar direcciones',
+                icono: Icons.add_location_alt_outlined,
+                tipo: TipoBoton.secundario,
+                onPressed: () => Navigator.pop(ctx, 'gestionar'),
+              ),
             ],
           ),
         ),
@@ -159,7 +171,11 @@ class _CarritoScreenState extends State<CarritoScreen> {
       carrito.vaciar();
       final nav = Navigator.of(context);
       nav.popUntil((r) => r.isFirst);
-      nav.push(MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido, recienHecho: true)));
+      nav.push(
+        MaterialPageRoute(
+          builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido, recienHecho: true),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         setState(() => _enviando = false);
@@ -191,188 +207,247 @@ class _CarritoScreenState extends State<CarritoScreen> {
     final falta = carrito.faltaParaMinimo;
     final recibe = n.abiertoAhora && n.aceptaPedidos;
 
-    return FondoValle(
-      titulo: 'Tu carrito',
-      acciones: [
-        TextButton(
-          onPressed: () async {
-            final ok = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('¿Vaciar el carrito?'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-                  TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Vaciar')),
-                ],
-              ),
-            );
-            if (ok == true) carrito.vaciar();
-          },
-          child: const Text('Vaciar'),
+    final vaciar = TextButton(
+      onPressed: () async {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('¿Vaciar el carrito?'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Vaciar')),
+            ],
+          ),
+        );
+        if (ok == true) carrito.vaciar();
+      },
+      child: const Text('Vaciar'),
+    );
+    final hacerPedido = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (falta > 0 || !recibe)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              !recibe
+                  ? '${n.nombre} no está recibiendo pedidos en este momento'
+                  : 'Agrega ${Formato.dinero(falta)} más para llegar al pedido mínimo (${Formato.dinero(n.pedidoMinimo)})',
+              textAlign: TextAlign.center,
+              style: tema.bodySmall?.copyWith(color: AppTheme.warningColor, fontWeight: FontWeight.w600),
+            ),
+          ),
+        BotonValle(
+          texto: _direccion == null && !_cargando
+              ? 'Elige a dónde llevarlo'
+              : _fuera
+              ? 'Fuera del área de entrega'
+              : 'Hacer pedido · ${Formato.dinero(_total(carrito))}',
+          icono: Icons.check_rounded,
+          cargando: _enviando,
+          onPressed: (_cargando || _cotizando || _fuera || falta > 0 || !recibe) ? null : () => _pedir(carrito),
         ),
       ],
+    );
+    final productos = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            ImagenRed(url: n.logo, ancho: 44, alto: 44, radio: 12, icono: n.categoria.icono),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(n.nombre, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            ),
+            TextButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n))),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Agregar más'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TarjetaValle(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            children: [
+              for (final (i, item) in carrito.items.indexed) ...[
+                if (i > 0) Divider(height: 1, color: c.borde, indent: 16, endIndent: 16),
+                _LineaCarrito(item: item, carrito: carrito),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+    final entrega = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const EncabezadoSeccion('Entrega'),
+        TarjetaValle(
+          onTap: _cargando ? null : _elegirDireccion,
+          child: Row(
+            children: [
+              Icon(_direccion?.tipo.icono ?? Icons.add_location_alt_outlined, color: c.primario),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _cargando
+                    ? const LinearProgressIndicator()
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_direccion?.titulo ?? 'Agrega una dirección de entrega', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                          if (_direccion != null)
+                            Text(
+                              _direccion!.direccion,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: tema.bodySmall?.copyWith(color: c.textoSuave),
+                            ),
+                        ],
+                      ),
+              ),
+              Text('Cambiar', style: tema.labelLarge?.copyWith(color: c.primario)),
+            ],
+          ),
+        ),
+        if (_fuera) ...[
+          const SizedBox(height: 10),
+          InsigniaValle(
+            'Esta dirección está fuera del área de entrega de ${n.nombre} (hasta ${_envio!.radioKm.toStringAsFixed(0)} km). Elige otra dirección',
+            color: AppTheme.errorColor,
+            icono: Icons.wrong_location_outlined,
+          ),
+        ],
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Icon(Icons.timer_outlined, size: 18, color: c.textoSuave),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text('Llega en unos ${n.tiempoPreparacion + 15} min', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+            ),
+          ],
+        ),
+      ],
+    );
+    final pago = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const EncabezadoSeccion('¿Cómo vas a pagar?'),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            // Transferencia solo si el negocio registró cuentas para recibirla
+            for (final m in _metodos.where((m) => m.codigo != 'transferencia' || n.aceptaTransferencia))
+              ChoiceChip(
+                avatar: Icon(m.icono, size: 18, color: _metodoElegido(n) == m.codigo ? Colors.white : c.textoSuave),
+                label: Text(m.descripcion),
+                selected: _metodoElegido(n) == m.codigo,
+                showCheckmark: false,
+                labelStyle: TextStyle(color: _metodoElegido(n) == m.codigo ? Colors.white : c.texto, fontWeight: FontWeight.w600),
+                onSelected: (_) => setState(() => _metodo = m.codigo),
+              ),
+          ],
+        ),
+        if (_metodoElegido(n) == 'efectivo') ...[
+          const SizedBox(height: 8),
+          Text(
+            'Pagas al recibir. Ten el monto exacto si puedes.${!n.aceptaTransferencia && _metodos.any((m) => m.codigo == 'transferencia') ? ' Este negocio todavía no recibe transferencias.' : ''}',
+            style: tema.bodySmall?.copyWith(color: c.textoSuave),
+          ),
+        ] else if (_metodoElegido(n) == 'transferencia') ...[
+          const SizedBox(height: 8),
+          Text(
+            'Cuando el negocio confirme tu pedido verás sus cuentas: transfieres y subes la foto del comprobante. Así no pagas algo que no te puedan atender.',
+            style: tema.bodySmall?.copyWith(color: c.textoSuave),
+          ),
+        ],
+      ],
+    );
+    final indicaciones = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const EncabezadoSeccion('Indicaciones (opcional)'),
+        TextField(
+          controller: _notas,
+          maxLength: 300,
+          maxLines: 2,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Ej: tocar el timbre, casa de dos pisos', prefixIcon: Icon(Icons.chat_bubble_outline_rounded)),
+        ),
+      ],
+    );
+    final resumen = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const EncabezadoSeccion('Resumen'),
+        TarjetaValle(
+          child: Column(
+            children: [
+              _FilaMonto('Productos', carrito.subtotal),
+              const SizedBox(height: 8),
+              _FilaMonto(
+                _envio?.distanciaKm != null ? 'Envío (${_envio!.distanciaKm!.toStringAsFixed(1)} km)' : 'Envío',
+                _costoEnvio(carrito),
+                gratis: _costoEnvio(carrito) == 0,
+                cargando: _cotizando,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Divider(height: 1, color: c.borde),
+              ),
+              _FilaMonto('Total', _total(carrito), destacado: true),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    // Computador: a la izquierda lo que lleva y a dónde; a la derecha cómo paga, el resumen y el botón
+    if (esEscritorio(context)) {
+      return PaginaEscritorio(
+        titulo: 'Tu carrito',
+        subtitulo: 'Pedido a ${n.nombre}',
+        icono: Icons.shopping_bag_rounded,
+        conAtras: true,
+        acciones: [vaciar],
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [productos, const SizedBox(height: 16), entrega, const SizedBox(height: 16), indicaciones]),
+            ),
+            const SizedBox(width: 32),
+            SizedBox(
+              width: 400,
+              child: TarjetaValle(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [pago, resumen, const SizedBox(height: 20), hacerPedido]),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return FondoValle(
+      titulo: 'Tu carrito',
+      acciones: [vaciar],
       barraInferior: SafeArea(
         top: false,
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          decoration: BoxDecoration(color: c.tarjeta, border: Border(top: BorderSide(color: c.borde))),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (falta > 0 || !recibe)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    !recibe ? '${n.nombre} no está recibiendo pedidos en este momento' : 'Agrega ${Formato.dinero(falta)} más para llegar al pedido mínimo (${Formato.dinero(n.pedidoMinimo)})',
-                    textAlign: TextAlign.center,
-                    style: tema.bodySmall?.copyWith(color: AppTheme.warningColor, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              BotonValle(
-                texto: _direccion == null && !_cargando
-                    ? 'Elige a dónde llevarlo'
-                    : _fuera
-                        ? 'Fuera del área de entrega'
-                        : 'Hacer pedido · ${Formato.dinero(_total(carrito))}',
-                icono: Icons.check_rounded,
-                cargando: _enviando,
-                onPressed: (_cargando || _cotizando || _fuera || falta > 0 || !recibe) ? null : () => _pedir(carrito),
-              ),
-            ],
+          decoration: BoxDecoration(
+            color: c.tarjeta,
+            border: Border(top: BorderSide(color: c.borde)),
           ),
+          child: hacerPedido,
         ),
       ),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        children: [
-          // ---------------------------- Negocio y productos ----------------------------
-          Row(
-            children: [
-              ImagenRed(url: n.logo, ancho: 44, alto: 44, radio: 12, icono: n.categoria.icono),
-              const SizedBox(width: 12),
-              Expanded(child: Text(n.nombre, style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-              TextButton.icon(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n))),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Agregar más'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TarjetaValle(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Column(
-              children: [
-                for (final (i, item) in carrito.items.indexed) ...[
-                  if (i > 0) Divider(height: 1, color: c.borde, indent: 16, endIndent: 16),
-                  _LineaCarrito(item: item, carrito: carrito),
-                ],
-              ],
-            ),
-          ),
-
-          // ---------------------------- Entrega ----------------------------
-          const EncabezadoSeccion('Entrega'),
-          TarjetaValle(
-            onTap: _cargando ? null : _elegirDireccion,
-            child: Row(
-              children: [
-                Icon(_direccion?.tipo.icono ?? Icons.add_location_alt_outlined, color: c.primario),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _cargando
-                      ? const LinearProgressIndicator()
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_direccion?.titulo ?? 'Agrega una dirección de entrega', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                            if (_direccion != null) Text(_direccion!.direccion, maxLines: 2, overflow: TextOverflow.ellipsis, style: tema.bodySmall?.copyWith(color: c.textoSuave)),
-                          ],
-                        ),
-                ),
-                Text('Cambiar', style: tema.labelLarge?.copyWith(color: c.primario)),
-              ],
-            ),
-          ),
-          if (_fuera) ...[
-            const SizedBox(height: 10),
-            InsigniaValle(
-              'Esta dirección está fuera del área de entrega de ${n.nombre} (hasta ${_envio!.radioKm.toStringAsFixed(0)} km). Elige otra dirección',
-              color: AppTheme.errorColor,
-              icono: Icons.wrong_location_outlined,
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(Icons.timer_outlined, size: 18, color: c.textoSuave),
-              const SizedBox(width: 6),
-              Expanded(child: Text('Llega en unos ${n.tiempoPreparacion + 15} min', style: tema.bodySmall?.copyWith(color: c.textoSuave))),
-            ],
-          ),
-
-          // ---------------------------- Pago ----------------------------
-          const EncabezadoSeccion('¿Cómo vas a pagar?'),
-          Wrap(
-            spacing: 10,
-            runSpacing: 8,
-            children: [
-              // Transferencia solo si el negocio registró cuentas para recibirla
-              for (final m in _metodos.where((m) => m.codigo != 'transferencia' || n.aceptaTransferencia))
-                ChoiceChip(
-                  avatar: Icon(m.icono, size: 18, color: _metodoElegido(n) == m.codigo ? Colors.white : c.textoSuave),
-                  label: Text(m.descripcion),
-                  selected: _metodoElegido(n) == m.codigo,
-                  showCheckmark: false,
-                  labelStyle: TextStyle(color: _metodoElegido(n) == m.codigo ? Colors.white : c.texto, fontWeight: FontWeight.w600),
-                  onSelected: (_) => setState(() => _metodo = m.codigo),
-                ),
-            ],
-          ),
-          if (_metodoElegido(n) == 'efectivo') ...[
-            const SizedBox(height: 8),
-            Text(
-              'Pagas al recibir. Ten el monto exacto si puedes.${!n.aceptaTransferencia && _metodos.any((m) => m.codigo == 'transferencia') ? ' Este negocio todavía no recibe transferencias.' : ''}',
-              style: tema.bodySmall?.copyWith(color: c.textoSuave),
-            ),
-          ] else if (_metodoElegido(n) == 'transferencia') ...[
-            const SizedBox(height: 8),
-            Text(
-              'Cuando el negocio confirme tu pedido verás sus cuentas: transfieres y subes la foto del comprobante. Así no pagas algo que no te puedan atender.',
-              style: tema.bodySmall?.copyWith(color: c.textoSuave),
-            ),
-          ],
-
-          // ---------------------------- Indicaciones ----------------------------
-          const EncabezadoSeccion('Indicaciones (opcional)'),
-          TextField(
-            controller: _notas,
-            maxLength: 300,
-            maxLines: 2,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(hintText: 'Ej: tocar el timbre, casa de dos pisos', prefixIcon: Icon(Icons.chat_bubble_outline_rounded)),
-          ),
-
-          // ---------------------------- Resumen ----------------------------
-          const EncabezadoSeccion('Resumen'),
-          TarjetaValle(
-            child: Column(
-              children: [
-                _FilaMonto('Productos', carrito.subtotal),
-                const SizedBox(height: 8),
-                _FilaMonto(
-                  _envio?.distanciaKm != null ? 'Envío (${_envio!.distanciaKm!.toStringAsFixed(1)} km)' : 'Envío',
-                  _costoEnvio(carrito),
-                  gratis: _costoEnvio(carrito) == 0,
-                  cargando: _cotizando,
-                ),
-                Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1, color: c.borde)),
-                _FilaMonto('Total', _total(carrito), destacado: true),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [productos, entrega, pago, indicaciones, resumen]),
     );
   }
 }
@@ -422,14 +497,20 @@ class _LineaCarrito extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(p.nombre, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                Text(Formato.dinero(item.subtotal), style: tema.bodyMedium?.copyWith(color: c.primario, fontWeight: FontWeight.w700)),
+                Text(
+                  Formato.dinero(item.subtotal),
+                  style: tema.bodyMedium?.copyWith(color: c.primario, fontWeight: FontWeight.w700),
+                ),
                 InkWell(
                   onTap: () => _editarNota(context),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Text(
                       item.notas ?? '+ Agregar nota',
-                      style: tema.bodySmall?.copyWith(color: item.notas == null ? c.textoSuave : c.texto, fontStyle: item.notas == null ? null : FontStyle.italic),
+                      style: tema.bodySmall?.copyWith(
+                        color: item.notas == null ? c.textoSuave : c.texto,
+                        fontStyle: item.notas == null ? null : FontStyle.italic,
+                      ),
                     ),
                   ),
                 ),
