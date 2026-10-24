@@ -5,8 +5,18 @@ const admin = require('firebase-admin');
 //   'general'  cuenta, aprobaciones y demás: suena sin interrumpir tanto
 const canalDe = (tipo = '') => (/^(pedido|repartidor_cerca|repartidor_asignado)/.test(tipo) ? 'pedidos' : 'general');
 
+// Dirección de la app web (la primera https de CORS_ORIGENES, p. ej. https://app.vallexpress.com): al tocar una
+// notificación en el navegador se abre ahí, con el aviso para que la web abra ese pedido
+function enlaceWeb(data = {}) {
+  const web = String(process.env.CORS_ORIGENES || '').split(',').map((o) => o.trim().replace(/\/$/, '')).find((o) => o.startsWith('https://'));
+  if (!web) return null;
+  const q = new URLSearchParams({ aviso: String(data.tipo || 'aviso'), ...(data.pedidoId && { pedido: String(data.pedidoId) }) });
+  return { web, link: `${web}/inicio?${q}` };
+}
+
 // Arma el mensaje de FCM (los valores de "data" deben ser texto)
 function armarMensaje(fcmToken, title, body, data = {}) {
+  const web = enlaceWeb(data);
   return {
     notification: {
       title,
@@ -29,6 +39,13 @@ function armarMensaje(fcmToken, title, body, data = {}) {
       }
     },
     apns: { payload: { aps: { sound: 'default' } } },   // iPhone: también con sonido
+    // Navegador (app.vallexpress.com): con el logo y, al tocarla, abre la web en ese pedido
+    ...(web && {
+      webpush: {
+        notification: { icon: `${web.web}/icons/Icon-192.png`, ...(data.pedidoId && { tag: `pedido-${data.pedidoId}-${data.tipo || ''}` }) },
+        fcmOptions: { link: web.link },
+      },
+    }),
   };
 }
 

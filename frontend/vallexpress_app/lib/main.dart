@@ -18,7 +18,7 @@ import 'screens/inicio/inicio_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/version_app.dart';
 import 'services/fcm_mobile.dart'
-    if (dart.library.html) 'providers/fcm_stub_import.dart';
+    if (dart.library.html) 'services/fcm_web.dart';
 
 void main() async {
   // Web: direcciones limpias (app.vallexpress.com/pedidos) en vez de /#/home. En el celular no hace nada.
@@ -36,6 +36,8 @@ void main() async {
     } catch (e) {
       debugPrint('❌ Error inicializando FCM: $e');
     }
+  } else {
+    FcmService.initialize(); // web: sin esperar, para no demorar la primera pantalla
   }
 
   runApp(const MyApp());

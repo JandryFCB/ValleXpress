@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../config/theme.dart';
 import '../providers/tema_provider.dart';
+import 'aviso_notificaciones.dart';
 import '../widgets/ui/animaciones.dart';
 
 /// En la web con pantalla ancha (computador o tablet de lado) la app usa el diseño de escritorio: menú lateral o
@@ -126,7 +127,7 @@ class PestanasAdaptables extends StatelessWidget {
 
     if (!esEscritorio(context)) {
       return Scaffold(
-        body: contenido,
+        body: Column(children: [const AvisoNotificaciones(), Expanded(child: contenido)]),
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -155,6 +156,7 @@ class PestanasAdaptables extends StatelessWidget {
         body: Column(
           children: [
             _BarraSuperior(indice: indice, onCambiar: onCambiar, destinos: destinos, acciones: accionesSuperiores, icono: _icono),
+            const AvisoNotificaciones(),
             Expanded(child: interno),
           ],
         ),
@@ -166,7 +168,7 @@ class PestanasAdaptables extends StatelessWidget {
       body: Row(
         children: [
           _MenuLateral(indice: indice, onCambiar: onCambiar, destinos: destinos, cabecera: cabeceraLateral),
-          Expanded(child: interno),
+          Expanded(child: Column(children: [const AvisoNotificaciones(), Expanded(child: interno)])),
         ],
       ),
     );

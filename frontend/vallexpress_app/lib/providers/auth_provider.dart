@@ -15,7 +15,7 @@ import '../services/gps_repartidor.dart';
 import '../models/pedido.dart';
 import '../services/pedidos_service.dart';
 import '../services/fcm_mobile.dart'
-    if (dart.library.html) 'fcm_stub_import.dart';
+    if (dart.library.html) '../services/fcm_web.dart';
 
 /// Estado de la sesión del usuario. Sesión persistente: al abrir la app se restaura sola con el refresh token
 /// guardado (cifrado), así que el usuario solo escribe su clave la primera vez o cuando la cierra él mismo.

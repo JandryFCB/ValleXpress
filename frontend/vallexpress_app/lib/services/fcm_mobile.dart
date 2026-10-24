@@ -179,6 +179,11 @@ class NotificationService {
 }
 
 class FcmService {
+  // Solo en la web (fcm_web.dart): el aviso "Activa las notificaciones". En el celular el permiso se pide al abrir.
+  static bool get permisoPendiente => false;
+  static void descartar() {}
+  static Future<bool> activar() async => false;
+
   static String get _plataforma => Platform.isIOS ? 'ios' : 'android';
 
   static Future<void> _registrar(String token) async {
