@@ -45,7 +45,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       final contexto = tester.element(find.byType(LoginScreen));
-      final esperado = modo == ThemeMode.dark ? AppTheme.backgroundColor : const Color(0xFFF4F8F5);
+      final esperado = modo == ThemeMode.dark ? AppTheme.backgroundColor : const Color(0xFFF6F8F7);
       expect(contexto.colores.fondo, esperado);
     });
   }

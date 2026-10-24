@@ -19,6 +19,7 @@ class FondoValle extends StatelessWidget {
     this.zonaSegura = true,
     this.resizeToAvoidBottomInset = true,
     this.anchoCompleto = false,
+    this.anchoEscritorio = 840,
   });
 
   final Widget child;
@@ -35,6 +36,9 @@ class FondoValle extends StatelessWidget {
 
   /// En el computador la pantalla se centra con un ancho cómodo; true = usa todo el ancho (mapas, tableros)
   final bool anchoCompleto;
+
+  /// Ancho máximo en el computador (los tableros usan más)
+  final double anchoEscritorio;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +66,6 @@ class FondoValle extends StatelessWidget {
       ),
     );
     if (anchoCompleto || !esEscritorio(context)) return pantalla;
-    return ColoredBox(color: c.fondo, child: AnchoMaximo(child: pantalla));
+    return ColoredBox(color: c.fondo, child: AnchoMaximo(ancho: anchoEscritorio, child: pantalla));
   }
 }

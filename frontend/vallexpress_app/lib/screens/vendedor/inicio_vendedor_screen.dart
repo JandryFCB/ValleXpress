@@ -5,6 +5,7 @@ import '../../models/negocio.dart';
 import '../../services/catalogo_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
+import '../../utils/sonido.dart';
 import '../../widgets/panel_aprobacion.dart';
 import '../../widgets/ui/ui.dart';
 import '../../config/theme.dart';
@@ -37,7 +38,7 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
         if (!mounted) return;
         if (a.tipo == 'pedido_nuevo') {
           HapticFeedback.heavyImpact();
-          SystemSound.play(SystemSoundType.alert);
+          sonarPedidoNuevo();
         }
         mostrarMensaje(context, a.tipo == 'pedido_nuevo' ? '🛒 ${a.titulo} ${a.mensaje}' : a.titulo);
         // La decisión del administrador sobre el negocio: se recarga al instante

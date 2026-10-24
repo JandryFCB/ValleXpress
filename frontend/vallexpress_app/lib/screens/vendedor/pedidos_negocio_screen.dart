@@ -26,6 +26,7 @@ class PedidosNegocioScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: FondoValle(
+        anchoEscritorio: 1280, // en el computador, los pedidos en curso van en columnas
         appBar: AppBar(
           title: const Text('Pedidos'),
           automaticallyImplyLeading: conFlechaAtras,
@@ -120,6 +121,7 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
         ]),
       );
     }
+    if (widget.estado == 'activos' && esEscritorio(context)) return _tablero();
     // Primero lo que necesita una acción del negocio
     final orden = [..._pedidos]..sort((a, b) => _prioridad(a).compareTo(_prioridad(b)));
     return RefreshIndicator(
@@ -145,12 +147,94 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
     );
   }
 
+  void _abrir(Pedido p) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoNegocioScreen(pedidoId: p.id, inicial: p)));
+    _cargar();
+  }
+
+  /// En el computador: los pedidos en curso en columnas, de izquierda a derecha según el paso en que van
+  Widget _tablero() {
+    final columnas = [
+      ('Nuevos', AppTheme.warningColor, _pedidos.where((p) => p.estado == EstadoPedido.pendiente).toList()),
+      ('Aceptados', AppTheme.infoColor, _pedidos.where((p) => p.estado == EstadoPedido.confirmado).toList()),
+      ('Preparando', AppTheme.successColor, _pedidos.where((p) => p.estado == EstadoPedido.preparando).toList()),
+      ('Listos y en camino', context.colores.textoSuave, _pedidos.where((p) => p.estado.activo && _prioridad(p) >= 2).toList()),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (i, (titulo, color, lista)) in columnas.indexed) ...[
+            if (i > 0) const SizedBox(width: 14),
+            Expanded(child: _Columna(titulo: titulo, color: color, pedidos: lista, alCambiar: _cargar, onTap: _abrir)),
+          ],
+        ],
+      ),
+    );
+  }
+
   static int _prioridad(Pedido p) => switch (p.estado) {
         EstadoPedido.pendiente => 0,
         EstadoPedido.confirmado || EstadoPedido.preparando => 1,
         EstadoPedido.listo => 2,
         _ => 3,
       };
+}
+
+/// Una columna del tablero de pedidos (computador)
+class _Columna extends StatelessWidget {
+  const _Columna({required this.titulo, required this.color, required this.pedidos, required this.alCambiar, required this.onTap});
+
+  final String titulo;
+  final Color color;
+  final List<Pedido> pedidos;
+  final VoidCallback alCambiar;
+  final void Function(Pedido) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    return Container(
+      decoration: BoxDecoration(color: c.tarjetaElevada, borderRadius: BorderRadius.circular(20)),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+            child: Row(
+              children: [
+                Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(titulo, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
+                Text('${pedidos.length}', style: tema.labelLarge?.copyWith(color: c.textoSuave, fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+          Flexible(
+            child: pedidos.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text('Nada por aquí', textAlign: TextAlign.center, style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(bottom: 4),
+                    itemCount: pedidos.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) => Aparecer(
+                      key: ValueKey('tablero-${pedidos[i].id}'),
+                      indice: i,
+                      child: TarjetaPedidoNegocio(pedido: pedidos[i], alCambiar: alCambiar, onTap: () => onTap(pedidos[i])),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Tarjeta de un pedido para el negocio: cliente, productos, total y el botón del siguiente paso
@@ -347,28 +431,29 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
     if (motivo != null) await _cambiar('rechazado', motivo: motivo, exito: 'Pedido rechazado');
   }
 
+  /// Botón secundario y principal lado a lado; si no caben (columnas del tablero en el computador), uno encima del otro
+  Widget _dos(Widget secundario, Widget principal, {int flexPrincipal = 2}) => LayoutBuilder(
+        builder: (_, medidas) => medidas.maxWidth < 300
+            ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [principal, const SizedBox(height: 8), secundario])
+            : Row(children: [Expanded(child: secundario), const SizedBox(width: 10), Expanded(flex: flexPrincipal, child: principal)]),
+      );
+
   @override
   Widget build(BuildContext context) {
     final p = widget.pedido;
     final c = context.colores;
     switch (p.estado) {
       case EstadoPedido.pendiente:
-        return Row(
-          children: [
-            Expanded(child: BotonValle(texto: 'Rechazar', tipo: TipoBoton.secundario, onPressed: _ocupado ? null : _rechazar)),
-            const SizedBox(width: 10),
-            Expanded(flex: 2, child: BotonValle(texto: 'Aceptar', icono: Icons.check_rounded, cargando: _ocupado, onPressed: _aceptar)),
-          ],
+        return _dos(
+          BotonValle(texto: 'Rechazar', tipo: TipoBoton.secundario, onPressed: _ocupado ? null : _rechazar),
+          BotonValle(texto: 'Aceptar', icono: Icons.check_rounded, cargando: _ocupado, onPressed: _aceptar),
         );
       // Por transferencia y sin pagar: primero se confirma el pago
       case EstadoPedido.confirmado when p.esperandoPago:
         if (p.transferencia?.comprobante?.enviado == true) {
-          return Row(
-            children: [
-              Expanded(child: BotonValle(texto: 'No me llegó', tipo: TipoBoton.secundario, onPressed: _ocupado ? null : () => _pago(false))),
-              const SizedBox(width: 10),
-              Expanded(flex: 2, child: BotonValle(texto: 'Pago recibido', icono: Icons.verified_rounded, cargando: _ocupado, onPressed: () => _pago(true))),
-            ],
+          return _dos(
+            BotonValle(texto: 'No me llegó', tipo: TipoBoton.secundario, onPressed: _ocupado ? null : () => _pago(false)),
+            BotonValle(texto: 'Pago recibido', icono: Icons.verified_rounded, cargando: _ocupado, onPressed: () => _pago(true)),
           );
         }
         return Row(children: [
@@ -378,12 +463,10 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
           TextButton(onPressed: _ocupado ? null : _rechazar, style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor), child: const Text('Rechazar')),
         ]);
       case EstadoPedido.confirmado:
-        return Row(
-          children: [
-            Expanded(child: BotonValle(texto: 'Preparando', tipo: TipoBoton.secundario, onPressed: _ocupado ? null : () => _cambiar('preparando', exito: 'Pedido en preparación'))),
-            const SizedBox(width: 10),
-            Expanded(child: BotonValle(texto: 'Listo', icono: Icons.inventory_2_rounded, cargando: _ocupado, onPressed: () => _cambiar('listo', exito: 'Avisamos a los repartidores'))),
-          ],
+        return _dos(
+          BotonValle(texto: 'Preparando', tipo: TipoBoton.secundario, onPressed: _ocupado ? null : () => _cambiar('preparando', exito: 'Pedido en preparación')),
+          BotonValle(texto: 'Listo', icono: Icons.inventory_2_rounded, cargando: _ocupado, onPressed: () => _cambiar('listo', exito: 'Avisamos a los repartidores')),
+          flexPrincipal: 1,
         );
       case EstadoPedido.preparando:
         return BotonValle(texto: 'Está listo', icono: Icons.inventory_2_rounded, cargando: _ocupado, onPressed: () => _cambiar('listo', exito: 'Avisamos a los repartidores'));
