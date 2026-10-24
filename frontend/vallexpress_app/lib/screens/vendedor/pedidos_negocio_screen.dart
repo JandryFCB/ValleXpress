@@ -26,7 +26,7 @@ class PedidosNegocioScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: FondoValle(
-        anchoEscritorio: 1280, // en el computador, los pedidos en curso van en columnas
+        anchoCompleto: true, // en el computador, los pedidos en curso van en columnas a todo el ancho
         appBar: AppBar(
           title: const Text('Pedidos'),
           automaticallyImplyLeading: conFlechaAtras,

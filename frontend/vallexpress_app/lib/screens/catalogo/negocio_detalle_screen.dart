@@ -262,7 +262,7 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
       backgroundColor: c.fondo,
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1280),
+          constraints: const BoxConstraints(maxWidth: double.infinity),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -270,7 +270,7 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
                 child: CustomScrollView(
                   slivers: [
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(32, 24, 24, 0),
+                      padding: const EdgeInsets.fromLTRB(margenWeb, 24, 24, 0),
                       sliver: SliverToBoxAdapter(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(28),
@@ -305,19 +305,19 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
                       ),
                     ),
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(32, 16, 24, 8),
+                      padding: const EdgeInsets.fromLTRB(margenWeb, 16, 24, 8),
                       sliver: SliverToBoxAdapter(child: _info()),
                     ),
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 8, 24),
+                      padding: const EdgeInsets.fromLTRB(margenWeb - 16, 0, 8, 24),
                       sliver: SliverMainAxisGroup(slivers: _menuSlivers(cuadricula: true)),
                     ),
                   ],
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(0, 24, 32, 24),
-                child: SizedBox(width: 360, child: _CarritoLateral(negocio: n)),
+                padding: const EdgeInsets.fromLTRB(0, 24, margenWeb, 24),
+                child: SizedBox(width: 380, child: _CarritoLateral(negocio: n)),
               ),
             ],
           ),

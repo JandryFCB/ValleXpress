@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../config/theme.dart';
+import 'escritorio.dart';
 
 /// Página de computador: título grande con subtítulo y acciones a la derecha, y el contenido debajo con un ancho
 /// cómodo. [child] se desplaza solo (si es una lista con su propio desplazamiento, usar [desplazable] = false).
@@ -12,7 +13,7 @@ class PaginaEscritorio extends StatelessWidget {
     this.acciones = const [],
     this.icono,
     this.desplazable = true,
-    this.ancho = 1280,
+    this.ancho = double.infinity,
     this.debajoDelTitulo,
     this.conAtras = false,
   });
@@ -35,7 +36,7 @@ class PaginaEscritorio extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
-    Widget limitado(Widget w, {EdgeInsets relleno = const EdgeInsets.symmetric(horizontal: 32)}) => Align(
+    Widget limitado(Widget w, {EdgeInsets relleno = const EdgeInsets.symmetric(horizontal: margenWeb)}) => Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(constraints: BoxConstraints(maxWidth: ancho), child: Padding(padding: relleno, child: w)),
         );
@@ -68,7 +69,7 @@ class PaginaEscritorio extends StatelessWidget {
           ...acciones,
         ],
       ),
-      relleno: const EdgeInsets.fromLTRB(32, 28, 32, 20),
+      relleno: const EdgeInsets.fromLTRB(margenWeb, 28, margenWeb, 20),
     );
 
     return Scaffold(
@@ -81,7 +82,7 @@ class PaginaEscritorio extends StatelessWidget {
           Expanded(
             child: desplazable
                 ? SingleChildScrollView(padding: const EdgeInsets.only(bottom: 40), child: limitado(child))
-                : limitado(child, relleno: const EdgeInsets.fromLTRB(32, 0, 32, 0)),
+                : limitado(child, relleno: const EdgeInsets.fromLTRB(margenWeb, 0, margenWeb, 0)),
           ),
         ],
       ),

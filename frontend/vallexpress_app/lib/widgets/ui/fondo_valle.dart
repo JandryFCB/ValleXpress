@@ -19,7 +19,7 @@ class FondoValle extends StatelessWidget {
     this.zonaSegura = true,
     this.resizeToAvoidBottomInset = true,
     this.anchoCompleto = false,
-    this.anchoEscritorio = 960,
+    this.anchoEscritorio = 1200,
   });
 
   final Widget child;
@@ -65,7 +65,7 @@ class FondoValle extends StatelessWidget {
         child: zonaSegura ? SafeArea(top: barra == null, child: child) : child,
       ),
     );
-    if (anchoCompleto || !esEscritorio(context)) return pantalla;
+    if (!esEscritorio(context)) return pantalla;
     // Computador: títulos grandes en negrita y más aire arriba, como una página web (vale para todas las pantallas)
     final tema = Theme.of(context);
     return ColoredBox(
@@ -78,7 +78,7 @@ class FondoValle extends StatelessWidget {
             titleTextStyle: tema.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6, color: c.texto),
           ),
         ),
-        child: AnchoMaximo(ancho: anchoEscritorio, child: pantalla),
+        child: anchoCompleto ? pantalla : AnchoMaximo(ancho: anchoEscritorio, child: pantalla),
       ),
     );
   }

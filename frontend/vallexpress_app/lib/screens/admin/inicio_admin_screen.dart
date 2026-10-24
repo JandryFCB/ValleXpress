@@ -133,7 +133,7 @@ class _ResumenState extends State<_Resumen> {
     final r = _r;
     final nombre = (context.select<AuthProvider, String?>((a) => a.usuario?['nombre']?.toString()) ?? 'Admin').split(' ').first;
     return FondoValle(
-      anchoEscritorio: 1120,
+      anchoCompleto: true,
       child: r == null
           ? (_error != null
                 ? EstadoVacio(
@@ -381,7 +381,7 @@ class _Cifras extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
-      childAspectRatio: esEscritorio(context) ? 1.9 : 1.45,
+      childAspectRatio: esEscritorio(context) ? 2.5 : 1.45,
       children: [for (final (i, t) in tarjetas.indexed) Aparecer(indice: i, child: t)],
     );
   }

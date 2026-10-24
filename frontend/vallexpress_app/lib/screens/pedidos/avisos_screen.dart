@@ -13,13 +13,12 @@ import '../../widgets/ui/ui.dart';
 /// la derecha) que se cierra al tocar fuera. Al tocar un aviso se cierra el panel y se abre lo que corresponde.
 Future<void> abrirAvisos(BuildContext context) {
   if (!esEscritorio(context)) return Navigator.push(context, MaterialPageRoute(builder: (_) => const AvisosScreen()));
-  final ancho = MediaQuery.sizeOf(context).width;
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.08),
     builder: (ctx) => Dialog(
       alignment: Alignment.topRight,
-      insetPadding: EdgeInsets.only(top: 70, right: ancho > 1280 ? (ancho - 1280) / 2 + 24 : 24),
+      insetPadding: const EdgeInsets.only(top: 70, right: margenWeb - 8),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(width: 400, height: (MediaQuery.sizeOf(ctx).height - 110).clamp(300, 560), child: AvisosScreen(panel: true, contextoPadre: contextoDeContenido(context))),
     ),

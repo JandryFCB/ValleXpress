@@ -1,13 +1,18 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../providers/tema_provider.dart';
 import '../widgets/ui/animaciones.dart';
 
 /// En la web con pantalla ancha (computador o tablet de lado) la app usa el diseño de escritorio: menú lateral o
 /// barra superior en vez de la barra de abajo, y el contenido centrado con un ancho cómodo de leer.
 /// En el celular (app o navegador del celular) todo sigue igual.
 const double anchoEscritorio = 900;
+
+/// Aire a los lados en el computador: la web usa todo el ancho de la pantalla
+const double margenWeb = 48;
 
 bool esEscritorio(BuildContext context) => kIsWeb && MediaQuery.sizeOf(context).width >= anchoEscritorio;
 
@@ -237,6 +242,7 @@ class _MenuLateral extends StatelessWidget {
           children: [
             const Padding(padding: EdgeInsets.only(left: 8, bottom: 24), child: LogoValle()),
             if (cabecera != null) ...[cabecera!, const SizedBox(height: 16)],
+            const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(left: 4, bottom: 12), child: BotonTema(conTexto: true))),
             for (var i = 0; i < destinos.length; i++)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
@@ -302,9 +308,9 @@ class _BarraSuperior extends StatelessWidget {
       decoration: BoxDecoration(color: c.tarjeta, border: Border(bottom: BorderSide(color: c.borde))),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1280),
+          constraints: const BoxConstraints(maxWidth: double.infinity),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: margenWeb, vertical: 12),
             child: Row(
               children: [
                 InkWell(borderRadius: BorderRadius.circular(12), onTap: () => onCambiar(0), child: const LogoValle()),
@@ -325,6 +331,8 @@ class _BarraSuperior extends StatelessWidget {
                     ),
                   ),
                 const Spacer(),
+                const BotonTema(),
+                const SizedBox(width: 4),
                 ...acciones,
               ],
             ),
@@ -389,4 +397,28 @@ Future<T?> mostrarHoja<T>(
 BuildContext contextoDeContenido(BuildContext context) {
   if (!esEscritorio(context)) return context;
   return _NavegadorInternoState._actual?.currentState?.overlay?.context ?? context;
+}
+
+/// Botón para cambiar entre modo claro y oscuro (en el computador, en la barra de arriba o en el menú lateral)
+class BotonTema extends StatelessWidget {
+  const BotonTema({super.key, this.conTexto = false});
+
+  final bool conTexto;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = context.watch<TemaProvider>();
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    void cambiar() => tema.cambiar(oscuro ? ThemeMode.light : ThemeMode.dark);
+    final icono = Icon(oscuro ? Icons.light_mode_rounded : Icons.dark_mode_rounded);
+    if (conTexto) {
+      return TextButton.icon(
+        onPressed: cambiar,
+        style: TextButton.styleFrom(foregroundColor: context.colores.textoSuave),
+        icon: icono,
+        label: Text(oscuro ? 'Modo claro' : 'Modo oscuro'),
+      );
+    }
+    return IconButton(tooltip: oscuro ? 'Modo claro' : 'Modo oscuro', onPressed: cambiar, icon: icono);
+  }
 }

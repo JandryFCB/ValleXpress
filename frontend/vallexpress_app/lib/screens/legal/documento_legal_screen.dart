@@ -49,6 +49,7 @@ class _DocumentoLegalScreenState extends State<DocumentoLegalScreen> {
     final d = _doc;
     final tema = Theme.of(context).textTheme;
     return FondoValle(
+      anchoEscritorio: 900,
       appBar: AppBar(
         title: Text(d?.esPrivacidad == true ? 'Privacidad' : 'Términos y condiciones'),
         actions: [

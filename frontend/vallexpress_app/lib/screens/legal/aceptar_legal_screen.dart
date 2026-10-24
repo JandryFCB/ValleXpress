@@ -53,6 +53,7 @@ class _AceptarLegalScreenState extends State<AceptarLegalScreen> {
     return PopScope(
       canPop: false,
       child: FondoValle(
+        anchoEscritorio: 900,
         child: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),

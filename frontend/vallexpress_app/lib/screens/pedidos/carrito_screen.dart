@@ -190,6 +190,41 @@ class _CarritoScreenState extends State<CarritoScreen> {
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
 
+    if (carrito.vacio && esEscritorio(context)) {
+      return PaginaEscritorio(
+        titulo: 'Tu carrito',
+        subtitulo: 'Aquí verás lo que vas a pedir',
+        icono: Icons.shopping_bag_rounded,
+        conAtras: Navigator.canPop(context),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 40),
+          child: TarjetaValle(
+            padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+            child: Column(
+              children: [
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(color: AppTheme.accentColor.withValues(alpha: 0.18), shape: BoxShape.circle),
+                  child: const Icon(Icons.shopping_bag_outlined, size: 44, color: Color(0xFFB07A00)),
+                ),
+                const SizedBox(height: 20),
+                Text('Tu carrito está vacío', style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text('Entra a un negocio, elige lo que quieras y aparecerá aquí.', style: tema.bodyLarge?.copyWith(color: c.textoSuave)),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size(240, 52)),
+                  onPressed: () => Navigator.maybePop(context),
+                  icon: const Icon(Icons.storefront_rounded),
+                  label: const Text('Ver negocios'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (carrito.vacio) {
       return FondoValle(
         titulo: 'Tu carrito',

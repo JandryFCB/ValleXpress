@@ -142,6 +142,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
         if (!hecho) _terminar();
       },
       child: FondoValle(
+        anchoEscritorio: 720,
         child: SafeArea(
           child: Column(
             children: [

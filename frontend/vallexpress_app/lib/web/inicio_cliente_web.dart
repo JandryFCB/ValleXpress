@@ -21,11 +21,16 @@ import '../widgets/ui/ui.dart';
       _ => (const Color(0xFFEEF0EF), const Color(0xFF4A5650)),
     };
 
-/// Margen lateral: el contenido queda centrado en 1280 px con 32 de aire (alineado con la barra de arriba)
-double margenEscritorio(BuildContext context) {
-  final ancho = MediaQuery.sizeOf(context).width;
-  return (ancho > 1280 ? (ancho - 1280) / 2 : 0) + 32;
+/// Igual que [colorCategoria] pero según el modo: en oscuro el pastel se vuelve un tono apagado y el ícono toma el
+/// color claro (el pastel encendido deslumbraba sobre el fondo oscuro)
+(Color, Color) coloresCategoria(BuildContext context, String? codigo) {
+  final (fondo, tinta) = colorCategoria(codigo);
+  if (Theme.of(context).brightness != Brightness.dark) return (fondo, tinta);
+  return (Color.alphaBlend(fondo.withValues(alpha: 0.14), context.colores.tarjetaElevada), fondo);
 }
+
+/// Margen lateral del inicio: todo el ancho de la pantalla con el mismo aire que la barra de arriba
+double margenEscritorio(BuildContext context) => margenWeb;
 
 /// Bienvenida verde con el buscador
 class BienvenidaEscritorio extends StatelessWidget {
@@ -117,7 +122,7 @@ class _FichaCategoriaState extends State<FichaCategoria> {
   @override
   Widget build(BuildContext context) {
     final c = context.colores;
-    final (fondo, tinta) = colorCategoria(widget.codigo);
+    final (fondo, tinta) = coloresCategoria(context, widget.codigo);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _encima = true),
@@ -181,7 +186,7 @@ class _TarjetaNegocioEscritorioState extends State<TarjetaNegocioEscritorio> {
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
     final n = widget.negocio;
-    final (fondo, tinta) = colorCategoria(n.categoria.codigo);
+    final (fondo, tinta) = coloresCategoria(context, n.categoria.codigo);
     final envio = n.costoEnvio == 0 ? 'Envío gratis' : 'Envío ${n.envioEstimado ? '' : 'desde '}${Formato.dinero(n.costoEnvio)}';
     return MouseRegion(
       cursor: SystemMouseCursors.click,
