@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../models/pedido.dart';
 import '../services/rutas.dart';
 import '../utils/contacto.dart';
+import 'zoom_mapa.dart';
 
 /// Mapa de una entrega: el negocio, la dirección de entrega y el repartidor (que se desliza suave entre una
 /// posición y la siguiente, en vez de saltar). Se encuadra solo para que se vean todos los puntos.
@@ -257,6 +258,8 @@ class _MapaPedidoState extends State<MapaPedido> with SingleTickerProviderStateM
                   const SizedBox(height: 8),
                   _BotonMapa(tooltip: 'Ampliar', icono: Icons.open_in_full_rounded, onPressed: _ampliar),
                 ],
+                const SizedBox(height: 8),
+                ZoomMapa(mapa: _mapa),
               ]),
             ),
             if (widget.pantallaCompleta && (widget.entrega ?? widget.negocio) != null)

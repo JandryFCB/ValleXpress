@@ -83,18 +83,20 @@ class BienvenidaEscritorio extends StatelessWidget {
           ),
           if (MediaQuery.sizeOf(context).width >= 1100) ...[
             const SizedBox(width: 40),
-            Container(
-              width: 300,
-              height: 260,
-              decoration: BoxDecoration(color: const Color(0xFF2B9B55), borderRadius: BorderRadius.circular(24)),
-              alignment: Alignment.center,
-              child: Flotar(
+            // Solo el logo flotando (sin recuadro): ocupa menos y deja respirar el texto
+            Flotar(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(34),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 24, offset: const Offset(0, 10))],
+                ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(40),
-                  child: Image.asset('assets/images/logo.png', width: 180, height: 180, fit: BoxFit.cover),
+                  borderRadius: BorderRadius.circular(34),
+                  child: Image.asset('assets/images/logo.png', width: 150, height: 150, fit: BoxFit.cover),
                 ),
               ),
             ),
+            const SizedBox(width: 24),
           ],
         ],
       ),

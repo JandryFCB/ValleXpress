@@ -8,7 +8,7 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="ValleXpress: pide comida, compras, farmacia y más a los negocios de tu zona.">
-  <meta name="theme-color" content="#072530">
+  <meta name="theme-color" content="#F6F8F7">
 
   <!-- iPhone: "Agregar a pantalla de inicio" la abre como una app (sin barra del navegador) -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -22,11 +22,41 @@
   <title>ValleXpress</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    /* Mientras carga la app: fondo del logo en vez de una página en blanco */
-    html, body { background: #072530; margin: 0; height: 100%; }
+    /* Mientras carga la app (al abrir o recargar): el mismo fondo claro de la app con el logo, para que no se
+       note un pantallazo oscuro. Si la persona eligió el modo oscuro, el fondo es el oscuro de la app. */
+    html, body { background: #F6F8F7; margin: 0; height: 100%; }
+    html.oscuro, html.oscuro body { background: #0B1A2B; }
+    #cargando {
+      position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 22px; background: inherit; transition: opacity .25s ease;
+    }
+    #cargando img { width: 96px; height: 96px; border-radius: 26px; box-shadow: 0 10px 30px rgba(16, 40, 24, .18);
+      animation: latido 1.4s ease-in-out infinite; }
+    #cargando .barra { width: 120px; height: 4px; border-radius: 4px; background: rgba(24, 122, 60, .15); overflow: hidden; }
+    #cargando .barra::after { content: ""; display: block; width: 40%; height: 100%; border-radius: 4px; background: #187A3C;
+      animation: avance 1s ease-in-out infinite; }
+    @keyframes latido { 50% { transform: scale(1.05); } }
+    @keyframes avance { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
   </style>
+  <script>
+    // Modo guardado por la app (shared_preferences guarda "flutter.tema" en el navegador)
+    try { if ((localStorage.getItem('flutter.tema') || '').indexOf('dark') >= 0) document.documentElement.className = 'oscuro'; } catch (e) {}
+  </script>
 </head>
 <body>
+  <div id="cargando" aria-label="Cargando ValleXpress">
+    <img src="icons/Icon-192.png" alt="ValleXpress">
+    <div class="barra"></div>
+  </div>
+  <script>
+    // Se quita apenas la app dibuja su primera pantalla
+    window.addEventListener('flutter-first-frame', function () {
+      var c = document.getElementById('cargando');
+      if (!c) return;
+      c.style.opacity = '0';
+      setTimeout(function () { c.remove(); }, 300);
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

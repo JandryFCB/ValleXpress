@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../../config/theme.dart';
 import '../../models/direccion.dart';
 import '../../widgets/ui/ui.dart';
+import '../../widgets/zoom_mapa.dart';
 
 /// Lo que devuelve el selector al guardar
 class DireccionElegida {
@@ -211,6 +212,7 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
             ),
           ),
         ),
+        Positioned(right: 12, bottom: 56, child: ZoomMapa(mapa: _mapa)),
         Positioned(
           left: 0,
           right: 0,
