@@ -59,6 +59,7 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: tema.modo,
+        builder: kIsWeb ? (context, hijo) => _MarcoWeb(child: hijo!) : null,
         home: const _PuertaDeSesion(),
         routes: {
           AppConstants.loginRoute: (_) => const LoginScreen(),
@@ -89,5 +90,37 @@ class _PuertaDeSesionState extends State<_PuertaDeSesion> {
     if (auth.isRestoring) return const SplashScreen();
     // Después de decidir no se vuelve a reaccionar: el login y el cierre de sesión navegan por su cuenta
     return _destino ??= auth.isAuthenticated ? const InicioScreen() : const LoginScreen();
+  }
+}
+
+/// En la web con pantalla ancha (computador, tablet de lado) la app se muestra centrada con el ancho de un celular
+/// grande: las pantallas están diseñadas para el celular y estiradas a todo el ancho se veían vacías y descuadradas.
+/// Se ajusta también el MediaQuery para que cada pantalla crea que mide eso (diálogos y hojas quedan dentro).
+class _MarcoWeb extends StatelessWidget {
+  const _MarcoWeb({required this.child});
+
+  static const double _ancho = 560;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    if (mq.size.width <= _ancho + 40) return child;
+    final c = context.colores;
+    return ColoredBox(
+      color: c.fondo,
+      child: Center(
+        child: Container(
+          width: _ancho,
+          decoration: BoxDecoration(
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 30)],
+          ),
+          child: MediaQuery(
+            data: mq.copyWith(size: Size(_ancho, mq.size.height)),
+            child: ClipRect(child: child),
+          ),
+        ),
+      ),
+    );
   }
 }

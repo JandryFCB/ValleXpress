@@ -60,6 +60,8 @@ services:
       DOMINIO_ANTERIOR: ${DOMINIO_ANTERIOR}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # La app web (flutter build web), la sube deploy/publicar-web.sh
+      - ./web:/srv/app:ro
       - caddy_datos:/data
       - caddy_config:/config
     depends_on: [backend]

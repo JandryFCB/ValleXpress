@@ -95,10 +95,15 @@ const { notFoundHandler, errorHandler } = require('./shared/middlewares/errorHan
 const app = express();
 const httpServer = createServer(app);
 
+// Orígenes del navegador que pueden usar la API (la app web, p. ej. https://app.vallexpress.com), separados por coma.
+// Vacío = cualquiera (desarrollo). Las apps del celular no mandan "Origin": a ellas no les afecta.
+const origenesPermitidos = String(process.env.CORS_ORIGENES || '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+const origenCors = origenesPermitidos.length ? origenesPermitidos : '*';
+
 // Configurar Socket.IO para tiempo real
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
+    origin: origenCors,
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   },
   // Evitar desconexiones por inactividad y permitir reanudación de sesión
@@ -123,8 +128,9 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', /^\d+$/.test(process.env.TRU
 // Middlewares globales
 app.use(solicitudId);          // identificador por petición (une los logs de una misma petición)
 
-app.use(helmet());
-app.use(cors());
+// Las fotos de /uploads se muestran desde la app web (otro subdominio): se permiten entre orígenes
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors({ origin: origenCors, maxAge: 86400 }));
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));

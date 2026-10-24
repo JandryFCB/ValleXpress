@@ -45,4 +45,5 @@ deploy/secretos/
 deploy/respaldos/
 # APK publicadas en el servidor (pesan ~60 MB; se suben con scp)
 deploy/descargas/
+deploy/web/
 backend/descargas/

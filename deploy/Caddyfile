@@ -16,3 +16,22 @@
 www.{$DOMINIO} {
 	redir https://{$DOMINIO}{uri} permanent
 }
+
+# app.vallexpress.com -> la app en la web (Flutter compilado, archivos estáticos en ./web; ver DESPLIEGUE.md §9).
+# Es la misma app del celular para clientes, negocios y el administrador (el repartidor necesita la app de Android).
+app.{$DOMINIO} {
+	encode gzip
+	root * /srv/app
+	# Rutas que no son archivos (p. ej. al recargar) abren la app
+	try_files {path} /index.html
+	file_server
+	header {
+		# Siempre se revisa si cambió (responde 304 si no): una versión nueva llega con solo recargar
+		Cache-Control "no-cache"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

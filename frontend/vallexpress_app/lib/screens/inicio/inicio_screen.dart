@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,7 @@ import 'tutorial_screen.dart';
 import '../catalogo/negocios_screen.dart';
 import '../admin/inicio_admin_screen.dart';
 import '../repartidor/inicio_repartidor_screen.dart';
+import 'solo_app_screen.dart';
 import '../vendedor/inicio_vendedor_screen.dart';
 import '../pedidos/avisos_screen.dart';
 import '../pedidos/carrito_screen.dart';
@@ -65,7 +67,8 @@ class _InicioScreenState extends State<InicioScreen> {
     if (_tutorial) return TutorialScreen(key: ValueKey('tutorial-$rol'), rol: rol, alTerminar: () => setState(() => _tutorial = false));
     return switch (rol) {
       'vendedor' => const InicioVendedorScreen(),
-      'repartidor' => const InicioRepartidorScreen(),
+      // En la web no se reparte (sin GPS en segundo plano ni avisos del celular)
+      'repartidor' => kIsWeb ? const SoloAppScreen() : const InicioRepartidorScreen(),
       'administrador' => const InicioAdminScreen(),
       _ => const InicioClienteScreen(),
     };

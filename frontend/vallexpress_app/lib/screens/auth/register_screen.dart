@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -288,14 +289,22 @@ class _PasoRol extends StatelessWidget {
           controlador: c,
         ),
         const SizedBox(height: 12),
-        _TarjetaRol(
-          valor: 'repartidor',
-          icono: Icons.two_wheeler_outlined,
-          titulo: 'Repartidor',
-          descripcion: 'Entrega pedidos y gana por cada envío que completes.',
-          color: AppTheme.repartidorColor,
-          controlador: c,
-        ),
+        // En la web no se reparte: el repartidor se registra desde la app de Android
+        if (kIsWeb)
+          Text(
+            '¿Quieres ser repartidor? Regístrate desde la app de ValleXpress para Android.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colores.textoSuave),
+            textAlign: TextAlign.center,
+          )
+        else
+          _TarjetaRol(
+            valor: 'repartidor',
+            icono: Icons.two_wheeler_outlined,
+            titulo: 'Repartidor',
+            descripcion: 'Entrega pedidos y gana por cada envío que completes.',
+            color: AppTheme.repartidorColor,
+            controlador: c,
+          ),
       ],
     );
   }

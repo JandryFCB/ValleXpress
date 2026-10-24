@@ -153,3 +153,30 @@ cd deploy && docker compose --env-file .env -f docker-compose.prod.yml up -d --b
 - [ ] Aprobación manual activada; tarifas, zona y cuenta de cobro revisadas.
 - [ ] UptimeRobot vigilando y primer respaldo copiado fuera del servidor.
 - [ ] Probar en un celular con la APK de producción: registro (llega el correo), pedido completo, notificaciones.
+
+## 9. La app en la web (https://app.vallexpress.com)
+
+La misma app de Flutter compilada para el navegador. Sirve para **clientes, negocios y el administrador** (y para
+quien tiene iPhone mientras no haya app de iOS: en Safari, *Compartir → Agregar a pantalla de inicio* la deja como
+una app). El **repartidor no**: en la web no puede registrarse y, si entra, se le pide usar la app de Android (necesita
+el GPS en segundo plano y los avisos del celular). En una pantalla ancha la app se ve centrada con ancho de celular.
+
+**Una sola vez:**
+1. Cloudflare → DNS → registro **A** `app` → la IP del servidor, en **Solo DNS** (nube gris), igual que `@` y `www`.
+2. En `deploy/.env` del servidor agrega `CORS_ORIGENES=https://app.vallexpress.com` (sin esto la API acepta
+   cualquier página web; con esto solo la app web; a las apps del celular no les afecta).
+3. `git pull` y reinicia Caddy y el backend para que tomen el Caddyfile, la carpeta `web` y el `.env`:
+   ```bash
+   cd ~/ValleXpress && git pull && mkdir -p deploy/web
+   cd deploy && docker compose --env-file .env -f docker-compose.prod.yml up -d --build backend caddy
+   ```
+   Caddy saca solo el certificado HTTPS de `app.vallexpress.com` (tarda unos segundos la primera vez).
+
+**Cada vez que publiques una versión web** (desde tu PC, Git Bash, en la raíz del repo):
+```bash
+bash deploy/publicar-web.sh root@IP_DEL_SERVIDOR          # compila con API_PROD=https://vallexpress.com y la sube
+```
+No hay que reiniciar nada: los navegadores reciben la versión nueva al recargar (sin caché del service worker).
+
+**Pendiente en la web:** notificaciones push del navegador (hoy los avisos llegan en vivo mientras la pestaña está
+abierta, con la campana; las push con la página cerrada necesitan la configuración web de Firebase).
