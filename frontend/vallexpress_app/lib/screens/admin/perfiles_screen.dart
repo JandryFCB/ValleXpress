@@ -81,8 +81,7 @@ class _PerfilesScreenState extends State<PerfilesScreen> {
     var aprobarPendientes = false;
     if (automatica && p.pendientes > 0) {
       // ¿Qué pasa con las que ya esperaban?
-      final eleccion = await showModalBottomSheet<bool>(
-        context: context,
+      final eleccion = await mostrarHoja<bool>(context,
         showDragHandle: true,
         builder: (ctx) => _HojaPendientes(cantidad: p.pendientes, plural: _textos(p.rol).plural),
       );

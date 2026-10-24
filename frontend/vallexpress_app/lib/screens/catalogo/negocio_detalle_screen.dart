@@ -75,8 +75,7 @@ class _NegocioDetalleScreenState extends State<NegocioDetalleScreen> {
       );
       return;
     }
-    showModalBottomSheet(
-      context: context,
+    mostrarHoja(context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _DetalleProducto(producto: p, recibePedidos: _recibePedidos, onAgregar: (cantidad, notas) => _agregar(p, cantidad, notas)),

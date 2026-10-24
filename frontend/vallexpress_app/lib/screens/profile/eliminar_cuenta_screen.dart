@@ -44,7 +44,7 @@ class _EliminarCuentaScreenState extends State<EliminarCuentaScreen> {
     );
     if (seguro != true || !mounted) return;
     setState(() => _eliminando = true);
-    final navegador = Navigator.of(context);
+    final navegador = Navigator.of(context, rootNavigator: true);
     final mensajero = ScaffoldMessenger.of(context);
     try {
       await context.read<AuthProvider>().eliminarCuenta(_clave.text);

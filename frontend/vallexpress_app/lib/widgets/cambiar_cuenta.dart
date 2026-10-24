@@ -28,7 +28,7 @@ Future<String?> _pedirClave(BuildContext context, String perfil) {
     builder: (ctx) => AlertDialog(
       title: Text('Entrar como ${perfilesCuenta[perfil]?.$2 ?? perfil}'),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('Escribe la contraseña de esa cuenta. Solo te la pedimos la primera vez en este celular.'),
+        const Text('Escribe la contraseña de esa cuenta. Solo te la pedimos la primera vez en este dispositivo.'),
         const SizedBox(height: 12),
         TextField(
           controller: clave,
@@ -51,7 +51,7 @@ Future<String?> _pedirClave(BuildContext context, String perfil) {
 /// bloqueada se avisa y no se deja escribir la clave. Si se bloquea mientras la escribe (muchos intentos), igual.
 Future<void> cambiarDeCuenta(BuildContext context, {required String usuario, required String tipoUsuario}) async {
   final auth = context.read<AuthProvider>();
-  final navegador = Navigator.of(context);
+  final navegador = Navigator.of(context, rootNavigator: true);
   Future<void> avisar(String estado, DateTime? hasta) =>
       context.mounted ? avisarCuentaBloqueada(context, usuario: usuario, perfil: tipoUsuario, estado: estado, hasta: hasta) : Future.value();
   try {
@@ -106,8 +106,7 @@ Future<void> avisarCuentaBloqueada(BuildContext context, {required String usuari
     _ => (Icons.block_rounded, AppTheme.errorColor, 'Tu cuenta de $nombre ($usuario) está bloqueada', 'Solicita el desbloqueo a soporte.'),
   };
   final mensaje = 'Hola, mi cuenta de $nombre de ValleXpress ($usuario) está bloqueada. ¿Me ayudan?';
-  await showModalBottomSheet<void>(
-    context: context,
+  await mostrarHoja<void>(context,
     showDragHandle: true,
     builder: (ctx) => SafeArea(
       child: Padding(
@@ -253,6 +252,32 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
 
   Widget _lista(BuildContext context, List<Map<String, dynamic>> otras) {
     final c = context.colores;
+    Widget fila(Map<String, dynamic> cuenta) => _FilaCuenta(
+          cuenta: cuenta,
+          cambiando: _cambiando == '${cuenta['usuario']}',
+          habilitada: _cambiando == null,
+          onTap: () async {
+            setState(() => _cambiando = '${cuenta['usuario']}');
+            await cambiarDeCuenta(context, usuario: '${cuenta['usuario']}', tipoUsuario: '${cuenta['tipoUsuario']}');
+            if (!mounted) return;
+            setState(() => _cambiando = null);
+            _recargar(); // por si cambió su estado (se bloqueó por intentos, etc.)
+          },
+        );
+    // Computador: arriba del perfil, una tarjeta por cuenta en fila
+    if (esEscritorio(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const EncabezadoSeccion('Tus otras cuentas', subtitulo: 'Cambia sin cerrar sesión'),
+          Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            children: [for (final cuenta in otras) SizedBox(width: 330, child: TarjetaValle(padding: EdgeInsets.zero, child: fila(cuenta)))],
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -264,18 +289,7 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
             children: [
               for (final (i, cuenta) in otras.indexed) ...[
                 if (i > 0) Divider(height: 1, indent: 70, color: c.borde),
-                _FilaCuenta(
-                  cuenta: cuenta,
-                  cambiando: _cambiando == '${cuenta['usuario']}',
-                  habilitada: _cambiando == null,
-                  onTap: () async {
-                    setState(() => _cambiando = '${cuenta['usuario']}');
-                    await cambiarDeCuenta(context, usuario: '${cuenta['usuario']}', tipoUsuario: '${cuenta['tipoUsuario']}');
-                    if (!mounted) return;
-                    setState(() => _cambiando = null);
-                    _recargar(); // por si cambió su estado (se bloqueó por intentos, etc.)
-                  },
-                ),
+                fila(cuenta),
               ],
             ],
           ),
@@ -368,7 +382,7 @@ class _CuentasEnEsteCelularState extends State<CuentasEnEsteCelular> {
 
   Future<void> _entrar(CuentaGuardada cuenta) async {
     setState(() => _entrando = cuenta.usuario);
-    final navegador = Navigator.of(context);
+    final navegador = Navigator.of(context, rootNavigator: true);
     try {
       final ok = await context.read<AuthProvider>().entrarConGuardada(cuenta.usuario);
       if (ok) {

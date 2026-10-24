@@ -71,8 +71,7 @@ Future<CuentaCobro?> editarCuentaBanco(BuildContext context, {CuentaCobro? actua
   final titular = TextEditingController(text: base.titular);
   final identificacion = TextEditingController(text: base.identificacion);
   var tipo = base.tipo;
-  return showModalBottomSheet<CuentaCobro>(
-    context: context,
+  return mostrarHoja<CuentaCobro>(context,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (ctx) => StatefulBuilder(

@@ -51,8 +51,7 @@ class _TelefonosScreenState extends State<TelefonosScreen> {
   }
 
   Future<void> _abrirFormulario([Telefono? actual]) async {
-    final guardado = await showModalBottomSheet<bool>(
-      context: context,
+    final guardado = await mostrarHoja<bool>(context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _FormularioTelefono(actual: actual, haySiguientes: _telefonos.isNotEmpty),

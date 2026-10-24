@@ -87,8 +87,7 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
   }
 
   Future<void> _editar() async {
-    final n = await showModalBottomSheet<Negocio>(
-      context: context,
+    final n = await mostrarHoja<Negocio>(context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _FormularioNegocio(negocio: _negocio!, categorias: _categorias),

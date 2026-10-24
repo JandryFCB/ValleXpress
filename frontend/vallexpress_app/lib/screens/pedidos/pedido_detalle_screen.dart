@@ -132,8 +132,8 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
   }
 
   Future<void> _calificar() async {
-    final r = await showModalBottomSheet<({int estrellas, String comentario})>(
-      context: context,
+    final r = await mostrarHoja<({int estrellas, String comentario})>(
+      context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _HojaCalificar(negocio: _pedido!.negocioNombre),
@@ -142,8 +142,8 @@ class _PedidoDetalleScreenState extends State<PedidoDetalleScreen> {
   }
 
   Future<void> _calificarRepartidor() async {
-    final r = await showModalBottomSheet<({int estrellas, String comentario})>(
-      context: context,
+    final r = await mostrarHoja<({int estrellas, String comentario})>(
+      context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _HojaCalificar(negocio: _pedido!.repartidor!.nombre, pregunta: '¿Qué tal te atendió ${_pedido!.repartidor!.nombre}?'),
@@ -540,8 +540,8 @@ class TarjetaRepartidor extends StatelessWidget {
 /// Hoja para calificar (al negocio o al repartidor): estrellas y un comentario opcional
 /// Pide estrellas y un comentario (opcional). La usa el cliente (negocio y repartidor) y el negocio (repartidor).
 Future<({int estrellas, String comentario})?> pedirCalificacion(BuildContext context, {required String nombre, String? pregunta}) =>
-    showModalBottomSheet<({int estrellas, String comentario})>(
-      context: context,
+    mostrarHoja<({int estrellas, String comentario})>(
+      context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _HojaCalificar(negocio: nombre, pregunta: pregunta),

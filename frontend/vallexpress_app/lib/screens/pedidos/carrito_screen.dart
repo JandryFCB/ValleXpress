@@ -68,8 +68,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
   }
 
   Future<void> _elegirDireccion() async {
-    final elegida = await showModalBottomSheet<Object>(
-      context: context,
+    final elegida = await mostrarHoja<Object>(context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (ctx) => SafeArea(

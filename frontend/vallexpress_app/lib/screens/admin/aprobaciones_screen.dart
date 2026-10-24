@@ -249,8 +249,7 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
     final esNegocio = item is NegocioAdmin;
     final a = esNegocio ? item.aprobacion : (item as RepartidorAdmin).aprobacion;
     final contacto = esNegocio ? item.dueno : (item as RepartidorAdmin).contacto;
-    final elegida = await showModalBottomSheet<String>(
-      context: context,
+    final elegida = await mostrarHoja<String>(context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (ctx) {

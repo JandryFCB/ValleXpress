@@ -12,8 +12,7 @@ Future<String?> pedirMotivo(
   List<String> sugerencias = const [],
   int minimo = 5,
 }) {
-  return showModalBottomSheet<String>(
-    context: context,
+  return mostrarHoja<String>(context,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (_) => _HojaMotivo(titulo: titulo, explicacion: explicacion, textoBoton: textoBoton, sugerencias: sugerencias, minimo: minimo),

@@ -91,8 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<String?> _elegirCuenta(List<Map<String, String>> cuentas) => showModalBottomSheet<String>(
-        context: context,
+  Future<String?> _elegirCuenta(List<Map<String, String>> cuentas) => mostrarHoja<String>(context,
         showDragHandle: true,
         builder: (ctx) {
           final tema = Theme.of(ctx).textTheme;

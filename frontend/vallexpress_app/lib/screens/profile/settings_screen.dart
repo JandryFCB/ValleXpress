@@ -50,8 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _cambiarClave() async {
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
+    final ok = await mostrarHoja<bool>(context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => const _FormularioClave(),
@@ -75,7 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await context.read<AuthProvider>().cerrarSesionEnTodos();
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(AppConstants.loginRoute, (_) => false);
+      Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(AppConstants.loginRoute, (_) => false);
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
     }

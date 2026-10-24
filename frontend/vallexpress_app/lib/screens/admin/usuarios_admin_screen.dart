@@ -309,7 +309,7 @@ class _UsuarioAdminScreenState extends State<UsuarioAdminScreen> {
   }
 
   Future<void> _clave() async {
-    final clave = await showModalBottomSheet<String>(context: context, isScrollControlled: true, showDragHandle: true, builder: (_) => _HojaClave(nombre: _u!.nombre));
+    final clave = await mostrarHoja<String>(context, isScrollControlled: true, showDragHandle: true, builder: (_) => _HojaClave(nombre: _u!.nombre));
     if (clave != null) await _hacer(() => AdminService.ponerClave(widget.usuario, clave), 'Contraseña cambiada. Se cerraron sus sesiones');
   }
 

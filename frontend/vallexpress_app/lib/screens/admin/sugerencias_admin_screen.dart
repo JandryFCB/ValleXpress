@@ -47,8 +47,7 @@ class _SugerenciasAdminScreenState extends State<SugerenciasAdminScreen> {
       SugerenciaService.atender(s.id, estado: 'leida').then((_) => _cargar()).catchError((_) {});
     }
     final respuesta = TextEditingController(text: s.respuesta ?? '');
-    final accion = await showModalBottomSheet<String>(
-      context: context,
+    final accion = await mostrarHoja<String>(context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (ctx) => Padding(

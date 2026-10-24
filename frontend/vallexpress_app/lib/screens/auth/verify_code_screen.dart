@@ -49,8 +49,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
   Future<({String usuario, String tipoUsuario, String estado, String resetToken})?> _elegirCuenta(
       List<({String usuario, String tipoUsuario, String estado, String resetToken})> cuentas) {
     const nombres = {'cliente': ('Cliente', Icons.shopping_bag_rounded), 'vendedor': ('Negocio', Icons.storefront_rounded), 'repartidor': ('Repartidor', Icons.delivery_dining_rounded)};
-    return showModalBottomSheet(
-      context: context,
+    return mostrarHoja(context,
       showDragHandle: true,
       isDismissible: false,
       builder: (ctx) => SafeArea(

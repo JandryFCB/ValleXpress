@@ -140,13 +140,17 @@ class PestanasAdaptables extends StatelessWidget {
       );
     }
 
+    // Lo que se abre desde una pestaña (detalle, carrito, configuración...) aparece en el área de contenido: la
+    // barra de arriba o el menú lateral siguen a la vista, como en una página web
+    final interno = _NavegadorInterno(indice: indice, alCambiarPestana: onCambiar, child: contenido);
+
     if (!lateral) {
       return Scaffold(
         backgroundColor: c.fondo,
         body: Column(
           children: [
             _BarraSuperior(indice: indice, onCambiar: onCambiar, destinos: destinos, acciones: accionesSuperiores, icono: _icono),
-            Expanded(child: contenido),
+            Expanded(child: interno),
           ],
         ),
       );
@@ -157,8 +161,43 @@ class PestanasAdaptables extends StatelessWidget {
       body: Row(
         children: [
           _MenuLateral(indice: indice, onCambiar: onCambiar, destinos: destinos, cabecera: cabeceraLateral),
-          Expanded(child: contenido),
+          Expanded(child: interno),
         ],
+      ),
+    );
+  }
+}
+
+/// Navegador del área de contenido (computador). Al tocar una pestaña se cierra lo que estaba abierto encima.
+class _NavegadorInterno extends StatefulWidget {
+  const _NavegadorInterno({required this.indice, required this.alCambiarPestana, required this.child});
+
+  final int indice;
+  final ValueChanged<int> alCambiarPestana;
+  final Widget child;
+
+  @override
+  State<_NavegadorInterno> createState() => _NavegadorInternoState();
+}
+
+class _NavegadorInternoState extends State<_NavegadorInterno> {
+  final _llave = GlobalKey<NavigatorState>();
+
+  @override
+  void didUpdateWidget(covariant _NavegadorInterno vieja) {
+    super.didUpdateWidget(vieja);
+    if (vieja.indice != widget.indice) _llave.currentState?.popUntil((r) => r.isFirst);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigatorPopHandler(
+      // El botón "atrás" (del navegador o del teclado) cierra primero lo abierto dentro de la página
+      onPopWithResult: (_) => _llave.currentState?.maybePop(),
+      child: Navigator(
+        key: _llave,
+        pages: [MaterialPage(key: const ValueKey('pestanas'), child: widget.child)],
+        onDidRemovePage: (_) {},
       ),
     );
   }
@@ -295,4 +334,39 @@ class AnchoMaximo extends StatelessWidget {
     if (!esEscritorio(context)) return child;
     return Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: BoxConstraints(maxWidth: ancho), child: child));
   }
+}
+
+/// Hoja de opciones: en el celular sube desde abajo; en el computador es una ventana centrada
+Future<T?> mostrarHoja<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+  bool isScrollControlled = false,
+  bool showDragHandle = false,
+  bool useSafeArea = false,
+  bool isDismissible = true,
+  Color? backgroundColor,
+}) {
+  if (!esEscritorio(context)) {
+    return showModalBottomSheet<T>(
+      context: context,
+      builder: builder,
+      isScrollControlled: isScrollControlled,
+      showDragHandle: showDragHandle,
+      useSafeArea: useSafeArea,
+      isDismissible: isDismissible,
+      backgroundColor: backgroundColor,
+    );
+  }
+  return showDialog<T>(
+    context: context,
+    barrierDismissible: isDismissible,
+    builder: (ctx) => Dialog(
+      backgroundColor: backgroundColor,
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 520, maxHeight: MediaQuery.sizeOf(ctx).height * 0.85),
+        child: Padding(padding: const EdgeInsets.only(top: 20), child: Builder(builder: builder)),
+      ),
+    ),
+  );
 }

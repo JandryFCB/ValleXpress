@@ -81,8 +81,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   Future<void> _editarNombre() async {
     final u = _usuario!;
-    final cambios = await showModalBottomSheet<Map<String, String>>(
-      context: context,
+    final cambios = await mostrarHoja<Map<String, String>>(
+      context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _FormularioNombre(nombre: '${u['nombre'] ?? ''}', apellido: '${u['apellido'] ?? ''}'),
@@ -98,8 +98,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Future<void> _opcionesFoto() async {
     final foto = _usuario?['fotoPerfil']?.toString();
     if (foto == null || foto.isEmpty) return _cambiarFoto();
-    final opcion = await showModalBottomSheet<String>(
-      context: context,
+    final opcion = await mostrarHoja<String>(context,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -216,7 +215,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
       return;
     }
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(AppConstants.loginRoute, (_) => false);
+    Navigator.of(context, rootNavigator: true).pushNamedAndRemoveUntil(AppConstants.loginRoute, (_) => false);
   }
 
   @override
@@ -492,8 +491,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  DosColumnas(hijos: [misDatos, contacto, ?reparto, ?negocio, cuenta]),
+                  // Primero las otras cuentas de la persona (cambiar de perfil), luego sus datos en dos columnas
                   const TusCuentas(),
+                  const SizedBox(height: 12),
+                  DosColumnas(hijos: [misDatos, contacto, ?reparto, ?negocio, cuenta]),
                 ],
               ),
             ),

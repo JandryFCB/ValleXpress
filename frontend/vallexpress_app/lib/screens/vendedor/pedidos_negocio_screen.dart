@@ -332,8 +332,7 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
   }
 
   Future<void> _aceptar() async {
-    final minutos = await showModalBottomSheet<int>(
-      context: context,
+    final minutos = await mostrarHoja<int>(context,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -404,8 +403,7 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
 
   Future<void> _rechazar() async {
     final sinPago = widget.pedido.estado == EstadoPedido.confirmado;
-    final motivo = await showModalBottomSheet<String>(
-      context: context,
+    final motivo = await mostrarHoja<String>(context,
       showDragHandle: true,
       builder: (ctx) => SafeArea(
         child: Padding(

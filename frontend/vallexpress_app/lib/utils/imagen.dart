@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../web/escritorio.dart';
 
 /// Pregunta si se usa la cámara o la galería, deja elegir una foto y la devuelve en base64 (como la espera el
 /// servidor, que luego la optimiza). Devuelve null si el usuario cancela.
 Future<String?> elegirImagenBase64(BuildContext context, {String titulo = 'Elegir imagen'}) async {
-  final origen = await showModalBottomSheet<ImageSource>(
-    context: context,
+  final origen = await mostrarHoja<ImageSource>(context,
     showDragHandle: true,
     builder: (ctx) => SafeArea(
       child: Column(
