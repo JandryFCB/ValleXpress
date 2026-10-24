@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/negocio.dart';
@@ -11,6 +12,7 @@ import '../../widgets/ui/ui.dart';
 import '../../config/theme.dart';
 import '../profile/perfil_screen.dart';
 import 'mi_negocio_screen.dart';
+import 'mis_productos_screen.dart';
 import 'pedidos_negocio_screen.dart';
 
 /// Inicio del vendedor: pestañas Pedidos, Mi negocio y Perfil. Un pedido nuevo vibra fuerte y avisa arriba aunque
@@ -24,7 +26,9 @@ class InicioVendedorScreen extends StatefulWidget {
 }
 
 class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
-  static const _rutas = ['/pedidos', '/negocio', '/perfil'];
+  // En la web, Productos es una sección propia del menú (en la app se entra desde Mi negocio / Perfil)
+  static final _rutas = kIsWeb ? ['/pedidos', '/productos', '/negocio', '/perfil'] : ['/pedidos', '/negocio', '/perfil'];
+  static final _iNegocio = _rutas.indexOf('/negocio');
   int _pestana = PestanasAdaptables.indiceInicial(_rutas);
   int _porAceptar = 0;
   Negocio? _negocio;
@@ -100,9 +104,9 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
         motivo: n.motivoAprobacion,
         soporte: n.soporte,
         textoMientras: 'Armar mi negocio y mi menú',
-        onMientras: () => setState(() => _pestana = 1),
+        onMientras: () => setState(() => _pestana = _iNegocio),
         textoCorregir: 'Corregir mi negocio',
-        onCorregir: () => setState(() => _pestana = 1),
+        onCorregir: () => setState(() => _pestana = _iNegocio),
         onPedirRevision: () async {
           final actualizado = await CatalogoService.pedirRevisionNegocio();
           if (mounted) setState(() => _negocio = actualizado);
@@ -127,6 +131,7 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
         cabeceraLateral: _negocio == null ? null : _NegocioLateral(negocio: _negocio!),
         paginas: [
           _enRevision ? _solicitud() : const PedidosNegocioScreen(conFlechaAtras: false),
+          if (kIsWeb) MisProductosScreen(alIrANegocio: () => setState(() => _pestana = _iNegocio)),
           const MiNegocioScreen(),
           const PerfilScreen(),
         ],
@@ -141,6 +146,7 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
               insignia: _porAceptar,
               colorInsignia: AppTheme.warningColor,
             ),
+          if (kIsWeb) const Destino(icono: Icons.restaurant_menu_outlined, iconoActivo: Icons.restaurant_menu_rounded, texto: 'Productos'),
           const Destino(icono: Icons.storefront_outlined, iconoActivo: Icons.storefront_rounded, texto: 'Mi negocio'),
           const Destino(icono: Icons.person_outline_rounded, iconoActivo: Icons.person_rounded, texto: 'Perfil'),
         ],

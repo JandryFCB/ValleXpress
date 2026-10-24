@@ -87,7 +87,8 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
   }
 
   Future<void> _editar() async {
-    final n = await mostrarHoja<Negocio>(context,
+    final n = await mostrarHoja<Negocio>(
+      context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _FormularioNegocio(negocio: _negocio!, categorias: _categorias),
@@ -111,7 +112,9 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
     );
     if (elegida == null || !mounted) return;
     try {
-      _actualizar(await CatalogoService.fijarLocal(direccion: elegida.direccion, referencia: elegida.referencia, latitud: elegida.latitud, longitud: elegida.longitud));
+      _actualizar(
+        await CatalogoService.fijarLocal(direccion: elegida.direccion, referencia: elegida.referencia, latitud: elegida.latitud, longitud: elegida.longitud),
+      );
       if (mounted) mostrarExito(context, 'Ubicación guardada');
     } catch (e) {
       if (mounted) mostrarError(context, textoDeError(e));
@@ -125,13 +128,22 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Computador con el negocio cargado: página propia (título grande y dos columnas)
+    if (esEscritorio(context) && !_cargando && _error == null && _negocio != null) return _contenido();
     return FondoValle(titulo: CatalogoService.gestionandoComoAdmin ? 'Gestionar negocio' : 'Mi negocio', child: _contenido());
   }
 
   Widget _contenido() {
     if (_cargando) return const EsqueletoLista(cantidad: 3, altoImagen: 120, conImagen: false);
     if (_error != null) {
-      return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tu negocio', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
+      return EstadoVacio(
+        icono: Icons.cloud_off_rounded,
+        color: AppTheme.errorColor,
+        titulo: 'No pudimos cargar tu negocio',
+        mensaje: _error,
+        textoAccion: 'Reintentar',
+        onAccion: _cargar,
+      );
     }
     if (_negocio == null) return _CrearNegocio(categorias: _categorias, onCreado: _actualizar);
 
@@ -139,170 +151,245 @@ class _MiNegocioScreenState extends State<MiNegocioScreen> {
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
 
+    final escritorio = esEscritorio(context);
+
+    // ------------------------------ Portada y logo ------------------------------
+    final portada = TarjetaValle(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          SizedBox(
+            height: escritorio ? 190 : 150,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                n.portada != null
+                    ? ImagenRed(url: n.portada, radio: 0)
+                    : Container(
+                        decoration: BoxDecoration(gradient: LinearGradient(colors: [c.primario.withValues(alpha: 0.4), c.acento.withValues(alpha: 0.3)])),
+                      ),
+                Positioned(
+                  right: 10,
+                  top: 10,
+                  child: _BotonCamara(cargando: _subiendo == 'portada', texto: 'Portada', onTap: () => _imagen('portada')),
+                ),
+                Positioned(
+                  left: 16,
+                  bottom: 12,
+                  child: GestureDetector(
+                    onTap: () => _imagen('logo'),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: c.tarjeta, width: 3),
+                          ),
+                          child: ImagenRed(url: n.logo, ancho: 72, alto: 72, radio: 15, icono: n.categoria.icono),
+                        ),
+                        Positioned(
+                          right: -6,
+                          bottom: -6,
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundColor: c.primario,
+                            child: _subiendo == 'logo'
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.photo_camera_rounded, size: 15, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(n.nombre, style: tema.titleLarge),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          InsigniaValle(n.categoria.descripcion, color: AppTheme.infoColor, icono: n.categoria.icono),
+                          if (n.aprobacion != null && n.aprobacion != 'aprobado')
+                            switch (n.aprobacion) {
+                              'rechazado' => const InsigniaValle('No aprobado', color: AppTheme.errorColor, icono: Icons.assignment_late_rounded),
+                              'suspendido' => const InsigniaValle('Suspendido', color: AppTheme.errorColor, icono: Icons.block_rounded),
+                              _ => const InsigniaValle('En revisión', color: AppTheme.warningColor, icono: Icons.hourglass_top_rounded),
+                            },
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(onPressed: _editar, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar datos'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // ------------------------------ Estado ------------------------------
+    final estado = TarjetaValle(
+      padding: EdgeInsets.zero,
+      colorBorde: n.abiertoAhora ? AppTheme.successColor : null,
+      child: Column(
+        children: [
+          SwitchListTile(
+            secondary: Icon(
+              n.abierto ? Icons.storefront_rounded : Icons.store_mall_directory_outlined,
+              color: n.abierto ? AppTheme.successColor : c.textoSuave,
+            ),
+            title: Text(n.abierto ? 'Abierto' : 'Cerrado', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            subtitle: Text(
+              !n.abierto
+                  ? 'Los clientes te ven cerrado'
+                  : (n.abiertoAhora ? 'Los clientes te ven abierto ahora' : 'Fuera de tu horario: los clientes te ven cerrado'),
+            ),
+            value: n.abierto,
+            onChanged: _cambiandoEstado ? null : (v) => _estado(abierto: v),
+          ),
+          Divider(height: 1, color: c.borde),
+          SwitchListTile(
+            secondary: const Icon(Icons.receipt_long_outlined),
+            title: const Text('Acepto pedidos'),
+            subtitle: const Text('Apágalo si estás muy lleno, aunque sigas abierto'),
+            value: n.aceptaPedidos,
+            onChanged: _cambiandoEstado ? null : (v) => _estado(aceptaPedidos: v),
+          ),
+        ],
+      ),
+    );
+
+    // ------------------------------ Resumen ------------------------------
+    final resumen = Row(
+      children: [
+        Expanded(
+          child: _Indicador(
+            icono: Icons.star_rounded,
+            color: AppTheme.accentColor,
+            valor: n.numeroCalificaciones == 0 ? '—' : n.calificacion.toStringAsFixed(1),
+            etiqueta: 'Calificación',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _Indicador(icono: Icons.receipt_long_rounded, color: AppTheme.infoColor, valor: '${n.numeroPedidos}', etiqueta: 'Pedidos'),
+        ),
+      ],
+    );
+
+    // ------------------------------ Gestión ------------------------------
+    final gestion = TarjetaValle(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _Fila(
+            icono: Icons.restaurant_menu_rounded,
+            titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos',
+            valor: 'Menú, precios, stock e imágenes',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisProductosScreen())),
+          ),
+          Divider(height: 1, indent: 70, color: c.borde),
+          _Fila(
+            icono: Icons.account_balance_rounded,
+            titulo: 'Cuentas para transferencias',
+            valor: n.aceptaTransferencia ? 'Tus clientes pueden pagarte por transferencia' : 'Sin cuentas: tus clientes solo pagan en efectivo',
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const CuentasNegocioScreen()));
+              _cargar();
+            },
+          ),
+          Divider(height: 1, indent: 70, color: c.borde),
+          if (!CatalogoService.gestionandoComoAdmin) ...[
+            _Fila(
+              icono: Icons.account_balance_wallet_outlined,
+              titulo: 'Mi suscripción',
+              valor: n.bloqueadoPorDeuda ? 'Tu suscripción está vencida: no recibes pedidos' : 'Cuota mensual y comprobantes',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MiSuscripcionScreen())),
+            ),
+            Divider(height: 1, indent: 70, color: c.borde),
+          ],
+          _Fila(
+            icono: Icons.schedule_rounded,
+            titulo: 'Horario',
+            valor: n.horarios.isEmpty ? 'Sin horario: configúralo' : 'Hoy: ${n.horarioHoy?.texto ?? 'Cerrado'}',
+            onTap: _horarios,
+          ),
+          Divider(height: 1, indent: 70, color: c.borde),
+          _Fila(
+            icono: Icons.location_on_outlined,
+            titulo: 'Ubicación del local',
+            valor: n.local?.direccion ?? 'Agrega dónde recogen los pedidos',
+            onTap: _ubicacion,
+          ),
+          Divider(height: 1, indent: 70, color: c.borde),
+          _Fila(
+            icono: Icons.delivery_dining_outlined,
+            titulo: 'Entrega',
+            valor: 'Pedido mínimo ${Formato.dinero(n.pedidoMinimo)} · ${n.tiempoPreparacion} min · hasta ${n.radioKm.toStringAsFixed(0)} km',
+            onTap: _editar,
+          ),
+        ],
+      ),
+    );
+
+    // Computador: a la izquierda la tarjeta del negocio, si está abierto y sus cifras; a la derecha la gestión
+    if (escritorio) {
+      return PaginaEscritorio(
+        titulo: CatalogoService.gestionandoComoAdmin ? 'Gestionar negocio' : 'Mi negocio',
+        subtitulo: 'Cómo te ven los clientes, tu horario, tu local y tus cobros',
+        icono: Icons.storefront_rounded,
+        conAtras: CatalogoService.gestionandoComoAdmin,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 420,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [portada, const SizedBox(height: 16), estado, const SizedBox(height: 16), resumen],
+              ),
+            ),
+            const SizedBox(width: 32),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const EncabezadoSeccion('Tu negocio', subtitulo: 'Toca una opción para cambiarla'),
+                  gestion,
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
-          // ------------------------------ Portada y logo ------------------------------
-          TarjetaValle(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 150,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      n.portada != null
-                          ? ImagenRed(url: n.portada, radio: 0)
-                          : Container(decoration: BoxDecoration(gradient: LinearGradient(colors: [c.primario.withValues(alpha: 0.4), c.acento.withValues(alpha: 0.3)]))),
-                      Positioned(right: 10, top: 10, child: _BotonCamara(cargando: _subiendo == 'portada', texto: 'Portada', onTap: () => _imagen('portada'))),
-                      Positioned(
-                        left: 16,
-                        bottom: 12,
-                        child: GestureDetector(
-                          onTap: () => _imagen('logo'),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: c.tarjeta, width: 3)),
-                                child: ImagenRed(url: n.logo, ancho: 72, alto: 72, radio: 15, icono: n.categoria.icono),
-                              ),
-                              Positioned(
-                                right: -6,
-                                bottom: -6,
-                                child: CircleAvatar(
-                                  radius: 14,
-                                  backgroundColor: c.primario,
-                                  child: _subiendo == 'logo'
-                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                      : const Icon(Icons.photo_camera_rounded, size: 15, color: Colors.white),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(n.nombre, style: tema.titleLarge),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: [
-                                InsigniaValle(n.categoria.descripcion, color: AppTheme.infoColor, icono: n.categoria.icono),
-                                if (n.aprobacion != null && n.aprobacion != 'aprobado')
-                                  switch (n.aprobacion) {
-                                    'rechazado' => const InsigniaValle('No aprobado', color: AppTheme.errorColor, icono: Icons.assignment_late_rounded),
-                                    'suspendido' => const InsigniaValle('Suspendido', color: AppTheme.errorColor, icono: Icons.block_rounded),
-                                    _ => const InsigniaValle('En revisión', color: AppTheme.warningColor, icono: Icons.hourglass_top_rounded),
-                                  },
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(onPressed: _editar, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar datos'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ------------------------------ Estado ------------------------------
+          portada,
           const SizedBox(height: 12),
-          TarjetaValle(
-            padding: EdgeInsets.zero,
-            colorBorde: n.abiertoAhora ? AppTheme.successColor : null,
-            child: Column(
-              children: [
-                SwitchListTile(
-                  secondary: Icon(n.abierto ? Icons.storefront_rounded : Icons.store_mall_directory_outlined, color: n.abierto ? AppTheme.successColor : c.textoSuave),
-                  title: Text(n.abierto ? 'Abierto' : 'Cerrado', style: tema.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                  subtitle: Text(
-                    !n.abierto
-                        ? 'Los clientes te ven cerrado'
-                        : (n.abiertoAhora ? 'Los clientes te ven abierto ahora' : 'Fuera de tu horario: los clientes te ven cerrado'),
-                  ),
-                  value: n.abierto,
-                  onChanged: _cambiandoEstado ? null : (v) => _estado(abierto: v),
-                ),
-                Divider(height: 1, color: c.borde),
-                SwitchListTile(
-                  secondary: const Icon(Icons.receipt_long_outlined),
-                  title: const Text('Acepto pedidos'),
-                  subtitle: const Text('Apágalo si estás muy lleno, aunque sigas abierto'),
-                  value: n.aceptaPedidos,
-                  onChanged: _cambiandoEstado ? null : (v) => _estado(aceptaPedidos: v),
-                ),
-              ],
-            ),
-          ),
-
-          // ------------------------------ Resumen ------------------------------
+          estado,
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _Indicador(icono: Icons.star_rounded, color: AppTheme.accentColor, valor: n.numeroCalificaciones == 0 ? '—' : n.calificacion.toStringAsFixed(1), etiqueta: 'Calificación')),
-              const SizedBox(width: 10),
-              Expanded(child: _Indicador(icono: Icons.receipt_long_rounded, color: AppTheme.infoColor, valor: '${n.numeroPedidos}', etiqueta: 'Pedidos')),
-            ],
-          ),
-
-          // ------------------------------ Gestión ------------------------------
+          resumen,
           const SizedBox(height: 12),
           const EncabezadoSeccion('Tu negocio'),
-          TarjetaValle(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                _Fila(icono: Icons.restaurant_menu_rounded, titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos', valor: 'Menú, precios, stock e imágenes', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MisProductosScreen()))),
-                Divider(height: 1, indent: 70, color: c.borde),
-                _Fila(
-                  icono: Icons.account_balance_rounded,
-                  titulo: 'Cuentas para transferencias',
-                  valor: n.aceptaTransferencia ? 'Tus clientes pueden pagarte por transferencia' : 'Sin cuentas: tus clientes solo pagan en efectivo',
-                  onTap: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const CuentasNegocioScreen()));
-                    _cargar();
-                  },
-                ),
-                Divider(height: 1, indent: 70, color: c.borde),
-                if (!CatalogoService.gestionandoComoAdmin) ...[
-                  _Fila(
-                    icono: Icons.account_balance_wallet_outlined,
-                    titulo: 'Mi suscripción',
-                    valor: n.bloqueadoPorDeuda ? 'Tu suscripción está vencida: no recibes pedidos' : 'Cuota mensual y comprobantes',
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MiSuscripcionScreen())),
-                  ),
-                  Divider(height: 1, indent: 70, color: c.borde),
-                ],
-                _Fila(icono: Icons.schedule_rounded, titulo: 'Horario', valor: n.horarios.isEmpty ? 'Sin horario: configúralo' : 'Hoy: ${n.horarioHoy?.texto ?? 'Cerrado'}', onTap: _horarios),
-                Divider(height: 1, indent: 70, color: c.borde),
-                _Fila(icono: Icons.location_on_outlined, titulo: 'Ubicación del local', valor: n.local?.direccion ?? 'Agrega dónde recogen los pedidos', onTap: _ubicacion),
-                Divider(height: 1, indent: 70, color: c.borde),
-                _Fila(
-                  icono: Icons.delivery_dining_outlined,
-                  titulo: 'Entrega',
-                  valor: 'Pedido mínimo ${Formato.dinero(n.pedidoMinimo)} · ${n.tiempoPreparacion} min · hasta ${n.radioKm.toStringAsFixed(0)} km',
-                  onTap: _editar,
-                ),
-              ],
-            ),
-          ),
+          gestion,
         ],
       ),
     );
@@ -333,7 +420,10 @@ class _BotonCamara extends StatelessWidget {
                   ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.photo_camera_rounded, size: 16, color: Colors.white),
               const SizedBox(width: 6),
-              Text(texto, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              Text(
+                texto,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
             ],
           ),
         ),
@@ -407,7 +497,12 @@ class _Fila extends StatelessWidget {
                 children: [
                   Text(titulo, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
-                  Text(valor, style: tema.bodySmall?.copyWith(color: c.textoSuave), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    valor,
+                    style: tema.bodySmall?.copyWith(color: c.textoSuave),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
@@ -450,7 +545,11 @@ class _CrearNegocioState extends State<_CrearNegocio> {
     }
     setState(() => _guardando = true);
     try {
-      final n = await CatalogoService.crearNegocio(nombre: _nombre.text.trim(), categoria: _categoria, descripcion: _descripcion.text.trim().isEmpty ? null : _descripcion.text.trim());
+      final n = await CatalogoService.crearNegocio(
+        nombre: _nombre.text.trim(),
+        categoria: _categoria,
+        descripcion: _descripcion.text.trim().isEmpty ? null : _descripcion.text.trim(),
+      );
       if (!mounted) return;
       mostrarExito(context, '¡Tu negocio está listo!');
       widget.onCreado(n);
@@ -472,9 +571,19 @@ class _CrearNegocioState extends State<_CrearNegocio> {
         const SizedBox(height: 16),
         Text('Crea tu negocio', style: tema.headlineMedium, textAlign: TextAlign.center),
         const SizedBox(height: 8),
-        Text('Con estos datos los clientes te encontrarán. Luego podrás agregar logo, horario y productos.', style: tema.bodyMedium, textAlign: TextAlign.center),
+        Text(
+          'Con estos datos los clientes te encontrarán. Luego podrás agregar logo, horario y productos.',
+          style: tema.bodyMedium,
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 28),
-        CampoValle(controller: _nombre, etiqueta: 'Nombre del negocio', icono: Icons.storefront_outlined, mayusculas: TextCapitalization.words, maxLongitud: 120),
+        CampoValle(
+          controller: _nombre,
+          etiqueta: 'Nombre del negocio',
+          icono: Icons.storefront_outlined,
+          mayusculas: TextCapitalization.words,
+          maxLongitud: 120,
+        ),
         const SizedBox(height: 16),
         Text('Categoría', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
@@ -494,7 +603,14 @@ class _CrearNegocioState extends State<_CrearNegocio> {
           ],
         ),
         const SizedBox(height: 16),
-        CampoValle(controller: _descripcion, etiqueta: 'Descripción (opcional)', icono: Icons.notes_rounded, maxLongitud: 500, maxLineas: 3, mayusculas: TextCapitalization.sentences),
+        CampoValle(
+          controller: _descripcion,
+          etiqueta: 'Descripción (opcional)',
+          icono: Icons.notes_rounded,
+          maxLongitud: 500,
+          maxLineas: 3,
+          mayusculas: TextCapitalization.sentences,
+        ),
         const SizedBox(height: 24),
         BotonValle(texto: 'Crear mi negocio', icono: Icons.check_rounded, cargando: _guardando, onPressed: _crear),
       ],
@@ -590,9 +706,23 @@ class _FormularioNegocioState extends State<_FormularioNegocio> {
               onChanged: (v) => setState(() => _categoria = v ?? _categoria),
             ),
             const SizedBox(height: 12),
-            CampoValle(controller: _descripcion, etiqueta: 'Descripción', icono: Icons.notes_rounded, maxLongitud: 500, maxLineas: 3, mayusculas: TextCapitalization.sentences),
+            CampoValle(
+              controller: _descripcion,
+              etiqueta: 'Descripción',
+              icono: Icons.notes_rounded,
+              maxLongitud: 500,
+              maxLineas: 3,
+              mayusculas: TextCapitalization.sentences,
+            ),
             const SizedBox(height: 12),
-            CampoValle(controller: _ruc, etiqueta: 'RUC (opcional)', icono: Icons.badge_outlined, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 13),
+            CampoValle(
+              controller: _ruc,
+              etiqueta: 'RUC (opcional)',
+              icono: Icons.badge_outlined,
+              tipoTeclado: TextInputType.number,
+              formateadores: [FilteringTextInputFormatter.digitsOnly],
+              maxLongitud: 13,
+            ),
             const SizedBox(height: 20),
             Text('Entrega', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
@@ -603,13 +733,37 @@ class _FormularioNegocioState extends State<_FormularioNegocio> {
               icono: Icons.delivery_dining_outlined,
             ),
             const SizedBox(height: 12),
-            CampoValle(controller: _minimo, etiqueta: 'Pedido mínimo \$', icono: Icons.shopping_bag_outlined, tipoTeclado: const TextInputType.numberWithOptions(decimal: true), formateadores: decimal),
+            CampoValle(
+              controller: _minimo,
+              etiqueta: 'Pedido mínimo \$',
+              icono: Icons.shopping_bag_outlined,
+              tipoTeclado: const TextInputType.numberWithOptions(decimal: true),
+              formateadores: decimal,
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(child: CampoValle(controller: _tiempo, etiqueta: 'Preparación (min)', icono: Icons.timer_outlined, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 3)),
+                Expanded(
+                  child: CampoValle(
+                    controller: _tiempo,
+                    etiqueta: 'Preparación (min)',
+                    icono: Icons.timer_outlined,
+                    tipoTeclado: TextInputType.number,
+                    formateadores: [FilteringTextInputFormatter.digitsOnly],
+                    maxLongitud: 3,
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: CampoValle(controller: _radio, etiqueta: 'Radio (km)', icono: Icons.radar_rounded, tipoTeclado: const TextInputType.numberWithOptions(decimal: true), formateadores: decimal, accion: TextInputAction.done)),
+                Expanded(
+                  child: CampoValle(
+                    controller: _radio,
+                    etiqueta: 'Radio (km)',
+                    icono: Icons.radar_rounded,
+                    tipoTeclado: const TextInputType.numberWithOptions(decimal: true),
+                    formateadores: decimal,
+                    accion: TextInputAction.done,
+                  ),
+                ),
               ],
             ),
             if (_error != null)

@@ -3,13 +3,17 @@ import '../../config/theme.dart';
 import '../../models/producto.dart';
 import '../../services/api_error.dart';
 import '../../services/catalogo_service.dart';
+import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import '../catalogo/negocio_detalle_screen.dart';
 import 'producto_form_screen.dart';
 
 /// Mis productos (vendedor): el menú agrupado por secciones, con acciones rápidas (agotado, ocultar, editar, borrar).
 class MisProductosScreen extends StatefulWidget {
-  const MisProductosScreen({super.key});
+  const MisProductosScreen({super.key, this.alIrANegocio});
+
+  /// Como pestaña de la web (sin flecha atrás): lleva a "Mi negocio" cuando aún no hay negocio
+  final VoidCallback? alIrANegocio;
 
   @override
   State<MisProductosScreen> createState() => _MisProductosScreenState();
@@ -94,6 +98,7 @@ class _MisProductosScreenState extends State<MisProductosScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (esEscritorio(context)) return _escritorio();
     return FondoValle(
       titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos',
       botonFlotante: (_cargando || _error != null || _sinNegocio || _menu.productos.isEmpty)
@@ -103,10 +108,60 @@ class _MisProductosScreenState extends State<MisProductosScreen> {
     );
   }
 
+  String get _resumen {
+    final total = _menu.productos.length;
+    final ocultos = _menu.productos.where((p) => p.estado == EstadoProducto.oculto).length;
+    final agotados = _menu.productos.where((p) => p.estado == EstadoProducto.agotado).length;
+    return '$total producto${total == 1 ? '' : 's'}${agotados > 0 ? ' · $agotados agotado${agotados == 1 ? '' : 's'}' : ''}${ocultos > 0 ? ' · $ocultos oculto${ocultos == 1 ? '' : 's'}' : ''}';
+  }
+
+  // Computador: una tabla por sección (foto, producto, precio, estado, stock y acciones) a todo el ancho
+  Widget _escritorio() {
+    final lista = !_cargando && _error == null && !_sinNegocio && _menu.productos.isNotEmpty;
+    return PaginaEscritorio(
+      titulo: CatalogoService.gestionandoComoAdmin ? 'Productos' : 'Mis productos',
+      subtitulo: lista ? _resumen : 'Tu menú: lo que ven los clientes',
+      icono: Icons.restaurant_menu_rounded,
+      conAtras: widget.alIrANegocio == null,
+      desplazable: lista,
+      acciones: [
+        if (lista) FilledButton.icon(
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)), // el tema los pone a todo el ancho
+          onPressed: () => _abrirFormulario(),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Agregar producto'),
+        ),
+      ],
+      child: !lista
+          ? _contenido()
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final entrada in _menu.porSeccion.entries) ...[
+                  EncabezadoSeccion(entrada.key ?? 'Sin sección', subtitulo: '${entrada.value.length} producto${entrada.value.length == 1 ? '' : 's'}'),
+                  _TablaProductos(
+                    productos: entrada.value,
+                    onEditar: _abrirFormulario,
+                    onEstado: _estado,
+                    onEliminar: _eliminar,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ],
+            ),
+    );
+  }
+
   Widget _contenido() {
     if (_cargando) return const EsqueletoLista();
     if (_sinNegocio) {
-      return EstadoVacio(icono: Icons.storefront_outlined, titulo: 'Primero crea tu negocio', mensaje: 'Ve a "Mi negocio" para registrarlo; luego podrás cargar tus productos.', textoAccion: 'Volver', onAccion: () => Navigator.pop(context));
+      return EstadoVacio(
+        icono: Icons.storefront_outlined,
+        titulo: 'Primero crea tu negocio',
+        mensaje: 'Ve a "Mi negocio" para registrarlo; luego podrás cargar tus productos.',
+        textoAccion: widget.alIrANegocio != null ? 'Ir a Mi negocio' : 'Volver',
+        onAccion: widget.alIrANegocio ?? () => Navigator.pop(context),
+      );
     }
     if (_error != null) {
       return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tus productos', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
@@ -197,4 +252,108 @@ class _MisProductosScreenState extends State<MisProductosScreen> {
       ),
     );
   }
+}
+
+/// Tabla de productos de una sección (computador): encabezado y una fila por producto
+class _TablaProductos extends StatelessWidget {
+  const _TablaProductos({required this.productos, required this.onEditar, required this.onEstado, required this.onEliminar});
+
+  final List<Producto> productos;
+  final void Function(Producto) onEditar;
+  final void Function(Producto, EstadoProducto) onEstado;
+  final void Function(Producto) onEliminar;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    final cabecera = tema.labelMedium?.copyWith(color: c.textoSuave, fontWeight: FontWeight.w700);
+    Widget fila(List<Widget> celdas) => Row(children: celdas);
+
+    return TarjetaValle(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: fila([
+              const SizedBox(width: 64),
+              Expanded(flex: 5, child: Text('Producto', style: cabecera)),
+              SizedBox(width: 110, child: Text('Precio', style: cabecera)),
+              SizedBox(width: 170, child: Text('Estado', style: cabecera)),
+              SizedBox(width: 110, child: Text('Stock', style: cabecera)),
+              const SizedBox(width: 96),
+            ]),
+          ),
+          for (final p in productos) ...[
+            Divider(height: 1, color: c.borde),
+            InkWell(
+              onTap: () => onEditar(p),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                child: fila([
+                  ImagenRed(url: p.miniatura ?? p.imagen, ancho: 48, alto: 48, radio: 12, icono: Icons.fastfood_outlined),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 5,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.nombre, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        if (p.descripcion != null)
+                          Text(p.descripcion!, style: tema.bodySmall?.copyWith(color: c.textoSuave), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 110, child: Text(Formato.dinero(p.precio), style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+                  SizedBox(
+                    width: 170,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      // Tocar el estado lo cambia ahí mismo (disponible, agotado u oculto)
+                      child: PopupMenuButton<EstadoProducto>(
+                        tooltip: 'Cambiar estado',
+                        onSelected: (e) => onEstado(p, e),
+                        itemBuilder: (_) => [
+                          for (final e in EstadoProducto.values)
+                            PopupMenuItem(value: e, enabled: e != p.estado, child: Row(children: [Icon(e.icono, size: 18), const SizedBox(width: 10), Text(e.etiqueta)])),
+                        ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InsigniaValle(p.estado.etiqueta, icono: p.estado.icono, color: _colorEstado(context, p.estado)),
+                            Icon(Icons.arrow_drop_down_rounded, color: c.textoSuave),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 110,
+                    child: Text(p.controlaStock ? '${p.stock ?? 0} u.' : '—', style: tema.bodyMedium?.copyWith(color: p.controlaStock ? c.texto : c.textoSuave)),
+                  ),
+                  SizedBox(
+                    width: 96,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        IconButton(tooltip: 'Editar', onPressed: () => onEditar(p), icon: Icon(Icons.edit_outlined, color: c.textoSuave)),
+                        IconButton(tooltip: 'Eliminar', onPressed: () => onEliminar(p), icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.errorColor)),
+                      ],
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static Color _colorEstado(BuildContext context, EstadoProducto e) => switch (e) {
+        EstadoProducto.disponible => AppTheme.successColor,
+        EstadoProducto.agotado => AppTheme.warningColor,
+        EstadoProducto.oculto => context.colores.textoSuave,
+      };
 }

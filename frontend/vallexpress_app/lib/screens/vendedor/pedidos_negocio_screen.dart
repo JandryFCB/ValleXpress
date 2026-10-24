@@ -122,6 +122,19 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
       );
     }
     if (widget.estado == 'activos' && esEscritorio(context)) return _tablero();
+    // Computador, pedidos terminados: en cuadrícula (ya no tienen botones, todas las tarjetas miden igual)
+    if (esEscritorio(context)) {
+      return RefreshIndicator(
+        onRefresh: _cargar,
+        child: GridView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 440, mainAxisExtent: 124, crossAxisSpacing: 14, mainAxisSpacing: 14),
+          itemCount: _pedidos.length,
+          itemBuilder: (_, i) => TarjetaPedidoNegocio(pedido: _pedidos[i], alCambiar: _cargar, onTap: () => _abrir(_pedidos[i])),
+        ),
+      );
+    }
     // Primero lo que necesita una acción del negocio
     final orden = [..._pedidos]..sort((a, b) => _prioridad(a).compareTo(_prioridad(b)));
     return RefreshIndicator(
@@ -149,7 +162,7 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
   }
 
   void _abrir(Pedido p) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoNegocioScreen(pedidoId: p.id, inicial: p)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoNegocioScreen(pedidoId: p.id, inicial: p), settings: RouteSettings(name: 'pedido/${p.id}')));
     _cargar();
   }
 

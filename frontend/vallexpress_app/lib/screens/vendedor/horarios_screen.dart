@@ -86,6 +86,7 @@ class _HorariosScreenState extends State<HorariosScreen> {
     final hoy = DateTime.now().weekday;
 
     return FondoValle(
+      anchoEscritorio: 760, // computador: una columna centrada (estirada se ve vacía)
       titulo: 'Horario de atención',
       barraInferior: SafeArea(
         top: false,

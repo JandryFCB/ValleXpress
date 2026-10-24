@@ -83,6 +83,7 @@ class _MiSuscripcionScreenState extends State<MiSuscripcionScreen> {
   @override
   Widget build(BuildContext context) {
     return FondoValle(
+      anchoEscritorio: 900, // computador: una columna centrada (estirada se ve vacía)
       appBar: AppBar(title: const Text('Mi suscripción')),
       child: _cuenta == null
           ? (_error != null

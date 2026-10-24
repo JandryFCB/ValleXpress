@@ -81,6 +81,7 @@ class _CuentasNegocioScreenState extends State<CuentasNegocioScreen> {
     final tema = Theme.of(context).textTheme;
     final cuentas = _cuentas;
     return FondoValle(
+      anchoEscritorio: 760, // computador: una columna centrada (estirada se ve vacía)
       titulo: 'Cuentas para transferencias',
       child: _error != null
           ? EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar tus cuentas', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar)

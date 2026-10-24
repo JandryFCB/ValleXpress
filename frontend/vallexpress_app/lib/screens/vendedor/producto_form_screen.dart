@@ -98,7 +98,11 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
         content: const Text('Dejará de aparecer en tu menú. Si solo quieres quitarlo por un tiempo, mejor márcalo como oculto.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor), child: const Text('Eliminar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Eliminar'),
+          ),
         ],
       ),
     );
@@ -117,14 +121,167 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
     final tema = Theme.of(context).textTheme;
     final decimal = [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))];
 
+    final escritorio = esEscritorio(context);
+    final foto = GestureDetector(
+      onTap: _elegirImagen,
+      child: AspectRatio(
+        aspectRatio: 16 / 10,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_imagenNueva != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.memory(base64Decode(_imagenNueva!), fit: BoxFit.cover),
+              )
+            else if (_p?.imagen != null)
+              ImagenRed(url: _p!.imagen, radio: 20)
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: c.tarjeta,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: c.borde),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_a_photo_outlined, size: 40, color: c.primario),
+                    const SizedBox(height: 8),
+                    Text('Agregar foto', style: tema.titleSmall?.copyWith(color: c.primario)),
+                    Text('Una buena foto vende más', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+                  ],
+                ),
+              ),
+            if (_imagenNueva != null || _p?.imagen != null)
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.photo_camera_rounded, size: 16, color: Colors.white),
+                      SizedBox(width: 6),
+                      Text(
+                        'Cambiar',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    final campos = <Widget>[
+      CampoValle(controller: _nombre, etiqueta: 'Nombre', icono: Icons.fastfood_outlined, mayusculas: TextCapitalization.sentences, maxLongitud: 120),
+      const SizedBox(height: 14),
+      CampoValle(
+        controller: _precio,
+        etiqueta: 'Precio (\$)',
+        icono: Icons.attach_money_rounded,
+        tipoTeclado: const TextInputType.numberWithOptions(decimal: true),
+        formateadores: decimal,
+        maxLongitud: 8,
+      ),
+      const SizedBox(height: 14),
+      CampoValle(
+        controller: _descripcion,
+        etiqueta: 'Descripción (opcional)',
+        icono: Icons.notes_rounded,
+        mayusculas: TextCapitalization.sentences,
+        maxLongitud: 500,
+        maxLineas: 3,
+      ),
+      const SizedBox(height: 14),
+      // Sección: se escribe o se toca una de las que ya existen (chips, porque una lista
+      // desplegable debajo del campo queda tapada por el teclado en el móvil)
+      CampoValle(
+        controller: _seccion,
+        etiqueta: 'Sección del menú (opcional)',
+        icono: Icons.view_list_outlined,
+        mayusculas: TextCapitalization.sentences,
+        maxLongitud: 60,
+        ayuda: widget.secciones.isEmpty ? 'Ej: Pizzas, Bebidas, Postres' : null,
+        onChanged: (_) => setState(() {}),
+      ),
+      if (widget.secciones.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final s in widget.secciones)
+              ChoiceChip(label: Text(s), selected: _seccion.text.trim().toLowerCase() == s.toLowerCase(), onSelected: (_) => setState(() => _seccion.text = s)),
+          ],
+        ),
+      ],
+      const SizedBox(height: 24),
+      Text('Estado', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 8),
+      SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<EstadoProducto>(
+          showSelectedIcon: false,
+          // Sin íconos: con ellos "Disponible" no cabe en pantallas angostas y se parte en dos líneas
+          segments: [for (final e in EstadoProducto.values) ButtonSegment(value: e, label: Text(e.etiqueta, maxLines: 1))],
+          selected: {_estado},
+          onSelectionChanged: (s) => setState(() => _estado = s.first),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(switch (_estado) {
+        EstadoProducto.disponible => 'Los clientes lo ven y lo pueden pedir.',
+        EstadoProducto.agotado => 'Los clientes lo ven, pero no lo pueden pedir.',
+        EstadoProducto.oculto => 'Los clientes no lo ven.',
+      }, style: tema.bodySmall?.copyWith(color: c.textoSuave)),
+      const SizedBox(height: 16),
+      TarjetaValle(
+        padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
+        child: Column(
+          children: [
+            SwitchListTile(
+              title: const Text('Controlar stock'),
+              subtitle: const Text('Se agota solo cuando llega a 0'),
+              value: _controlaStock,
+              onChanged: (v) => setState(() => _controlaStock = v),
+            ),
+            if (_controlaStock)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 0, 12),
+                child: CampoValle(
+                  controller: _stock,
+                  etiqueta: 'Unidades disponibles',
+                  icono: Icons.inventory_2_outlined,
+                  tipoTeclado: TextInputType.number,
+                  formateadores: [FilteringTextInputFormatter.digitsOnly],
+                  maxLongitud: 6,
+                  accion: TextInputAction.done,
+                ),
+              ),
+          ],
+        ),
+      ),
+    ];
+
     return FondoValle(
       titulo: _editando ? 'Editar producto' : 'Nuevo producto',
+      anchoEscritorio: 1000,
       acciones: [if (_editando) IconButton(onPressed: _eliminar, icon: const Icon(Icons.delete_outline), tooltip: 'Eliminar', color: AppTheme.errorColor)],
       barraInferior: SafeArea(
         top: false,
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          decoration: BoxDecoration(color: c.tarjeta, border: Border(top: BorderSide(color: c.borde))),
+          decoration: escritorio
+              ? null
+              : BoxDecoration(
+                  color: c.tarjeta,
+                  border: Border(top: BorderSide(color: c.borde)),
+                ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -138,128 +295,22 @@ class _ProductoFormScreenState extends State<ProductoFormScreen> {
           ),
         ),
       ),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        children: [
-          // Imagen
-          GestureDetector(
-            onTap: _elegirImagen,
-            child: AspectRatio(
-              aspectRatio: 16 / 10,
-              child: Stack(
-                fit: StackFit.expand,
+      child: escritorio
+          // Computador: la foto a la izquierda y los datos a la derecha
+          ? SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_imagenNueva != null)
-                    ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.memory(base64Decode(_imagenNueva!), fit: BoxFit.cover))
-                  else if (_p?.imagen != null)
-                    ImagenRed(url: _p!.imagen, radio: 20)
-                  else
-                    Container(
-                      decoration: BoxDecoration(color: c.tarjeta, borderRadius: BorderRadius.circular(20), border: Border.all(color: c.borde)),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.add_a_photo_outlined, size: 40, color: c.primario),
-                          const SizedBox(height: 8),
-                          Text('Agregar foto', style: tema.titleSmall?.copyWith(color: c.primario)),
-                          Text('Una buena foto vende más', style: tema.bodySmall?.copyWith(color: c.textoSuave)),
-                        ],
-                      ),
-                    ),
-                  if (_imagenNueva != null || _p?.imagen != null)
-                    Positioned(
-                      right: 10,
-                      bottom: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
-                        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.photo_camera_rounded, size: 16, color: Colors.white),
-                          SizedBox(width: 6),
-                          Text('Cambiar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                        ]),
-                      ),
-                    ),
+                  SizedBox(width: 380, child: foto),
+                  const SizedBox(width: 32),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: campos),
+                  ),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          CampoValle(controller: _nombre, etiqueta: 'Nombre', icono: Icons.fastfood_outlined, mayusculas: TextCapitalization.sentences, maxLongitud: 120),
-          const SizedBox(height: 14),
-          CampoValle(controller: _precio, etiqueta: 'Precio (\$)', icono: Icons.attach_money_rounded, tipoTeclado: const TextInputType.numberWithOptions(decimal: true), formateadores: decimal, maxLongitud: 8),
-          const SizedBox(height: 14),
-          CampoValle(controller: _descripcion, etiqueta: 'Descripción (opcional)', icono: Icons.notes_rounded, mayusculas: TextCapitalization.sentences, maxLongitud: 500, maxLineas: 3),
-          const SizedBox(height: 14),
-          // Sección: se escribe o se toca una de las que ya existen (chips, porque una lista
-          // desplegable debajo del campo queda tapada por el teclado en el móvil)
-          CampoValle(
-            controller: _seccion,
-            etiqueta: 'Sección del menú (opcional)',
-            icono: Icons.view_list_outlined,
-            mayusculas: TextCapitalization.sentences,
-            maxLongitud: 60,
-            ayuda: widget.secciones.isEmpty ? 'Ej: Pizzas, Bebidas, Postres' : null,
-            onChanged: (_) => setState(() {}),
-          ),
-          if (widget.secciones.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final s in widget.secciones)
-                  ChoiceChip(
-                    label: Text(s),
-                    selected: _seccion.text.trim().toLowerCase() == s.toLowerCase(),
-                    onSelected: (_) => setState(() => _seccion.text = s),
-                  ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 24),
-          Text('Estado', style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<EstadoProducto>(
-              showSelectedIcon: false,
-              // Sin íconos: con ellos "Disponible" no cabe en pantallas angostas y se parte en dos líneas
-              segments: [for (final e in EstadoProducto.values) ButtonSegment(value: e, label: Text(e.etiqueta, maxLines: 1))],
-              selected: {_estado},
-              onSelectionChanged: (s) => setState(() => _estado = s.first),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            switch (_estado) {
-              EstadoProducto.disponible => 'Los clientes lo ven y lo pueden pedir.',
-              EstadoProducto.agotado => 'Los clientes lo ven, pero no lo pueden pedir.',
-              EstadoProducto.oculto => 'Los clientes no lo ven.',
-            },
-            style: tema.bodySmall?.copyWith(color: c.textoSuave),
-          ),
-          const SizedBox(height: 16),
-          TarjetaValle(
-            padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  title: const Text('Controlar stock'),
-                  subtitle: const Text('Se agota solo cuando llega a 0'),
-                  value: _controlaStock,
-                  onChanged: (v) => setState(() => _controlaStock = v),
-                ),
-                if (_controlaStock)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 0, 12),
-                    child: CampoValle(controller: _stock, etiqueta: 'Unidades disponibles', icono: Icons.inventory_2_outlined, tipoTeclado: TextInputType.number, formateadores: [FilteringTextInputFormatter.digitsOnly], maxLongitud: 6, accion: TextInputAction.done),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+            )
+          : ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 24), children: [foto, const SizedBox(height: 20), ...campos]),
     );
   }
 }
