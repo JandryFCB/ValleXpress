@@ -270,11 +270,17 @@ class _TusCuentasState extends State<TusCuentas> with WidgetsBindingObserver {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const EncabezadoSeccion('Tus otras cuentas', subtitulo: 'Cambia sin cerrar sesión'),
-          Wrap(
-            spacing: 14,
-            runSpacing: 14,
-            children: [for (final cuenta in otras) SizedBox(width: 330, child: TarjetaValle(padding: EdgeInsets.zero, child: fila(cuenta)))],
-          ),
+          // Las tarjetas se reparten todo el ancho (de 2 a 3 por fila)
+          LayoutBuilder(builder: (_, medidas) {
+            const espacio = 16.0;
+            final porFila = (medidas.maxWidth / 300).floor().clamp(1, otras.length.clamp(2, 3)); // una sola: media fila
+            final ancho = (medidas.maxWidth - espacio * (porFila - 1)) / porFila;
+            return Wrap(
+              spacing: espacio,
+              runSpacing: espacio,
+              children: [for (final cuenta in otras) SizedBox(width: ancho, child: TarjetaValle(padding: EdgeInsets.zero, child: fila(cuenta)))],
+            );
+          }),
         ],
       );
     }

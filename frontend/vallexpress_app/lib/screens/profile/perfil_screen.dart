@@ -494,7 +494,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   // Primero las otras cuentas de la persona (cambiar de perfil), luego sus datos en dos columnas
                   const TusCuentas(),
                   const SizedBox(height: 12),
-                  DosColumnas(hijos: [misDatos, contacto, ?reparto, ?negocio, cuenta]),
+                  // Columnas parejas: a la izquierda los datos personales; a la derecha contacto y la cuenta
+                  DosColumnas.fijas(izquierda: [misDatos, ?reparto], derecha: [contacto, ?negocio, cuenta]),
                 ],
               ),
             ),

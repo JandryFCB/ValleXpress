@@ -93,14 +93,32 @@ class PaginaEscritorio extends StatelessWidget {
 /// Reparte bloques en dos columnas que se llenan alternando (izquierda, derecha, izquierda...); en una pantalla
 /// angosta, una sola columna
 class DosColumnas extends StatelessWidget {
-  const DosColumnas({super.key, required this.hijos, this.espacio = 20});
+  const DosColumnas({super.key, required this.hijos, this.espacio = 20}) : izquierda = null, derecha = null;
+
+  /// Columnas armadas a mano (para equilibrar el alto); en pantallas angostas va primero la izquierda
+  const DosColumnas.fijas({super.key, required List<Widget> this.izquierda, required List<Widget> this.derecha, this.espacio = 20})
+      : hijos = const [];
 
   final List<Widget> hijos;
+  final List<Widget>? izquierda;
+  final List<Widget>? derecha;
   final double espacio;
+
+  Widget _pila(List<Widget> lista) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (final (i, h) in lista.indexed) Padding(padding: EdgeInsets.only(top: i == 0 ? 0 : espacio), child: h),
+      ]);
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (_, medidas) {
+      if (izquierda != null && derecha != null) {
+        if (medidas.maxWidth < 640) return _pila([...izquierda!, ...derecha!]);
+        return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: _pila(izquierda!)),
+          SizedBox(width: espacio),
+          Expanded(child: _pila(derecha!)),
+        ]);
+      }
       if (medidas.maxWidth < 640) {
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           for (final (i, h) in hijos.indexed) Padding(padding: EdgeInsets.only(top: i == 0 ? 0 : espacio), child: h),
