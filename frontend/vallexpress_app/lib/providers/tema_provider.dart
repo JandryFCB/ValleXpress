@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,7 +9,8 @@ class TemaProvider with ChangeNotifier {
 
   /// Mientras las pantallas se migran al tema claro/oscuro, la app arranca en oscuro (las que aún usan los
   /// colores fijos se ven bien así). Cuando todas estén migradas, esto pasa a ThemeMode.system.
-  static const ThemeMode porDefecto = ThemeMode.dark;
+  /// En la web arranca en claro (se ve como una página normal; el usuario puede cambiarlo en Configuración).
+  static const ThemeMode porDefecto = kIsWeb ? ThemeMode.light : ThemeMode.dark;
 
   ThemeMode _modo = porDefecto;
   ThemeMode get modo => _modo;

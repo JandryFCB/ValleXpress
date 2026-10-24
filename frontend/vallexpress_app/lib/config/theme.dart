@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Colores que cambian según el modo (claro/oscuro). Las pantallas NUEVAS los leen así:
 ///     final c = context.colores;   ->   c.fondo, c.tarjeta, c.texto, c.textoSuave, c.borde ...
@@ -149,15 +148,16 @@ class AppTheme {
     acento: accentColor,
   );
 
+  // Claro (el de la web por defecto): blanco y gris muy suave, verde profundo (el texto blanco encima se lee bien)
   static const ColoresValle _claro = ColoresValle(
-    fondo: Color(0xFFF4F8F5),
-    fondoFin: Color(0xFFE6F1EA),
+    fondo: Color(0xFFF6F8F7),
+    fondoFin: Color(0xFFF6F8F7),
     tarjeta: Color(0xFFFFFFFF),
-    tarjetaElevada: Color(0xFFEEF4F0),
-    borde: Color(0xFFD3E0D8),
-    texto: Color(0xFF0B1A2B),
-    textoSuave: Color(0xFF5A6B7C),
-    primario: Color(0xFF1F8F43), // verde más profundo: contrasta bien sobre blanco
+    tarjetaElevada: Color(0xFFF1F4F2),
+    borde: Color(0xFFE3E9E5),
+    texto: Color(0xFF15201A),
+    textoSuave: Color(0xFF5B6B62),
+    primario: Color(0xFF187A3C),
     acento: Color(0xFFC98A00),
   );
 
@@ -184,10 +184,9 @@ class AppTheme {
       outline: c.borde,
     );
 
-    // Tipografía moderna (Plus Jakarta Sans), con los colores del modo
-    final base = GoogleFonts.plusJakartaSansTextTheme(
-      oscuro ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
-    ).apply(bodyColor: c.texto, displayColor: c.texto);
+    // Tipografía moderna (Plus Jakarta Sans, incluida en assets/fonts), con los colores del modo
+    final base = (oscuro ? ThemeData.dark().textTheme : ThemeData.light().textTheme)
+        .apply(fontFamily: 'PlusJakartaSans', bodyColor: c.texto, displayColor: c.texto);
     final texto = base.copyWith(
       headlineLarge: base.headlineLarge?.copyWith(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.5),
       headlineMedium: base.headlineMedium?.copyWith(fontSize: 24, fontWeight: FontWeight.w700),
@@ -203,6 +202,7 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'PlusJakartaSans',
       brightness: brillo,
       colorScheme: esquema,
       scaffoldBackgroundColor: c.fondo,
@@ -329,6 +329,8 @@ class AppTheme {
         backgroundColor: c.tarjeta,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        // En el computador las hojas de abajo no se estiran a todo el ancho de la ventana
+        constraints: const BoxConstraints(maxWidth: 640),
       ),
 
       navigationBarTheme: NavigationBarThemeData(

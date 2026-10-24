@@ -6,6 +6,7 @@ export 'avatar_valle.dart';
 export 'boton_valle.dart';
 export 'campo_valle.dart';
 export 'encabezado_seccion.dart';
+export 'escritorio.dart';
 export 'estado_vacio.dart';
 export 'fondo_valle.dart';
 export 'insignia_valle.dart';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
+import 'escritorio.dart';
 
 /// Fondo estándar de las pantallas: degradado del tema (claro u oscuro) y zona segura. Todas las pantallas nuevas
 /// se construyen sobre esto para verse iguales.
@@ -17,6 +18,7 @@ class FondoValle extends StatelessWidget {
     this.conFlechaAtras = true,
     this.zonaSegura = true,
     this.resizeToAvoidBottomInset = true,
+    this.anchoCompleto = false,
   });
 
   final Widget child;
@@ -31,6 +33,9 @@ class FondoValle extends StatelessWidget {
   final bool zonaSegura;
   final bool resizeToAvoidBottomInset;
 
+  /// En el computador la pantalla se centra con un ancho cómodo; true = usa todo el ancho (mapas, tableros)
+  final bool anchoCompleto;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colores;
@@ -43,7 +48,7 @@ class FondoValle extends StatelessWidget {
                 automaticallyImplyLeading: conFlechaAtras,
               ));
 
-    return Scaffold(
+    final pantalla = Scaffold(
       extendBodyBehindAppBar: false,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       appBar: barra,
@@ -56,5 +61,7 @@ class FondoValle extends StatelessWidget {
         child: zonaSegura ? SafeArea(top: barra == null, child: child) : child,
       ),
     );
+    if (anchoCompleto || !esEscritorio(context)) return pantalla;
+    return ColoredBox(color: c.fondo, child: AnchoMaximo(child: pantalla));
   }
 }

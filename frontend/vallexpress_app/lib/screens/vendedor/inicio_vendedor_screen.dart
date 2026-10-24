@@ -112,50 +112,71 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colores;
     return AtrasEnPestanas(
       pestana: _pestana,
       irAPrimera: () => setState(() => _pestana = 0),
-      child: Scaffold(
-        body: PestanasAnimadas(
-          indice: _pestana,
-          children: [
-            _enRevision ? _solicitud() : const PedidosNegocioScreen(conFlechaAtras: false),
-            const MiNegocioScreen(),
-            const PerfilScreen(),
-          ],
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _pestana,
-          backgroundColor: c.tarjeta,
-          indicatorColor: c.primario.withValues(alpha: 0.18),
-          onDestinationSelected: (i) {
-            setState(() => _pestana = i);
-            if (i == 0) _cargarNegocio(); // pudo crear o corregir su negocio en la otra pestaña
-          },
-          destinations: [
-            if (_enRevision)
-              const NavigationDestination(icon: Icon(Icons.hourglass_empty_rounded), selectedIcon: Icon(Icons.hourglass_top_rounded), label: 'Solicitud')
-            else
-              NavigationDestination(
-                icon: Badge(
-                  isLabelVisible: _porAceptar > 0,
-                  backgroundColor: AppTheme.warningColor,
-                  label: Text('$_porAceptar'),
-                  child: const Icon(Icons.receipt_long_outlined),
+      child: PestanasAdaptables(
+        indice: _pestana,
+        onCambiar: (i) {
+          setState(() => _pestana = i);
+          if (i == 0) _cargarNegocio(); // pudo crear o corregir su negocio en la otra pestaña
+        },
+        cabeceraLateral: _negocio == null ? null : _NegocioLateral(negocio: _negocio!),
+        paginas: [
+          _enRevision ? _solicitud() : const PedidosNegocioScreen(conFlechaAtras: false),
+          const MiNegocioScreen(),
+          const PerfilScreen(),
+        ],
+        destinos: [
+          if (_enRevision)
+            const Destino(icono: Icons.hourglass_empty_rounded, iconoActivo: Icons.hourglass_top_rounded, texto: 'Solicitud')
+          else
+            Destino(
+              icono: Icons.receipt_long_outlined,
+              iconoActivo: Icons.receipt_long_rounded,
+              texto: 'Pedidos',
+              insignia: _porAceptar,
+              colorInsignia: AppTheme.warningColor,
+            ),
+          const Destino(icono: Icons.storefront_outlined, iconoActivo: Icons.storefront_rounded, texto: 'Mi negocio'),
+          const Destino(icono: Icons.person_outline_rounded, iconoActivo: Icons.person_rounded, texto: 'Perfil'),
+        ],
+      ),
+    );
+  }
+}
+
+/// En el menú lateral del computador: logo, nombre y si el negocio está abierto
+class _NegocioLateral extends StatelessWidget {
+  const _NegocioLateral({required this.negocio});
+
+  final Negocio negocio;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    final abierto = negocio.abiertoAhora;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: c.tarjetaElevada, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          ImagenRed(url: negocio.logo, ancho: 40, alto: 40, radio: 12, icono: Icons.storefront_rounded),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(negocio.nombre, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  abierto ? '● Abierto' : 'Cerrado',
+                  style: tema.labelMedium?.copyWith(color: abierto ? c.primario : c.textoSuave, fontWeight: FontWeight.w700),
                 ),
-                selectedIcon: Badge(
-                  isLabelVisible: _porAceptar > 0,
-                  backgroundColor: AppTheme.warningColor,
-                  label: Text('$_porAceptar'),
-                  child: const Icon(Icons.receipt_long_rounded),
-                ),
-                label: 'Pedidos',
-              ),
-            const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Mi negocio'),
-            const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -42,38 +42,26 @@ class _InicioAdminScreenState extends State<InicioAdminScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colores;
     return AtrasEnPestanas(
       pestana: _pestana,
       irAPrimera: () => setState(() => _pestana = 0),
-      child: Scaffold(
-        body: PestanasAnimadas(
-          indice: _pestana,
-          children: [
-            _Resumen(alPendientes: (n) => setState(() => _pendientes = n), irAAprobaciones: () => setState(() => _pestana = 1)),
-            AprobacionesScreen(alCambiar: () => setState(() => _pendientes = (_pendientes - 1).clamp(0, 999))),
-            const PedidosAdminScreen(),
-            const UsuariosAdminScreen(),
-            const PerfilScreen(),
-          ],
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _pestana,
-          backgroundColor: c.tarjeta,
-          indicatorColor: c.primario.withValues(alpha: 0.18),
-          onDestinationSelected: (i) => setState(() => _pestana = i),
-          destinations: [
-            const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_rounded), label: 'Resumen'),
-            NavigationDestination(
-              icon: Badge(isLabelVisible: _pendientes > 0, label: Text('$_pendientes'), child: const Icon(Icons.fact_check_outlined)),
-              selectedIcon: const Icon(Icons.fact_check_rounded),
-              label: 'Gestión',
-            ),
-            const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_rounded), label: 'Pedidos'),
-            const NavigationDestination(icon: Icon(Icons.group_outlined), selectedIcon: Icon(Icons.group_rounded), label: 'Usuarios'),
-            const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
-          ],
-        ),
+      child: PestanasAdaptables(
+        indice: _pestana,
+        onCambiar: (i) => setState(() => _pestana = i),
+        paginas: [
+          _Resumen(alPendientes: (n) => setState(() => _pendientes = n), irAAprobaciones: () => setState(() => _pestana = 1)),
+          AprobacionesScreen(alCambiar: () => setState(() => _pendientes = (_pendientes - 1).clamp(0, 999))),
+          const PedidosAdminScreen(),
+          const UsuariosAdminScreen(),
+          const PerfilScreen(),
+        ],
+        destinos: [
+          const Destino(icono: Icons.insights_outlined, iconoActivo: Icons.insights_rounded, texto: 'Resumen'),
+          Destino(icono: Icons.fact_check_outlined, iconoActivo: Icons.fact_check_rounded, texto: 'Gestión', insignia: _pendientes),
+          const Destino(icono: Icons.receipt_long_outlined, iconoActivo: Icons.receipt_long_rounded, texto: 'Pedidos'),
+          const Destino(icono: Icons.group_outlined, iconoActivo: Icons.group_rounded, texto: 'Usuarios'),
+          const Destino(icono: Icons.person_outline_rounded, iconoActivo: Icons.person_rounded, texto: 'Perfil'),
+        ],
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../../services/catalogo_service.dart';
 import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import 'negocio_detalle_screen.dart';
+import 'negocios_escritorio.dart';
 
 /// Explorar negocios: buscador, categorías, "abiertos ahora" y la lista (se cargan más al llegar al final).
 /// Con [cabecera] se usa como pestaña de inicio: sin barra de título y con la cabecera arriba del buscador.
@@ -104,8 +105,118 @@ class _NegociosScreenState extends State<NegociosScreen> {
     _espera = Timer(const Duration(milliseconds: 400), _cargar); // no se consulta en cada tecla
   }
 
+  Widget _buscador() => TextField(
+        controller: _busqueda,
+        textInputAction: TextInputAction.search,
+        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+        onChanged: (v) {
+          setState(() {});
+          _alBuscar(v);
+        },
+        decoration: InputDecoration(
+          hintText: 'Buscar negocios o productos',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _busqueda.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: 'Borrar búsqueda',
+                  onPressed: () {
+                    _busqueda.clear();
+                    setState(() {});
+                    _cargar();
+                  },
+                ),
+        ),
+      );
+
+  void _abrir(Negocio n) {
+    FocusManager.instance.primaryFocus?.unfocus(); // al volver, el buscador no debe abrir el teclado
+    Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n)));
+  }
+
+  void _elegirCategoria(String? codigo) {
+    setState(() => _categoria = codigo);
+    _cargar();
+  }
+
+  /// En el computador: bienvenida verde con el buscador, fichas de colores por categoría y negocios en cuadrícula
+  Widget _escritorio() {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    final margen = margenEscritorio(context);
+    SliverPadding conMargen(Widget sliver, {double arriba = 0, double abajo = 0}) =>
+        SliverPadding(padding: EdgeInsets.fromLTRB(margen, arriba, margen, abajo), sliver: sliver);
+    final nombreCategoria = _categorias.where((k) => k.codigo == _categoria).map((k) => k.descripcion).firstOrNull;
+    final hayLista = !_cargando && _error == null && _negocios.isNotEmpty;
+
+    return ColoredBox(
+      color: c.fondo,
+      child: CustomScrollView(
+        controller: _scroll,
+        slivers: [
+          conMargen(SliverToBoxAdapter(child: BienvenidaEscritorio(buscador: _buscador())), arriba: 28),
+          if (widget.cabecera != null) conMargen(SliverToBoxAdapter(child: widget.cabecera), arriba: 24),
+          conMargen(SliverToBoxAdapter(child: Text('Categorías', style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800))), arriba: 36, abajo: 16),
+          conMargen(
+            SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 220, mainAxisExtent: 120, crossAxisSpacing: 14, mainAxisSpacing: 14),
+              delegate: SliverChildListDelegate([
+                FichaCategoria(codigo: null, texto: 'Todos', icono: Icons.apps_rounded, seleccionada: _categoria == null, onTap: () => _elegirCategoria(null)),
+                for (final k in _categorias)
+                  FichaCategoria(codigo: k.codigo, texto: k.descripcion, icono: k.icono, seleccionada: _categoria == k.codigo, onTap: () => _elegirCategoria(k.codigo)),
+              ]),
+            ),
+          ),
+          conMargen(
+            SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(nombreCategoria ?? 'Negocios cerca de ti', style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  ),
+                  FilterChip(
+                    avatar: Icon(Icons.access_time_rounded, size: 18, color: _soloAbiertos ? Colors.white : c.textoSuave),
+                    label: const Text('Abiertos ahora'),
+                    selected: _soloAbiertos,
+                    labelStyle: TextStyle(color: _soloAbiertos ? Colors.white : c.texto, fontWeight: FontWeight.w700),
+                    onSelected: (v) {
+                      setState(() => _soloAbiertos = v);
+                      _cargar();
+                    },
+                  ),
+                ],
+              ),
+            ),
+            arriba: 40,
+            abajo: 18,
+          ),
+          if (_cargando) const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()))),
+          if (!_cargando && !hayLista) ..._contenido(),
+          if (hayLista)
+            conMargen(
+              SliverGrid(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 330, mainAxisExtent: 270, crossAxisSpacing: 22, mainAxisSpacing: 28),
+                delegate: SliverChildBuilderDelegate(
+                  (_, i) => Aparecer(
+                    key: ValueKey('negocio-web-${_negocios[i].id}'),
+                    indice: i % 8,
+                    child: TarjetaNegocioEscritorio(negocio: _negocios[i], onTap: () => _abrir(_negocios[i])),
+                  ),
+                  childCount: _negocios.length,
+                ),
+              ),
+              abajo: 48,
+            ),
+          if (hayLista && _hayMas) const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.only(bottom: 48), child: Center(child: CircularProgressIndicator()))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (esEscritorio(context)) return _escritorio();
     final c = context.colores;
     return FondoValle(
       titulo: widget.cabecera == null ? 'Explorar' : null,
@@ -116,35 +227,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
           slivers: [
             if (widget.cabecera != null) SliverToBoxAdapter(child: widget.cabecera),
             // Buscador
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: TextField(
-                  controller: _busqueda,
-                  textInputAction: TextInputAction.search,
-                  onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-                  onChanged: (v) {
-                    setState(() {});
-                    _alBuscar(v);
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Buscar negocios o productos',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _busqueda.text.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.close_rounded),
-                            tooltip: 'Borrar búsqueda',
-                            onPressed: () {
-                              _busqueda.clear();
-                              setState(() {});
-                              _cargar();
-                            },
-                          ),
-                  ),
-                ),
-              ),
-            ),
+            SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 12), child: _buscador())),
             // Categorías y filtro de abiertos
             SliverToBoxAdapter(
               child: SizedBox(
@@ -190,10 +273,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
         selected: sel,
         showCheckmark: false,
         labelStyle: TextStyle(color: sel ? Colors.white : c.texto, fontWeight: FontWeight.w600),
-        onSelected: (_) {
-          setState(() => _categoria = codigo);
-          _cargar();
-        },
+        onSelected: (_) => _elegirCategoria(codigo),
       ),
     );
   }
@@ -246,13 +326,7 @@ class _NegociosScreenState extends State<NegociosScreen> {
             return Aparecer(
               key: ValueKey('negocio-${n.id}'),
               indice: i,
-              child: TarjetaNegocio(
-                negocio: n,
-                onTap: () {
-                  FocusManager.instance.primaryFocus?.unfocus(); // al volver, el buscador no debe abrir el teclado
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => NegocioDetalleScreen(negocio: n)));
-                },
-              ),
+              child: TarjetaNegocio(negocio: n, onTap: () => _abrir(n)),
             );
           },
         ),

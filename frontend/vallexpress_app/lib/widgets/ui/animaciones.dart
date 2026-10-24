@@ -508,3 +508,32 @@ class _IconoLatiendoState extends State<IconoLatiendo> with SingleTickerProvider
     );
   }
 }
+
+/// Sube y baja suavemente sin parar (decoración: el logo de la bienvenida en el computador)
+class Flotar extends StatefulWidget {
+  const Flotar({super.key, required this.child, this.distancia = 10});
+
+  final Widget child;
+  final double distancia;
+
+  @override
+  State<Flotar> createState() => _FlotarState();
+}
+
+class _FlotarState extends State<Flotar> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat(reverse: true);
+  late final Animation<double> _t = CurvedAnimation(parent: _c, curve: Curves.easeInOut);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _t,
+        builder: (_, hijo) => Transform.translate(offset: Offset(0, -widget.distancia * _t.value), child: hijo),
+        child: widget.child,
+      );
+}

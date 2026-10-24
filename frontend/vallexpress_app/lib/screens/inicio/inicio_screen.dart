@@ -142,48 +142,89 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
   @override
   Widget build(BuildContext context) {
     final carrito = context.watch<CarritoProvider>();
-    final c = context.colores;
+    final escritorio = esEscritorio(context);
 
     return AtrasEnPestanas(
       pestana: _pestana,
       irAPrimera: () => setState(() => _pestana = 0),
-      child: Scaffold(
-        body: PestanasAnimadas(
-          indice: _pestana,
-          children: [
-            NegociosScreen(
-              alRefrescar: _refrescar,
-              cabecera: _Cabecera(noLeidos: _noLeidos, enCurso: _enCurso, onAvisos: _abrirAvisos, onCarrito: _abrirCarrito, carrito: carrito),
+      child: PestanasAdaptables(
+        lateral: false,
+        indice: _pestana,
+        onCambiar: (i) => setState(() => _pestana = i),
+        paginas: [
+          NegociosScreen(
+            alRefrescar: _refrescar,
+            // En el computador el saludo va en la bienvenida y los avisos y el carrito en la barra de arriba
+            cabecera: escritorio
+                ? (_enCurso.isEmpty ? null : _EnCursoEscritorio(enCurso: _enCurso))
+                : _Cabecera(noLeidos: _noLeidos, enCurso: _enCurso, onAvisos: _abrirAvisos, onCarrito: _abrirCarrito, carrito: carrito),
+          ),
+          const MisPedidosScreen(conFlechaAtras: false),
+          const PerfilScreen(),
+        ],
+        destinos: [
+          const Destino(icono: Icons.storefront_outlined, iconoActivo: Icons.storefront_rounded, texto: 'Inicio'),
+          Destino(icono: Icons.receipt_long_outlined, iconoActivo: Icons.receipt_long_rounded, texto: 'Pedidos', insignia: _enCurso.length),
+          const Destino(icono: Icons.person_outline_rounded, iconoActivo: Icons.person_rounded, texto: 'Perfil'),
+        ],
+        accionesSuperiores: [
+          IconButton(
+            tooltip: 'Avisos',
+            onPressed: _abrirAvisos,
+            icon: Badge(
+              isLabelVisible: _noLeidos > 0,
+              label: Text(_noLeidos > 9 ? '9+' : '$_noLeidos'),
+              child: const Icon(Icons.notifications_none_rounded),
             ),
-            const MisPedidosScreen(conFlechaAtras: false),
-            const PerfilScreen(),
-          ],
-        ),
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            BarraDeslizante(
-              visible: _pestana == 0 && !carrito.vacio,
-              child: BarraCarrito(key: const ValueKey('carrito'), carrito: carrito, onTap: _abrirCarrito),
+          ),
+          const SizedBox(width: 8),
+          Rebote(
+            valor: carrito.cantidadTotal,
+            child: FilledButton.icon(
+              onPressed: _abrirCarrito,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.accentColor,
+                foregroundColor: const Color(0xFF15201A),
+                minimumSize: const Size(0, 46),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(99)),
+              ),
+              icon: const Icon(Icons.shopping_bag_outlined),
+              label: Text(carrito.vacio ? 'Carrito' : 'Carrito · ${carrito.cantidadTotal}', style: const TextStyle(fontWeight: FontWeight.w800)),
             ),
-            NavigationBar(
-              selectedIndex: _pestana,
-              backgroundColor: c.tarjeta,
-              indicatorColor: c.primario.withValues(alpha: 0.18),
-              onDestinationSelected: (i) => setState(() => _pestana = i),
-              destinations: [
-                const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Inicio'),
-                NavigationDestination(
-                  icon: Badge(isLabelVisible: _enCurso.isNotEmpty, label: Text('${_enCurso.length}'), child: const Icon(Icons.receipt_long_outlined)),
-                  selectedIcon: const Icon(Icons.receipt_long_rounded),
-                  label: 'Pedidos',
-                ),
-                const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Perfil'),
-              ],
-            ),
-          ],
+          ),
+        ],
+        sobreLaBarra: BarraDeslizante(
+          visible: _pestana == 0 && !carrito.vacio,
+          child: BarraCarrito(key: const ValueKey('carrito'), carrito: carrito, onTap: _abrirCarrito),
         ),
       ),
+    );
+  }
+}
+
+/// En el computador: los pedidos en curso, en fila, debajo de la bienvenida
+class _EnCursoEscritorio extends StatelessWidget {
+  const _EnCursoEscritorio({required this.enCurso});
+
+  final List<Pedido> enCurso;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Tus pedidos en curso', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            for (var i = 0; i < enCurso.length; i++)
+              Aparecer(key: ValueKey('en-curso-web-${enCurso[i].id}'), indice: i, child: _PedidoEnCurso(pedido: enCurso[i], ancho: 340)),
+          ],
+        ),
+      ],
     );
   }
 }
