@@ -106,6 +106,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       },
       child: FondoValle(
         zonaSegura: true,
+        anchoEscritorio: 560, // computador: progreso, pasos y botón en una sola columna centrada
         barraInferior: _barraAccion(context, ultimo: ultimo),
         child: Column(
           children: [
@@ -163,7 +164,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
-        decoration: BoxDecoration(color: c.tarjeta, border: Border(top: BorderSide(color: c.borde))),
+        // En el computador sin franja: el botón queda bajo el formulario, del mismo ancho
+        decoration: esEscritorio(context) ? null : BoxDecoration(color: c.tarjeta, border: Border(top: BorderSide(color: c.borde))),
         // heightFactor: 1 = la barra mide solo lo que mide su contenido (un Center solo ocuparía toda la pantalla)
         child: Align(
           heightFactor: 1,

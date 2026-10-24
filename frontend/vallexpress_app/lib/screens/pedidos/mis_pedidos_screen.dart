@@ -154,7 +154,10 @@ class _ListaPedidosState extends State<_ListaPedidos> with AutomaticKeepAliveCli
           child: TarjetaPedido(
             pedido: _pedidos[i],
             onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: _pedidos[i].id, inicial: _pedidos[i]), settings: RouteSettings(name: 'pedido/${_pedidos[i].id}')));
+              // El pedido se toma ahora: la pantalla se puede volver a armar cuando la lista ya cambió (p. ej. al
+              // confirmar 'Ya lo recibí' sale de 'En curso' y _pedidos[i] ya no existe)
+              final pedido = _pedidos[i];
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: pedido.id, inicial: pedido), settings: RouteSettings(name: 'pedido/${pedido.id}')));
               _cargar();
             },
           ),

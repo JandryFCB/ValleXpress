@@ -138,7 +138,8 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
             pedido: orden[i],
             alCambiar: _cargar,
             onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoNegocioScreen(pedidoId: orden[i].id, inicial: orden[i])));
+              final pedido = orden[i]; // tomado ahora: la lista puede cambiar mientras está abierto
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoNegocioScreen(pedidoId: pedido.id, inicial: pedido), settings: RouteSettings(name: 'pedido/${pedido.id}')));
               _cargar();
             },
           ),
