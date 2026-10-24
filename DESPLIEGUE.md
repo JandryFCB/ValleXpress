@@ -62,8 +62,9 @@ chown 1000:1000 ~/ValleXpress/deploy/secretos/firebase.json && chmod 600 ~/Valle
 Valores del `.env` que importan:
 | Variable | Qué poner |
 |---|---|
-| `DOMINIO` | `vallexpress.duckdns.org` |
-| `PUBLIC_URL` | `https://vallexpress.duckdns.org` |
+| `DOMINIO` | `vallexpress.com` (desde 2026-10-23; antes `vallexpress.duckdns.org`) |
+| `DOMINIO_ANTERIOR` | `vallexpress.duckdns.org` (las apps ya instaladas lo usan: Caddy sigue respondiendo en él) |
+| `PUBLIC_URL` | `https://vallexpress.com` |
 | `DB_PASSWORD` | una clave larga y aleatoria (nueva) |
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` (el servidor no arranca con menos de 32 caracteres) |
 | `BREVO_API_KEY` | una clave **nueva** de Brevo (la de desarrollo quedó expuesta) |
