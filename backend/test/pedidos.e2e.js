@@ -123,6 +123,10 @@ const LOCAL = { lat: -0.18, lng: -78.48 };
     check('el negocio ve su pedido activo con el cliente', r.status === 200 && r.body.pedidos.length === 1 && r.body.pedidos[0].cliente.nombre === 'Carlos');
     r = await api('GET', '/api/mi-negocio/pedidos', null, ana.token);
     check('otro negocio no ve nada', r.status === 200 && r.body.pedidos.length === 0);
+    r = await api('GET', '/api/mi-negocio/resumen', null, L);
+    check('resumen del día: 1 pedido hoy y lo vendido en productos', r.status === 200 && r.body.pedidosHoy === 1 && r.body.vendidoHoy > 0 && r.body.vendidoSemanaPasada === 0, JSON.stringify(r.body));
+    r = await api('GET', '/api/mi-negocio/resumen', null, C);
+    check('un cliente no ve el resumen de un negocio: 403', r.status === 403);
 
     seccion('6. Cancelar (cliente)');
     r = await api('POST', '/api/pedidos', { ...pedidoBase, direccionId: dirMaria.id, productos: [{ productoId: pizza.id, cantidad: 1 }, { productoId: cola.id, cantidad: 1 }] }, M);

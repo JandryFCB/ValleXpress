@@ -21,7 +21,8 @@ const obtener = asyncHandler(async (req, res) => res.json({ pedido: await servic
 
 // --- Negocio (rutas en /api/mi-negocio/pedidos) ---
 const delNegocio = asyncHandler(async (req, res) => res.json(await service.listarDelNegocio(req.usuario.id, req.query, req)));
+const resumenNegocio = asyncHandler(async (req, res) => res.json(await service.resumenDelNegocio(req.usuario.id)));
 const estadoNegocio = asyncHandler(async (req, res) => res.json({ pedido: await service.cambiarEstadoNegocio(req.usuario, id(req), req.body, req) }));
 const pagoNegocio = asyncHandler(async (req, res) => res.json({ pedido: await service.revisarPago(req.usuario, id(req), req.body, req) }));
 
-module.exports = { metodosPago, cotizar, crear, misPedidos, cancelar, recibido, calificar, comprobante, calificarRepartidor, obtener, delNegocio, estadoNegocio, pagoNegocio };
+module.exports = { metodosPago, cotizar, crear, misPedidos, cancelar, recibido, calificar, comprobante, calificarRepartidor, obtener, delNegocio, resumenNegocio, estadoNegocio, pagoNegocio };

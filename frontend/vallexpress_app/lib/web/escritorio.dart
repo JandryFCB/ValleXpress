@@ -19,7 +19,7 @@ bool esEscritorio(BuildContext context) => kIsWeb && MediaQuery.sizeOf(context).
 
 /// Una pestaña de la navegación principal
 class Destino {
-  const Destino({required this.icono, required this.iconoActivo, required this.texto, this.insignia = 0, this.colorInsignia});
+  const Destino({required this.icono, required this.iconoActivo, required this.texto, this.insignia = 0, this.colorInsignia, this.enBarra = true});
 
   final IconData icono;
   final IconData iconoActivo;
@@ -28,6 +28,9 @@ class Destino {
   /// Número en el globito (0 = sin globito)
   final int insignia;
   final Color? colorInsignia;
+
+  /// En la barra de arriba del computador aparece como pestaña (false: se abre con un botón propio, p. ej. el perfil)
+  final bool enBarra;
 }
 
 /// Logo de ValleXpress con el nombre ("Valle" + "Xpress" en verde)
@@ -77,7 +80,11 @@ class PestanasAdaptables extends StatelessWidget {
     this.accionesSuperiores = const [],
     this.sobreLaBarra,
     this.rutas,
+    this.menuCentrado = false,
   });
+
+  /// Barra de arriba (computador): logo a la izquierda, pestañas al centro y botones a la derecha
+  final bool menuCentrado;
 
   /// Dirección de cada pestaña en la web (/inicio, /pedidos, /perfil...): la barra del navegador la muestra y al
   /// recargar o abrir un enlace se vuelve a esa pestaña
@@ -158,7 +165,7 @@ class PestanasAdaptables extends StatelessWidget {
         backgroundColor: c.fondo,
         body: Column(
           children: [
-            _BarraSuperior(indice: indice, onCambiar: onCambiar, destinos: destinos, acciones: accionesSuperiores, icono: _icono),
+            _BarraSuperior(indice: indice, onCambiar: onCambiar, destinos: destinos, acciones: accionesSuperiores, icono: _icono, centrado: menuCentrado),
             const AvisoNotificaciones(),
             Expanded(child: interno),
           ],
@@ -299,8 +306,9 @@ class _MenuLateral extends StatelessWidget {
 }
 
 class _BarraSuperior extends StatelessWidget {
-  const _BarraSuperior({required this.indice, required this.onCambiar, required this.destinos, required this.acciones, required this.icono});
+  const _BarraSuperior({required this.indice, required this.onCambiar, required this.destinos, required this.acciones, required this.icono, this.centrado = false});
 
+  final bool centrado;
   final int indice;
   final ValueChanged<int> onCambiar;
   final List<Destino> destinos;
@@ -318,11 +326,27 @@ class _BarraSuperior extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: double.infinity),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: margenWeb, vertical: 12),
-            child: Row(
+            child: centrado
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: InkWell(borderRadius: BorderRadius.circular(12), onTap: () => onCambiar(0), child: const LogoValle()),
+                        ),
+                      ),
+                      Row(mainAxisSize: MainAxisSize.min, children: [for (var i = 0; i < destinos.length; i++) if (destinos[i].enBarra) _pestana(context, i)]),
+                      Expanded(
+                        child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [const BotonTema(), const SizedBox(width: 4), ...acciones]),
+                      ),
+                    ],
+                  )
+                : Row(
               children: [
                 InkWell(borderRadius: BorderRadius.circular(12), onTap: () => onCambiar(0), child: const LogoValle()),
                 const SizedBox(width: 32),
                 for (var i = 0; i < destinos.length; i++)
+                  if (destinos[i].enBarra)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: TextButton.icon(
@@ -345,6 +369,26 @@ class _BarraSuperior extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _pestana(BuildContext context, int i) {
+    final c = context.colores;
+    final activo = i == indice;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: TextButton.icon(
+        onPressed: () => onCambiar(i),
+        style: TextButton.styleFrom(
+          foregroundColor: activo ? c.primario : c.texto,
+          backgroundColor: activo ? c.primario.withValues(alpha: 0.10) : null,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          minimumSize: const Size(0, 44),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        icon: icono(destinos[i], activo),
+        label: Text(destinos[i].texto, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: activo ? c.primario : c.texto)),
       ),
     );
   }

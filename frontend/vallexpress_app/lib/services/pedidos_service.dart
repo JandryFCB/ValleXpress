@@ -151,6 +151,12 @@ class PedidosService {
     return (pedidos: lista, hayMas: datos['pagination']?['hasNext'] == true);
   }
 
+  /// Cifras del día del negocio (cabecera del panel web)
+  static Future<ResumenNegocio> resumenNegocio() async {
+    final res = await http.get(_url('/mi-negocio/resumen'), headers: await _cabeceras());
+    return ResumenNegocio.desdeJson(_json(res, 200, 'No se pudo cargar el resumen'));
+  }
+
   /// estado: 'confirmado' | 'preparando' | 'listo' | 'rechazado'
   static Future<Pedido> cambiarEstadoNegocio(int id, String estado, {String? motivo, int? tiempoEstimado}) async => _pedido(
         await http.patch(
@@ -249,4 +255,22 @@ class PedidosService {
     final res = await http.patch(_url('/notificaciones/leer-todas'), headers: await _cabeceras());
     if (res.statusCode != 200) throw Exception(mensajeDeError(res, 'No se pudieron marcar los avisos'));
   }
+}
+
+/// Cifras del día del negocio: vendido hoy (en productos) y el mismo día de la semana pasada, pedidos de hoy y
+/// minutos promedio de aceptado a listo (últimos 7 días; null si aún no hay datos)
+class ResumenNegocio {
+  const ResumenNegocio({required this.pedidosHoy, required this.vendidoHoy, required this.vendidoSemanaPasada, this.minutosPreparacion});
+
+  final int pedidosHoy;
+  final double vendidoHoy;
+  final double vendidoSemanaPasada;
+  final int? minutosPreparacion;
+
+  factory ResumenNegocio.desdeJson(Map<String, dynamic> j) => ResumenNegocio(
+        pedidosHoy: (j['pedidosHoy'] as num?)?.toInt() ?? 0,
+        vendidoHoy: (j['vendidoHoy'] as num?)?.toDouble() ?? 0,
+        vendidoSemanaPasada: (j['vendidoSemanaPasada'] as num?)?.toDouble() ?? 0,
+        minutosPreparacion: (j['minutosPreparacion'] as num?)?.toInt(),
+      );
 }

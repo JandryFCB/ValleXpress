@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../config/theme.dart';
+import '../../models/negocio.dart';
 import '../../models/pedido.dart';
 import '../../services/api_error.dart';
+import '../../services/catalogo_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
 import '../../utils/formato.dart';
@@ -23,6 +25,8 @@ class PedidosNegocioScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Computador (como pestaña del inicio): panel con el resumen del día arriba y los pedidos en columnas
+    if (esEscritorio(context) && !conFlechaAtras) return const _PanelPedidos();
     return DefaultTabController(
       length: 2,
       child: FondoValle(
@@ -46,7 +50,7 @@ class PedidosNegocioScreen extends StatelessWidget {
 }
 
 class _Lista extends StatefulWidget {
-  const _Lista({required this.estado});
+  const _Lista({super.key, required this.estado});
 
   final String estado;
 
@@ -105,6 +109,7 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
     if (_error != null && _pedidos.isEmpty) {
       return EstadoVacio(icono: Icons.cloud_off_rounded, color: AppTheme.errorColor, titulo: 'No pudimos cargar los pedidos', mensaje: _error, textoAccion: 'Reintentar', onAccion: _cargar);
     }
+    if (widget.estado == 'activos' && esEscritorio(context)) return _tablero();
     if (_pedidos.isEmpty) {
       final activos = widget.estado == 'activos';
       return RefreshIndicator(
@@ -170,8 +175,7 @@ class _ListaState extends State<_Lista> with AutomaticKeepAliveClientMixin {
   Widget _tablero() {
     final columnas = [
       ('Nuevos', AppTheme.warningColor, _pedidos.where((p) => p.estado == EstadoPedido.pendiente).toList()),
-      ('Aceptados', AppTheme.infoColor, _pedidos.where((p) => p.estado == EstadoPedido.confirmado).toList()),
-      ('Preparando', AppTheme.successColor, _pedidos.where((p) => p.estado == EstadoPedido.preparando).toList()),
+      ('Aceptados y preparando', AppTheme.infoColor, _pedidos.where((p) => p.estado == EstadoPedido.confirmado || p.estado == EstadoPedido.preparando).toList()),
       ('Listos y en camino', context.colores.textoSuave, _pedidos.where((p) => p.estado.activo && _prioridad(p) >= 2).toList()),
     ];
     return Padding(
@@ -211,8 +215,7 @@ class _Columna extends StatelessWidget {
     final c = context.colores;
     final tema = Theme.of(context).textTheme;
     return Container(
-      decoration: BoxDecoration(color: c.tarjetaElevada, borderRadius: BorderRadius.circular(20)),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -491,5 +494,211 @@ class _BotonesNegocioState extends State<BotonesNegocio> {
       default:
         return const SizedBox.shrink();
     }
+  }
+}
+
+/// Panel de pedidos del computador: franja con el saludo y el interruptor de abierto, las cifras del día y los
+/// pedidos (en curso en columnas, o los anteriores en cuadrícula)
+class _PanelPedidos extends StatefulWidget {
+  const _PanelPedidos();
+
+  @override
+  State<_PanelPedidos> createState() => _PanelPedidosState();
+}
+
+class _PanelPedidosState extends State<_PanelPedidos> {
+  Negocio? _negocio;
+  ResumenNegocio? _resumen;
+  bool _anteriores = false;
+  bool _cambiando = false;
+  StreamSubscription? _vivo;
+  Timer? _reloj;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+    // Cada pedido nuevo o cambio de estado mueve las cifras; el reloj cubre el cambio de hora del saludo
+    _vivo = TiempoReal.instancia.cambios().listen((_) => _cargar());
+    _reloj = Timer.periodic(const Duration(minutes: 2), (_) => _cargar());
+  }
+
+  @override
+  void dispose() {
+    _vivo?.cancel();
+    _reloj?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _cargar() async {
+    try {
+      final r = await Future.wait([CatalogoService.miNegocio(), PedidosService.resumenNegocio()]);
+      if (!mounted) return;
+      setState(() {
+        _negocio = r[0] as Negocio?;
+        _resumen = r[1] as ResumenNegocio;
+      });
+    } catch (_) {
+      // sin conexión o sin negocio: la franja queda con lo último que supo
+    }
+  }
+
+  Future<void> _abierto(bool v) async {
+    setState(() => _cambiando = true);
+    try {
+      final n = await CatalogoService.cambiarEstado(abierto: v);
+      if (mounted) setState(() => _negocio = n);
+    } catch (e) {
+      if (mounted) mostrarError(context, textoDeError(e));
+    } finally {
+      if (mounted) setState(() => _cambiando = false);
+    }
+  }
+
+  static const _dias = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  static const _meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colores;
+    final tema = Theme.of(context).textTheme;
+    final ahora = DateTime.now();
+    final saludo = ahora.hour < 12 ? 'Buenos días' : (ahora.hour < 19 ? 'Buenas tardes' : 'Buenas noches');
+    final dia = _dias[ahora.weekday - 1];
+    final fecha = '${dia[0].toUpperCase()}${dia.substring(1)} ${ahora.day} de ${_meses[ahora.month - 1]}';
+    final n = _negocio;
+    final r = _resumen;
+
+    // ------------------------------ Franja verde ------------------------------
+    final estadoTexto = n == null
+        ? ''
+        : !n.abierto
+            ? 'Cerrado: los clientes no te ven'
+            : (!n.aceptaPedidos ? 'Abierto, sin aceptar pedidos' : (n.abiertoAhora ? 'Abierto y aceptando pedidos' : 'Fuera de tu horario'));
+    final franja = Container(
+      padding: const EdgeInsets.fromLTRB(28, 22, 20, 22),
+      decoration: BoxDecoration(color: const Color(0xFF187A3C), borderRadius: BorderRadius.circular(22)),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$saludo${n == null ? '' : ', ${n.nombre}'}',
+                    style: tema.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: -0.5), maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Text('$fecha · horario de hoy: ${n?.horarioHoy?.texto ?? 'sin horario'}', style: tema.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.85))),
+              ],
+            ),
+          ),
+          if (n != null)
+            Container(
+              padding: const EdgeInsets.fromLTRB(18, 6, 8, 6),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(estadoTexto, style: tema.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 10),
+                  Switch(
+                    value: n.abierto,
+                    onChanged: _cambiando ? null : _abierto,
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: AppTheme.accentColor,
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+
+    // ------------------------------ Cifras del día ------------------------------
+    String? comparacion() {
+      if (r == null || r.vendidoSemanaPasada <= 0) return null;
+      final cambio = ((r.vendidoHoy - r.vendidoSemanaPasada) / r.vendidoSemanaPasada * 100).round();
+      return '${cambio >= 0 ? '+' : '−'}${cambio.abs()} % que el $dia pasado';
+    }
+
+    final cifras = Row(
+      children: [
+        for (final (i, (titulo, valor, detalle, icono, color)) in [
+          ('Vendido hoy', r == null ? '—' : Formato.dinero(r.vendidoHoy), comparacion() ?? 'en productos', Icons.payments_rounded, AppTheme.successColor),
+          ('Pedidos hoy', r == null ? '—' : '${r.pedidosHoy}', 'desde las 00:00', Icons.receipt_long_rounded, AppTheme.infoColor),
+          ('Tiempo medio', r?.minutosPreparacion == null ? '—' : '${r!.minutosPreparacion} min', 'de aceptado a listo · 7 días', Icons.timer_outlined, AppTheme.warningColor),
+          ('Calificación', n == null || n.numeroCalificaciones == 0 ? '—' : '${n.calificacion.toStringAsFixed(1)} ★', n == null ? '' : '${n.numeroCalificaciones} ${n.numeroCalificaciones == 1 ? 'opinión' : 'opiniones'}', Icons.star_rounded, AppTheme.accentColor),
+        ].indexed) ...[
+          if (i > 0) const SizedBox(width: 14),
+          Expanded(
+            child: TarjetaValle(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+                    child: Icon(icono, color: color),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(titulo, style: tema.labelMedium?.copyWith(color: c.textoSuave, fontWeight: FontWeight.w600)),
+                        Text(valor, style: tema.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                        Text(detalle, style: tema.labelSmall?.copyWith(color: c.textoSuave), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+
+    return Scaffold(
+      backgroundColor: c.fondo,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const AvisoPermisos(rol: 'vendedor', margen: EdgeInsets.fromLTRB(margenWeb, 12, margenWeb, 0)),
+          const AvisoSuscripcion(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(margenWeb, 24, margenWeb, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                franja,
+                const SizedBox(height: 16),
+                cifras,
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(child: Text(_anteriores ? 'Pedidos anteriores' : 'Pedidos en curso', style: tema.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+                    SegmentedButton<bool>(
+                      showSelectedIcon: false,
+                      segments: const [ButtonSegment(value: false, label: Text('En curso')), ButtonSegment(value: true, label: Text('Anteriores'))],
+                      selected: {_anteriores},
+                      onSelectionChanged: (v) => setState(() => _anteriores = v.first),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: margenWeb - 16),
+              child: _anteriores ? const _Lista(key: ValueKey('historial'), estado: 'historial') : const _Lista(key: ValueKey('activos'), estado: 'activos'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

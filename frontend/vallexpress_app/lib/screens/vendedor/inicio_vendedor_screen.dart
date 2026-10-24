@@ -2,7 +2,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../models/negocio.dart';
+import '../../providers/auth_provider.dart';
+import '../../widgets/campana_avisos.dart';
 import '../../services/catalogo_service.dart';
 import '../../services/pedidos_service.dart';
 import '../../services/tiempo_real.dart';
@@ -128,7 +131,14 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
           setState(() => _pestana = i);
           if (i == 0) _cargarNegocio(); // pudo crear o corregir su negocio en la otra pestaña
         },
-        cabeceraLateral: _negocio == null ? null : _NegocioLateral(negocio: _negocio!),
+        // Computador: barra arriba (logo, menú al centro; claro/oscuro, avisos y el perfil a la derecha)
+        lateral: false,
+        menuCentrado: true,
+        accionesSuperiores: [
+          const CampanaAvisos(),
+          const SizedBox(width: 6),
+          _BotonPerfil(activo: _pestana == _rutas.length - 1, onTap: () => setState(() => _pestana = _rutas.length - 1)),
+        ],
         paginas: [
           _enRevision ? _solicitud() : const PedidosNegocioScreen(conFlechaAtras: false),
           if (kIsWeb) MisProductosScreen(alIrANegocio: () => setState(() => _pestana = _iNegocio)),
@@ -148,44 +158,34 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
             ),
           if (kIsWeb) const Destino(icono: Icons.restaurant_menu_outlined, iconoActivo: Icons.restaurant_menu_rounded, texto: 'Productos'),
           const Destino(icono: Icons.storefront_outlined, iconoActivo: Icons.storefront_rounded, texto: 'Mi negocio'),
-          const Destino(icono: Icons.person_outline_rounded, iconoActivo: Icons.person_rounded, texto: 'Perfil'),
+          const Destino(icono: Icons.person_outline_rounded, iconoActivo: Icons.person_rounded, texto: 'Perfil', enBarra: false),
         ],
       ),
     );
   }
 }
 
-/// En el menú lateral del computador: logo, nombre y si el negocio está abierto
-class _NegocioLateral extends StatelessWidget {
-  const _NegocioLateral({required this.negocio});
+/// Botón del perfil en la barra de arriba (computador): las iniciales o la foto de la persona
+class _BotonPerfil extends StatelessWidget {
+  const _BotonPerfil({required this.activo, required this.onTap});
 
-  final Negocio negocio;
+  final bool activo;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final u = context.watch<AuthProvider>().usuario ?? const {};
     final c = context.colores;
-    final tema = Theme.of(context).textTheme;
-    final abierto = negocio.abiertoAhora;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: c.tarjetaElevada, borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: [
-          ImagenRed(url: negocio.logo, ancho: 40, alto: 40, radio: 12, icono: Icons.storefront_rounded),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(negocio.nombre, style: tema.titleSmall?.copyWith(fontWeight: FontWeight.w800), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(
-                  abierto ? '● Abierto' : 'Cerrado',
-                  style: tema.labelMedium?.copyWith(color: abierto ? c.primario : c.textoSuave, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return Tooltip(
+      message: 'Mi perfil',
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: activo ? c.primario : c.borde, width: 2)),
+          child: AvatarValle(nombre: '${u['nombre'] ?? ''}', apellido: '${u['apellido'] ?? ''}', fotoUrl: u['fotoPerfil']?.toString(), tamano: 36),
+        ),
       ),
     );
   }

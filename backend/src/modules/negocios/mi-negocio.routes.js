@@ -39,6 +39,7 @@ rutasDeGestion(router);
 
 // Pedidos que recibe el negocio
 router.get('/pedidos', pedidoSchema.listado, validar, pedidoController.delNegocio);
+router.get('/resumen', pedidoController.resumenNegocio);   // cifras del día para la cabecera del panel
 router.patch('/pedidos/:id/estado', pedidoSchema.estadoNegocio, validar, pedidoController.estadoNegocio);
 router.post('/pedidos/:id/pago', pedidoSchema.pago, validar, pedidoController.pagoNegocio);
 router.post('/pedidos/:id/calificar-repartidor', pedidoSchema.calificar, validar, pedidoController.calificarRepartidor);

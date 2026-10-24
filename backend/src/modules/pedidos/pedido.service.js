@@ -381,6 +381,38 @@ async function crear(cliente, datos, req) {
 // ---------------------------------------------------------------------------------------------
 const listarDelCliente = (clienteId, query, req) => listar({ clienteId, ...(filtroEstado(query.estado) && { estado: filtroEstado(query.estado) }) }, query, req, 'cliente');
 
+// Resumen del día del negocio (cabecera de su panel): lo vendido hoy y el mismo día de la semana pasada, los
+// pedidos de hoy y el tiempo medio de preparación (de aceptado a listo) de los últimos 7 días. Hora de Ecuador.
+async function resumenDelNegocio(usuarioId) {
+  const n = await NegocioService.exigirMio(usuarioId);
+  const fallidos = `'${E.RECHAZADO}','${E.CANCELADO}'`;
+  const [r] = await sequelize.query(
+    `SELECT COUNT(*) FILTER (WHERE dia = hoy) AS "pedidosHoy",
+            COALESCE(SUM(subtotal) FILTER (WHERE dia = hoy AND estado NOT IN (${fallidos})), 0) AS "vendidoHoy",
+            COALESCE(SUM(subtotal) FILTER (WHERE dia = hoy - 7 AND estado NOT IN (${fallidos})), 0) AS "vendidoSemanaPasada"
+       FROM (SELECT (fpedido AT TIME ZONE 'America/Guayaquil')::date AS dia, (now() AT TIME ZONE 'America/Guayaquil')::date AS hoy,
+                    cestatuspedido AS estado, subtotal
+               FROM tpedidos WHERE cnegocio = :negocio AND fhasta = '2999-12-31 00:00:00-05'
+                AND fpedido >= now() - interval '9 days') p`,
+    { replacements: { negocio: n.id }, type: QueryTypes.SELECT },
+  );
+  const [t] = await sequelize.query(
+    `SELECT AVG(EXTRACT(EPOCH FROM (listo - aceptado)) / 60) AS minutos
+       FROM (SELECT cpedido, MIN(fdesde) FILTER (WHERE cestatuspedido = :confirmado) AS aceptado,
+                    MIN(fdesde) FILTER (WHERE cestatuspedido = :listo) AS listo
+               FROM tpedidos WHERE cnegocio = :negocio AND fdesde >= now() - interval '7 days'
+              GROUP BY cpedido) x
+      WHERE aceptado IS NOT NULL AND listo IS NOT NULL AND listo > aceptado`,
+    { replacements: { negocio: n.id, confirmado: E.CONFIRMADO, listo: E.LISTO }, type: QueryTypes.SELECT },
+  );
+  return {
+    pedidosHoy: Number(r.pedidosHoy),
+    vendidoHoy: Number(r.vendidoHoy),
+    vendidoSemanaPasada: Number(r.vendidoSemanaPasada),
+    minutosPreparacion: t?.minutos == null ? null : Math.round(Number(t.minutos)),
+  };
+}
+
 async function listarDelNegocio(usuarioId, query, req) {
   const n = await NegocioService.exigirMio(usuarioId);
   return listar({ negocioId: n.id, ...(filtroEstado(query.estado) && { estado: filtroEstado(query.estado) }) }, query, req, 'vendedor');
@@ -796,7 +828,7 @@ async function metodosPago() {
 }
 
 module.exports = {
-  crear, cotizar, listarDelCliente, listarDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, calificarRepartidorComoNegocio, metodosPago,
+  crear, cotizar, listarDelCliente, listarDelNegocio, resumenDelNegocio, obtener, cambiarEstadoNegocio, cancelar, marcarRecibido, calificar, calificarRepartidorComoNegocio, metodosPago,
   subirComprobante, revisarPago,
   libresParaRepartidor, listarDelRepartidor, aceptar,
   recoger: (usuario, id, req) => pasoRepartidor(usuario, id, E.RECOGIDO, req),
