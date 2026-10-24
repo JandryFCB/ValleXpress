@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import '../../config/theme.dart';
-import 'animaciones.dart';
+import 'package:flutter/services.dart';
+import '../config/theme.dart';
+import '../widgets/ui/animaciones.dart';
 
 /// En la web con pantalla ancha (computador o tablet de lado) la app usa el diseño de escritorio: menú lateral o
 /// barra superior en vez de la barra de abajo, y el contenido centrado con un ancho cómodo de leer.
@@ -69,7 +70,31 @@ class PestanasAdaptables extends StatelessWidget {
     this.cabeceraLateral,
     this.accionesSuperiores = const [],
     this.sobreLaBarra,
+    this.rutas,
   });
+
+  /// Dirección de cada pestaña en la web (/inicio, /pedidos, /perfil...): la barra del navegador la muestra y al
+  /// recargar o abrir un enlace se vuelve a esa pestaña
+  final List<String>? rutas;
+
+  static String? _rutaAlAbrir = kIsWeb ? Uri.base.path : null;
+  static String? _ultimaRuta;
+
+  /// Pestaña con la que arranca un inicio: la de la dirección con que se abrió la web (una sola vez)
+  static int indiceInicial(List<String> rutas) {
+    final ruta = _rutaAlAbrir;
+    _rutaAlAbrir = null;
+    final i = ruta == null ? -1 : rutas.indexOf(ruta);
+    return i < 0 ? 0 : i;
+  }
+
+  void _anunciarRuta() {
+    if (!kIsWeb || rutas == null || indice >= rutas!.length) return;
+    final ruta = rutas![indice];
+    if (ruta == _ultimaRuta) return;
+    _ultimaRuta = ruta;
+    WidgetsBinding.instance.addPostFrameCallback((_) => SystemNavigator.routeInformationUpdated(uri: Uri(path: ruta), replace: true));
+  }
 
   final int indice;
   final ValueChanged<int> onCambiar;
@@ -91,6 +116,7 @@ class PestanasAdaptables extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colores;
+    _anunciarRuta();
     final contenido = PestanasAnimadas(indice: indice, children: paginas);
 
     if (!esEscritorio(context)) {

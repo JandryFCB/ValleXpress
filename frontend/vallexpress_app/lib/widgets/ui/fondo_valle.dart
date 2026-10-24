@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
-import 'escritorio.dart';
+import '../../web/escritorio.dart';
 
 /// Fondo estándar de las pantallas: degradado del tema (claro u oscuro) y zona segura. Todas las pantallas nuevas
 /// se construyen sobre esto para verse iguales.
@@ -19,7 +19,7 @@ class FondoValle extends StatelessWidget {
     this.zonaSegura = true,
     this.resizeToAvoidBottomInset = true,
     this.anchoCompleto = false,
-    this.anchoEscritorio = 840,
+    this.anchoEscritorio = 960,
   });
 
   final Widget child;
@@ -66,6 +66,20 @@ class FondoValle extends StatelessWidget {
       ),
     );
     if (anchoCompleto || !esEscritorio(context)) return pantalla;
-    return ColoredBox(color: c.fondo, child: AnchoMaximo(ancho: anchoEscritorio, child: pantalla));
+    // Computador: títulos grandes en negrita y más aire arriba, como una página web (vale para todas las pantallas)
+    final tema = Theme.of(context);
+    return ColoredBox(
+      color: c.fondo,
+      child: Theme(
+        data: tema.copyWith(
+          appBarTheme: tema.appBarTheme.copyWith(
+            toolbarHeight: 88,
+            titleSpacing: 24,
+            titleTextStyle: tema.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6, color: c.texto),
+          ),
+        ),
+        child: AnchoMaximo(ancho: anchoEscritorio, child: pantalla),
+      ),
+    );
   }
 }

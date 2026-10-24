@@ -18,6 +18,20 @@ class MisPedidosScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const listas = TabBarView(children: [_ListaPedidos(estado: 'activos'), _ListaPedidos(estado: 'historial')]);
+    if (esEscritorio(context)) {
+      return const DefaultTabController(
+        length: 2,
+        child: PaginaEscritorio(
+          titulo: 'Mis pedidos',
+          subtitulo: 'Sigue tus pedidos en vivo y revisa los anteriores',
+          icono: Icons.receipt_long_rounded,
+          desplazable: false,
+          debajoDelTitulo: TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: 'En curso'), Tab(text: 'Anteriores')]),
+          child: listas,
+        ),
+      );
+    }
     return DefaultTabController(
       length: 2,
       child: FondoValle(
@@ -26,7 +40,7 @@ class MisPedidosScreen extends StatelessWidget {
           automaticallyImplyLeading: conFlechaAtras,
           bottom: const TabBar(tabs: [Tab(text: 'En curso'), Tab(text: 'Anteriores')]),
         ),
-        child: const TabBarView(children: [_ListaPedidos(estado: 'activos'), _ListaPedidos(estado: 'historial')]),
+        child: listas,
       ),
     );
   }
@@ -134,6 +148,27 @@ class _ListaPedidosState extends State<_ListaPedidos> with AutomaticKeepAliveCli
         ),
       );
     }
+    Widget tarjeta(int i) => Aparecer(
+          key: ValueKey('pedido-${_pedidos[i].id}'),
+          indice: i % 12,
+          child: TarjetaPedido(
+            pedido: _pedidos[i],
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: _pedidos[i].id, inicial: _pedidos[i])));
+              _cargar();
+            },
+          ),
+        );
+    // Computador: en cuadrícula
+    if (esEscritorio(context)) {
+      return GridView.builder(
+        controller: _scroll,
+        padding: const EdgeInsets.only(top: 20, bottom: 32),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 400, mainAxisExtent: 156, crossAxisSpacing: 16, mainAxisSpacing: 16),
+        itemCount: _pedidos.length,
+        itemBuilder: (_, i) => tarjeta(i),
+      );
+    }
     return RefreshIndicator(
       onRefresh: _cargar,
       child: ListView.separated(
@@ -142,17 +177,7 @@ class _ListaPedidosState extends State<_ListaPedidos> with AutomaticKeepAliveCli
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         itemCount: _pedidos.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, i) => Aparecer(
-          key: ValueKey('pedido-${_pedidos[i].id}'),
-          indice: i,
-          child: TarjetaPedido(
-            pedido: _pedidos[i],
-            onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => PedidoDetalleScreen(pedidoId: _pedidos[i].id, inicial: _pedidos[i])));
-              _cargar();
-            },
-          ),
-        ),
+        itemBuilder: (_, i) => tarjeta(i),
       ),
     );
   }

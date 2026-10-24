@@ -31,7 +31,8 @@ class InicioAdminScreen extends StatefulWidget {
 }
 
 class _InicioAdminScreenState extends State<InicioAdminScreen> {
-  int _pestana = 0;
+  static const _rutas = ['/resumen', '/gestion', '/pedidos', '/usuarios', '/perfil'];
+  int _pestana = PestanasAdaptables.indiceInicial(_rutas);
   int _pendientes = 0;
 
   @override
@@ -46,6 +47,7 @@ class _InicioAdminScreenState extends State<InicioAdminScreen> {
       pestana: _pestana,
       irAPrimera: () => setState(() => _pestana = 0),
       child: PestanasAdaptables(
+        rutas: _rutas,
         indice: _pestana,
         onCambiar: (i) => setState(() => _pestana = i),
         paginas: [

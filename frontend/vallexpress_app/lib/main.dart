@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -20,6 +21,8 @@ import 'services/fcm_mobile.dart'
     if (dart.library.html) 'providers/fcm_stub_import.dart';
 
 void main() async {
+  // Web: direcciones limpias (app.vallexpress.com/pedidos) en vez de /#/home. En el celular no hace nada.
+  usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   // Solo vertical: las pantallas están diseñadas para el celular de pie (girarlo descuadraba el diseño).
   // En Android también lo fija el manifiesto (screenOrientation) para que no gire ni durante el arranque.
@@ -60,6 +63,8 @@ class MyApp extends StatelessWidget {
         darkTheme: AppTheme.dark,
         themeMode: tema.modo,
         home: const _PuertaDeSesion(),
+        // Al abrir o recargar en /pedidos, /perfil... se entra por la puerta de sesión; la pestaña la elige cada inicio
+        onGenerateInitialRoutes: (_) => [MaterialPageRoute(builder: (_) => const _PuertaDeSesion(), settings: const RouteSettings(name: '/'))],
         routes: {
           AppConstants.loginRoute: (_) => const LoginScreen(),
           AppConstants.registerRoute: (_) => const RegisterScreen(),

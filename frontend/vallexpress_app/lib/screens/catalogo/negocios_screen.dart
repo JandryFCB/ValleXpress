@@ -7,7 +7,7 @@ import '../../services/catalogo_service.dart';
 import '../../utils/formato.dart';
 import '../../widgets/ui/ui.dart';
 import 'negocio_detalle_screen.dart';
-import 'negocios_escritorio.dart';
+import '../../web/inicio_cliente_web.dart';
 
 /// Explorar negocios: buscador, categorías, "abiertos ahora" y la lista (se cargan más al llegar al final).
 /// Con [cabecera] se usa como pestaña de inicio: sin barra de título y con la cabecera arriba del buscador.

@@ -24,7 +24,8 @@ class InicioVendedorScreen extends StatefulWidget {
 }
 
 class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
-  int _pestana = 0;
+  static const _rutas = ['/pedidos', '/negocio', '/perfil'];
+  int _pestana = PestanasAdaptables.indiceInicial(_rutas);
   int _porAceptar = 0;
   Negocio? _negocio;
   final List<StreamSubscription> _subs = [];
@@ -117,6 +118,7 @@ class _InicioVendedorScreenState extends State<InicioVendedorScreen> {
       pestana: _pestana,
       irAPrimera: () => setState(() => _pestana = 0),
       child: PestanasAdaptables(
+        rutas: _rutas,
         indice: _pestana,
         onCambiar: (i) {
           setState(() => _pestana = i);

@@ -85,7 +85,8 @@ class InicioClienteScreen extends StatefulWidget {
 }
 
 class _InicioClienteScreenState extends State<InicioClienteScreen> {
-  int _pestana = 0;
+  static const _rutas = ['/inicio', '/pedidos', '/perfil'];
+  int _pestana = PestanasAdaptables.indiceInicial(_rutas);
   int _noLeidos = 0;
   List<Pedido> _enCurso = [];
   final List<StreamSubscription> _subs = [];
@@ -149,6 +150,7 @@ class _InicioClienteScreenState extends State<InicioClienteScreen> {
       irAPrimera: () => setState(() => _pestana = 0),
       child: PestanasAdaptables(
         lateral: false,
+        rutas: _rutas,
         indice: _pestana,
         onCambiar: (i) => setState(() => _pestana = i),
         paginas: [

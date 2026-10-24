@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../config/theme.dart';
-import '../../models/negocio.dart';
-import '../../providers/auth_provider.dart';
-import '../../utils/formato.dart';
-import '../../widgets/ui/ui.dart';
+import '../config/theme.dart';
+import '../models/negocio.dart';
+import '../providers/auth_provider.dart';
+import '../utils/formato.dart';
+import '../widgets/ui/ui.dart';
 
 // Piezas del inicio del cliente en el computador (la lógica de carga está en NegociosScreen).
 
