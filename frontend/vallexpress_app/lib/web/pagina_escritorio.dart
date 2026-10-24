@@ -16,6 +16,7 @@ class PaginaEscritorio extends StatelessWidget {
     this.ancho = double.infinity,
     this.debajoDelTitulo,
     this.conAtras = false,
+    this.anchoTitulo,
   });
 
   final String titulo;
@@ -31,6 +32,9 @@ class PaginaEscritorio extends StatelessWidget {
 
   /// Flecha para volver (páginas abiertas encima de otra)
   final bool conAtras;
+
+  /// Ancho máximo del título y subtítulo (el subtítulo baja de línea en vez de pasar sobre una columna)
+  final double? anchoTitulo;
 
   @override
   Widget build(BuildContext context) {
@@ -58,12 +62,18 @@ class PaginaEscritorio extends StatelessWidget {
             const SizedBox(width: 16),
           ],
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(titulo, style: tema.headlineMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6)),
-                if (subtitulo != null) ...[const SizedBox(height: 2), Text(subtitulo!, style: tema.bodyLarge?.copyWith(color: c.textoSuave))],
-              ],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: anchoTitulo ?? double.infinity),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(titulo, style: tema.headlineMedium?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6)),
+                    if (subtitulo != null) ...[const SizedBox(height: 2), Text(subtitulo!, style: tema.bodyLarge?.copyWith(color: c.textoSuave))],
+                  ],
+                ),
+              ),
             ),
           ),
           ...acciones,

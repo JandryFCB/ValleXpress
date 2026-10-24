@@ -471,6 +471,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
         titulo: 'Mi perfil',
         subtitulo: 'Tus datos, tus cuentas y la configuración',
         icono: Icons.person_rounded,
+        anchoTitulo: 360 - 68, // dentro de la columna de la tarjeta (sin el ícono)
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
